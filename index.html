@@ -465,6 +465,176 @@
         </div>
     </div>
 
+    <!-- Procedure Detail Lookup & AI Payment Probability Modal -->
+    <div id="procedure-modal" class="modal-overlay" style="display:none; z-index: 3000;">
+        <div class="modal-box" style="width: 1000px; max-width: 95vw; height: 85vh; text-align: left; padding: 0; overflow: hidden; display: flex;">
+            <!-- Left Sidebar Navigation Tree -->
+            <div style="width: 260px; background: #F9FAFB; border-right: 1px solid #E5E7EB; padding: 20px 16px; overflow-y: auto;">
+                <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Procedures</h3>
+                <div class="search-box" style="margin-bottom: 12px; background: white;">
+                    🔍 <input type="text" placeholder="Search..." style="width: 140px;">
+                </div>
+                <div style="color: #059669; font-size: 0.85rem; font-weight: 600; cursor: pointer; margin-bottom: 16px;">+ Add procedure</div>
+                
+                <div style="font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 8px;">▼ Autopilot</div>
+                <div style="padding-left: 12px;">
+                    <div style="font-size: 0.85rem; color: #4B5563; font-weight: 600; margin-bottom: 4px;">▼ High risk</div>
+                    <div style="padding-left: 12px; font-size: 0.8rem;">
+                        <div style="background: #E0E7FF; color: #3730A3; padding: 6px 8px; border-radius: 4px; font-weight: 600; margin-bottom: 4px; cursor: pointer;">
+                            Autopilot high risk <span style="font-size: 0.75rem;">Superior Supply - Chicago ⚠️</span>
+                        </div>
+                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Superior Supply - Florida ⚠️</span></div>
+                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Superior Supply - California</span></div>
+                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Superior Supply - Illinois</span></div>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Medium risk</div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Low risk</div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Optimal</div>
+                </div>
+                <div style="font-size: 0.85rem; font-weight: 600; color: #374151; margin-top: 16px;">► Custom</div>
+            </div>
+
+            <!-- Right Main Content Panel -->
+            <div style="flex: 1; padding: 24px 32px; overflow-y: auto; background: white; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h2 style="margin: 0; font-size: 1.3rem; font-weight: 700;" id="proc-modal-title">Superior Supply - Chicago » Autopilot high risk</h2>
+                        <span style="background: #D1FAE5; color: #065F46; font-size: 0.75rem; padding: 3px 10px; border-radius: 12px; font-weight: 600;">🤖 Billtrust Autopilot ✓</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Edit</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Delete</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Add New Step</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Copy</button>
+                        <button class="btn-btn" style="background: #6B7280; margin-left: 8px;" onclick="closeProcedureModal()">✕ Close</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 20px; border-bottom: 1px solid #E5E7EB; margin-top: 16px; margin-bottom: 20px;">
+                    <div style="font-size: 0.85rem; font-weight: 500; color: #6B7280; padding-bottom: 8px; cursor: pointer;">Recommendations</div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px; cursor: pointer;">Overview</div>
+                </div>
+
+                <!-- AI Payment Probability Chart Card -->
+                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px; position: relative;">
+                    <!-- AI Tooltip -->
+                    <div style="position: absolute; top: 12px; right: 24px; background: #E0F2FE; border: 1px solid #7DD3FC; border-radius: 12px; padding: 12px 16px; max-width: 320px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); z-index: 10;">
+                        <div style="font-size: 0.82rem; color: #0369A1; font-weight: 500;">
+                            AI analyzes historical data to determine their payment probability, so <strong>you don't have to</strong>.
+                            <button style="background: #4F46E5; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; float: right; margin-top: 8px; cursor: pointer;">Next</button>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Payment probability</h3>
+
+                    <!-- Bar Chart Container -->
+                    <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 160px; padding: 20px 20px 0 20px; border-bottom: 1px dashed #E5E7EB;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
+                            <div style="width: 28px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">-2 weeks</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
+                            <div style="width: 28px; height: 50px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">One week before</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">4%</span>
+                            <div style="width: 28px; height: 42px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">Moment overdue</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
+                            <div style="width: 28px; height: 50px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">1 week after</span>
+                        </div>
+                        <!-- Peak Bar -->
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative;">
+                            <div style="position: absolute; top: -20px; width: 14px; height: 14px; background: #2563EB; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"></div>
+                            <span style="font-size: 0.75rem; font-weight: 800; color: #111827;">21%</span>
+                            <div style="width: 28px; height: 110px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #111827; font-weight: 700; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">2 weeks</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">14%</span>
+                            <div style="width: 28px; height: 85px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">3 weeks</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
+                            <div style="width: 28px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">4 weeks</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">2%</span>
+                            <div style="width: 28px; height: 25px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
+                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">5 weeks</span>
+                        </div>
+                    </div>
+
+                    <!-- Timeline Slider Control -->
+                    <div style="margin-top: 40px; padding: 0 20px;">
+                        <div style="height: 4px; background: #DDD6FE; border-radius: 2px; position: relative; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="width: 22px; height: 22px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">-14</span>
+                            <span style="width: 22px; height: 22px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">-5</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">4</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">7</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">16</span>
+                            <span style="width: 22px; height: 22px; background: #7C3AED; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; transform: scale(1.2);">21</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">28</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">35</span>
+                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">40</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Procedure Workflow Steps Table -->
+                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
+                    <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Procedure Steps</h3>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Step</th>
+                                <th>Trigger Event</th>
+                                <th>Automated Action</th>
+                                <th>Email / Dunning Template</th>
+                                <th>Payment Behavior</th>
+                                <th>Notification</th>
+                            </tr>
+                        </thead>
+                        <tbody id="proc-steps-body">
+                            <tr>
+                                <td class="mono"><strong>Step 1</strong></td>
+                                <td>5 Days Before Due</td>
+                                <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Email Reminder</span></td>
+                                <td>Friendly Pre-Due Statement</td>
+                                <td>Auto-send</td>
+                                <td>Customer Contact</td>
+                            </tr>
+                            <tr>
+                                <td class="mono"><strong>Step 2</strong></td>
+                                <td>Invoice Due Date</td>
+                                <td><span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Dunning Notice</span></td>
+                                <td>Standard Overdue Notice</td>
+                                <td>Auto-send</td>
+                                <td>Collector Alert</td>
+                            </tr>
+                            <tr>
+                                <td class="mono"><strong>Step 3</strong></td>
+                                <td>14 Days Overdue</td>
+                                <td><span style="background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Autopilot Call Task</span></td>
+                                <td>Urgent Balance Confirmation</td>
+                                <td>Staged Action</td>
+                                <td>AR Manager</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tenant Settings Modal -->
     <div id="tenant-modal" class="modal-overlay" style="display:none;">
         <div class="modal-box" style="width: 520px; text-align: left;">
@@ -508,6 +678,25 @@
 
     function closeTenantModal() {
         document.getElementById('tenant-modal').style.display = 'none';
+    }
+
+    function openProcedureModal(tier) {
+        tier = tier || 'high';
+        fetch('/api/ar-manager/procedure-detail?tier=' + tier)
+            .then(res => res.json())
+            .then(data => {
+                if (data.title) {
+                    document.getElementById('proc-modal-title').innerText = 'Superior Supply - Chicago » ' + data.title;
+                }
+                document.getElementById('procedure-modal').style.display = 'flex';
+            })
+            .catch(() => {
+                document.getElementById('procedure-modal').style.display = 'flex';
+            });
+    }
+
+    function closeProcedureModal() {
+        document.getElementById('procedure-modal').style.display = 'none';
     }
 
     let loginPollTimer = null;
@@ -584,11 +773,12 @@
                 if (data.autopilot && data.autopilot.length > 0) {
                     let autoHtml = '';
                     data.autopilot.forEach(p => {
+                        const tierKey = p.dot_class.replace('dot-', '');
                         autoHtml += `
-                        <tr>
-                            <td><span class="dot ${p.dot_class}"></span><a style="color:#00A699; font-weight:600; text-decoration:underline; cursor:pointer;">${escapeHtml(p.procedure)}</a></td>
+                        <tr onclick="openProcedureModal('${tierKey}')" style="cursor:pointer;">
+                            <td><span class="dot ${p.dot_class}"></span><a style="color:#00A699; font-weight:600; text-decoration:underline; cursor:pointer;" onclick="openProcedureModal('${tierKey}')">${escapeHtml(p.procedure)}</a></td>
                             <td class="mono">
-                                <a style="color:#00A699; font-weight:600; font-size:0.95rem; text-decoration:underline; cursor:pointer;">${p.accounts_count}</a>
+                                <a style="color:#00A699; font-weight:600; font-size:0.95rem; text-decoration:underline; cursor:pointer;" onclick="openProcedureModal('${tierKey}')">${p.accounts_count}</a>
                                 <div style="color:#767676; font-size:0.72rem; margin-top:2px;">${escapeHtml(p.accounts_label)}</div>
                             </td>
                             <td class="mono" style="font-weight:500;">${p.avg_days}</td>

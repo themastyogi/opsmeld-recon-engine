@@ -97,6 +97,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps(data).encode("utf-8"))
 
+        elif path == "/api/ar-manager/procedure-detail":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            tier = query_params.get("tier", ["high"])[0]
+            config = load_client_config()
+            rules = load_engine_rules()
+            client = BCMCPClient(config)
+            report = ARManagerReport(client, rules)
+            detail = report.get_procedure_detail(tier)
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(detail).encode("utf-8"))
+
         elif path == "/api/debug/bc":
             config = load_client_config()
             client = BCMCPClient(config)
