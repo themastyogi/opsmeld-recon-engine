@@ -176,15 +176,15 @@ class ARManagerReport:
         ]
 
         steps = [
-            {"step": 1, "trigger": "5 Days Before Due", "action": "Email Reminder", "template": "Friendly Pre-Due Statement", "behavior": "Auto-send", "notification": "Customer Contact"},
-            {"step": 2, "trigger": "Invoice Due Date", "action": "First Dunning Notice", "template": "Standard Overdue Notice", "behavior": "Auto-send", "notification": "Collector Alert"},
-            {"step": 3, "trigger": "14 Days Overdue", "action": "Autopilot Call Task", "template": "Urgent Balance Confirmation", "behavior": "Staged Action", "notification": "AR Manager"},
-            {"step": 4, "trigger": "30 Days Overdue", "action": "Dispute / Credit Hold", "template": "Credit Suspension Warning", "behavior": "Review Required", "notification": "VP of Finance"},
+            {"step": 1, "trigger": "5 Days Before Due", "action": "Email Reminder", "template": "Opsmeld Courtesy Pre-Due Statement", "behavior": "Auto-send", "notification": "Customer Contact"},
+            {"step": 2, "trigger": "Invoice Due Date", "action": "Dunning Notice", "template": "Opsmeld Standard Overdue Notice", "behavior": "Auto-send", "notification": "Collector Alert"},
+            {"step": 3, "trigger": "14 Days Overdue", "action": "Opsmeld Collector Action", "template": "Opsmeld Priority Balance Confirmation", "behavior": "Staged Action", "notification": "AR Manager"},
+            {"step": 4, "trigger": "30 Days Overdue", "action": "Dispute / Credit Hold", "template": "Opsmeld Account Credit Suspension Notice", "behavior": "Review Required", "notification": "VP of Finance"},
         ]
 
         return {
             "tier": tier,
-            "title": f"Autopilot {tier.capitalize()} Risk Procedure",
+            "title": f"Opsmeld {tier.capitalize()} Risk Autopilot Procedure",
             "customers": tier_customers,
             "probability_bars": probability_bars,
             "steps": steps
