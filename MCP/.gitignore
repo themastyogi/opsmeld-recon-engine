@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 
 # Token Caches & Secrets
+token_cache/
 token_cache/*.bin
 config/clients.json
 

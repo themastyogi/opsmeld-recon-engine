@@ -10,9 +10,11 @@ __pycache__/
 .pytest_cache/
 
 # Token Caches & Secrets
+token_cache/
 token_cache/*.bin
 config/clients.json
 MCP/config/clients.json
+MCP/token_cache/
 MCP/token_cache/*.bin
 
 # Generated HTML Reports & Artifacts
