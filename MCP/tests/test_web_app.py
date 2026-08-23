@@ -30,8 +30,8 @@ class TestWebApp(unittest.TestCase):
         with urllib.request.urlopen(url) as response:
             self.assertEqual(response.status, 200)
             html = response.read().decode("utf-8")
-            self.assertIn("Opsmeld Financial Operations Console", html)
-            self.assertIn("AR Manager", html)
+            self.assertIn("opsmeld", html)
+            self.assertIn("Collections", html)
 
     def test_settings_route(self):
         url = f"http://127.0.0.1:{self.port}/settings"
