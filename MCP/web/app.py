@@ -110,6 +110,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps(detail).encode("utf-8"))
 
+        elif path == "/api/ar-manager/control-tower":
+            config = load_client_config()
+            rules = load_engine_rules()
+            client = BCMCPClient(config)
+            report = ARManagerReport(client, rules)
+            ct_data = report.get_control_tower_data()
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(ct_data).encode("utf-8"))
+
         elif path == "/api/debug/bc":
             config = load_client_config()
             client = BCMCPClient(config)
