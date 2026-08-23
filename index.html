@@ -914,6 +914,29 @@
                     treeContainer.innerHTML = treeHtml;
                 }
 
+                // Populate Procedure Steps Table dynamically
+                if (data.steps && data.steps.length > 0) {
+                    const stepsTbody = document.getElementById('proc-steps-body');
+                    let stepsHtml = '';
+                    data.steps.forEach(s => {
+                        let actionBg = '#E0E7FF';
+                        let actionColor = '#3730A3';
+                        if (s.step === 2) { actionBg = '#FEF3C7'; actionColor = '#92400E'; }
+                        else if (s.step >= 3) { actionBg = '#FEE2E2'; actionColor = '#991B1B'; }
+
+                        stepsHtml += `
+                        <tr>
+                            <td class="mono"><strong>Step ${s.step}</strong></td>
+                            <td>${escapeHtml(s.trigger)}</td>
+                            <td><span style="background: ${actionBg}; color: ${actionColor}; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${escapeHtml(s.action)}</span></td>
+                            <td>${escapeHtml(s.template)}</td>
+                            <td>${escapeHtml(s.behavior)}</td>
+                            <td>${escapeHtml(s.notification)}</td>
+                        </tr>`;
+                    });
+                    stepsTbody.innerHTML = stepsHtml;
+                }
+
                 document.getElementById('procedure-modal').style.display = 'flex';
             })
             .catch(() => {
