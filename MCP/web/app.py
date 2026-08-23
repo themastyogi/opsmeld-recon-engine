@@ -97,6 +97,25 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps(data).encode("utf-8"))
 
+        elif path == "/api/debug/bc":
+            config = load_client_config()
+            client = BCMCPClient(config)
+            token = client.get_access_token()
+            companies = client._execute_bc_rest("companies")
+            tools = client.list_tools()
+            custs = client.call_tool("customers_get_list")
+            debug_info = {
+                "tenant_id": config.tenant_id,
+                "app_client_id": config.app_client_id,
+                "company_name": config.company_name,
+                "has_token": bool(token),
+                "companies": companies,
+                "tools_count": len(tools),
+                "customers_response": custs
+            }
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(debug_info).encode("utf-8"))
+
         elif path == "/api/auth/login":
             config = load_client_config()
             client = BCMCPClient(config)

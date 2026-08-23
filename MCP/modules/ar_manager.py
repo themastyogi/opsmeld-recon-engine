@@ -26,8 +26,18 @@ class ARManagerReport:
             return {"error": customers_resp["error"], "customers": [], "autopilot": [], "custom_segments": []}
 
         raw_customers = customers_resp.get("value", [])
-        if not isinstance(raw_customers, list):
-            raw_customers = []
+        if not isinstance(raw_customers, list) or len(raw_customers) == 0:
+            # Fallback: Query Business Central REST v2.0 API for companies and customers
+            companies_resp = self.client._execute_bc_rest("companies")
+            if "value" in companies_resp and len(companies_resp["value"]) > 0:
+                comp_id = companies_resp["value"][0].get("id")
+                cust_resp = self.client._execute_bc_rest(f"companies({comp_id})/customers")
+                if "value" in cust_resp and isinstance(cust_resp["value"], list):
+                    raw_customers = cust_resp["value"]
+                else:
+                    raw_customers = []
+            else:
+                raw_customers = []
 
         entries_resp = self.client.call_tool("cust_ledger_entries_get")
         ledger_entries = entries_resp.get("value", []) if isinstance(entries_resp.get("value"), list) else []
