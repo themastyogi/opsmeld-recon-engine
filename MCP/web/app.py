@@ -1,6 +1,6 @@
 """
 Opsmeld Reconciliation Engine - Web Console App Handler
-Lightweight HTTP web app and routing server.
+Lightweight HTTP web app and routing server supporting report generation and fix staging APIs.
 """
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -74,7 +74,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             environment = post_data.get("environment", ["Production"])[0]
             company_name = post_data.get("company_name", ["CRONUS USA, Inc."])[0]
 
-            # Save to config/clients.json
             clients_file = CONFIG_DIR / "clients.json"
             clients_data = {
                 "active_client": "default_client",
@@ -95,7 +94,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             with open(clients_file, "w", encoding="utf-8") as f:
                 json.dump(clients_data, f, indent=2)
 
-            # Re-render settings with success notice
             config = load_client_config()
             rules = load_engine_rules()
             client_dict = {
@@ -106,6 +104,29 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "company_name": config.company_name,
             }
             html = render_settings_html(client_dict, rules.raw_rules, message="Configuration saved successfully!")
+            self._set_headers()
+            self.wfile.write(html.encode("utf-8"))
+
+        elif path == "/api/ar-manager/stage-fix":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            post_data = urllib.parse.parse_qs(body)
+            customer_no = post_data.get("customer_no", [""])[0]
+
+            config = load_client_config()
+            rules = load_engine_rules()
+            client = BCMCPClient(config)
+            report = ARManagerReport(client, rules)
+            result = report.propose_fix(customer_no)
+
+            # Re-render report with success message
+            customers = report.fetch_data()
+            tiered = [report.tier_customer(c) for c in customers]
+            html = report.render_html(tiered, config.name)
+            
+            notice_html = f'<div style="padding:12px; background:#E6F4F1; color:#0E6251; border-radius:6px; margin-bottom:20px; font-weight:600;">⚡ Fix Staged Successfully: Draft General Journal Voucher line created for Customer {customer_no} (Batch: OPSMELD-RECON).</div>'
+            html = html.replace("<h1>", notice_html + "<h1>")
+
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
 

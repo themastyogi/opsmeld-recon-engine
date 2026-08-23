@@ -45,7 +45,7 @@ class TestWebApp(unittest.TestCase):
         with urllib.request.urlopen(url) as response:
             self.assertEqual(response.status, 200)
             html = response.read().decode("utf-8")
-            self.assertIn("Accounts Receivable Manager View", html)
+            self.assertIn("AR Reconciliation & Working Capital Intelligence", html)
 
     def test_save_settings_api(self):
         url = f"http://127.0.0.1:{self.port}/api/settings"
