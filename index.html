@@ -237,10 +237,10 @@
       margin-right: 8px;
     }
 
-    .dot-high { background: var(--risk-high); }
-    .dot-medium { background: var(--risk-medium); }
-    .dot-low { background: var(--risk-low); }
-    .dot-optimal { background: var(--risk-optimal); }
+    .dot-high { background: #FF5A5F; }
+    .dot-medium { background: #FFB400; }
+    .dot-low { background: #00A699; }
+    .dot-optimal { background: #D8D8D8; }
 
     .risk-badge {
       display: inline-flex;
@@ -401,11 +401,11 @@
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Procedure</th>
-                            <th>Accounts</th>
-                            <th>Avg. days to pay</th>
-                            <th>Open Balance</th>
-                            <th>Over due</th>
+                            <th style="cursor:pointer;">Procedure <span style="color:#B0B0B0; font-size:0.7rem;">⇕</span></th>
+                            <th style="cursor:pointer;">Accounts <span style="color:#B0B0B0; font-size:0.7rem;">⇕</span></th>
+                            <th style="cursor:pointer;">Avg. days to pay <span style="color:#B0B0B0; font-size:0.7rem;">⇕</span></th>
+                            <th style="cursor:pointer;">Open Balance <span style="color:#B0B0B0; font-size:0.7rem;">⇕</span></th>
+                            <th style="cursor:pointer;">Over due <span style="color:#B0B0B0; font-size:0.7rem;">⇕</span></th>
                         </tr>
                     </thead>
                     <tbody id="autopilot-body">
@@ -584,14 +584,16 @@
                 if (data.autopilot && data.autopilot.length > 0) {
                     let autoHtml = '';
                     data.autopilot.forEach(p => {
-                        const overdueStyle = p.overdue > 0 ? 'style="color:var(--risk-high);"' : '';
                         autoHtml += `
                         <tr>
-                            <td><span class="dot ${p.dot_class}"></span><a style="color:#0E6251; font-weight:600;">${escapeHtml(p.procedure)}</a></td>
-                            <td class="mono"><strong>${p.accounts_count}</strong> <span style="color:var(--text-muted); font-size:0.75rem;">${escapeHtml(p.accounts_label)}</span></td>
-                            <td class="mono">${p.avg_days}</td>
-                            <td class="mono"><strong>${formatMoney(p.open_balance)}</strong></td>
-                            <td class="mono" ${overdueStyle}><strong>${formatMoney(p.overdue)}</strong></td>
+                            <td><span class="dot ${p.dot_class}"></span><a style="color:#00A699; font-weight:600; text-decoration:underline; cursor:pointer;">${escapeHtml(p.procedure)}</a></td>
+                            <td class="mono">
+                                <a style="color:#00A699; font-weight:600; font-size:0.95rem; text-decoration:underline; cursor:pointer;">${p.accounts_count}</a>
+                                <div style="color:#767676; font-size:0.72rem; margin-top:2px;">${escapeHtml(p.accounts_label)}</div>
+                            </td>
+                            <td class="mono" style="font-weight:500;">${p.avg_days}</td>
+                            <td class="mono" style="font-weight:600;">${formatMoney(p.open_balance)}</td>
+                            <td class="mono" style="font-weight:600;">${formatMoney(p.overdue)}</td>
                         </tr>`;
                     });
                     autoTbody.innerHTML = autoHtml;
