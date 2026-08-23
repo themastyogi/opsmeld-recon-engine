@@ -1,32 +1,24 @@
-# React + TypeScript + Vite
+# Opsmeld Reconciliation Engine — Business Central MCP
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+An intelligent, modular reconciliation engine and active financial operations assistant for Microsoft Dynamics 365 Business Central powered by Model Context Protocol (MCP).
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Opsmeld connects to Business Central via MCP to fetch subledger data, analyze risks, generate executive persona reports (AR Manager, AP Manager), and build staged draft actions (Sales Orders, Purchase Invoices, General Journal Vouchers).
 
-## React Compiler
+## Architecture & Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Multi-Tenant Configuration Engine**: Configure tenant IDs and rules safely via web UI or `config/clients.json`.
+- **Web Control Center (`server.py`)**: Centralized dashboard on `http://localhost:8000`.
+- **AR Manager Persona Module**: Credit utilization risk tiering (`COLLECT`, `WATCH`, `CLEAR`).
+- **Ledger Design System**: Standardized styling with Spectral, Inter, IBM Plex Mono, and XSS protection.
+- **Safety Mode (`STAGED`)**: Unposted draft document creation (`Do Not Post`).
 
-## Expanding the Oxlint configuration
+## Getting Started
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+1. Start the web management console:
+   ```bash
+   python server.py
+   ```
+2. Open `http://localhost:8000` in your browser.
+3. Configure your Business Central connection at `http://localhost:8000/settings`.
