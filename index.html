@@ -420,7 +420,7 @@
                             <span style="background: #FEF3C7; color: #D97706; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">⚠️</span>
                         </div>
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-high-risk">$32,644.30</div>
-                        <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Credit exposure / High risk balance 🔍</div>
+                        <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Total balance on high-risk accounts 🔍</div>
                     </div>
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="alert('📅 Expected Collections Breakdown (Next 7 Days):\n\nTotal Expected: $10,205.06\n\nCalculation basis:\n• 3 customer accounts with upcoming due dates\n• Payment velocity history derived from BC ledger entries\n• Scheduled pre-due courtesy check triggers')" title="Click for expected collections calculation basis">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -435,8 +435,8 @@
                             <span style="font-size: 0.78rem; font-weight: 600; color: #6B7280;">DSO</span>
                             <span style="background: #ECFDF5; color: #059669; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">⏱️</span>
                         </div>
-                        <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-dso">0.0 Days</div>
-                        <div style="font-size: 0.71rem; color: #6B7280; font-weight: 500; margin-top: 4px;" id="kpi-dso-sub">Current portfolio (0 overdue)</div>
+                        <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-dso">DSO — N/A</div>
+                        <div style="font-size: 0.71rem; color: #6B7280; font-weight: 500; margin-top: 4px;" id="kpi-dso-sub">No overdue receivables</div>
                     </div>
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -468,7 +468,7 @@
                                 <h3 style="margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">🎯 Your next best actions</h3>
                                 <div style="font-size: 0.78rem; color: #6B7280; margin-top: 2px;">Today's prioritized work queue</div>
                             </div>
-                            <button class="btn-btn" style="background: #059669;" onclick="alert('⚡ Starting automated work queue for prioritized accounts!')">Start My Work</button>
+                            <button class="btn-btn" style="background: #059669;" onclick="startGuidedWorkMode()">Start My Work</button>
                         </div>
                         <table class="table" style="font-size: 0.8rem;">
                             <thead>
@@ -516,9 +516,9 @@
                         </div>
 
                         <div style="background: #F3E8FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 14px;">
-                            <div style="font-size: 0.82rem; font-weight: 700; color: #6B21A8;">✨ Recommended Action</div>
-                            <div style="font-size: 0.78rem; color: #581C87; margin-top: 4px;" id="ai-rec-text">Analyzing live Business Central ledger entries...</div>
-                            <button class="btn-btn" style="background: #7C3AED; margin-top: 8px; font-size: 0.72rem;" onclick="switchProcTab('recommendations'); openProcedureModal('high');">Review Now</button>
+                            <div style="font-size: 0.85rem; font-weight: 800; color: #6B21A8;" id="ai-rec-title">⚡ Credit Exposure Needs Review</div>
+                            <div style="font-size: 0.78rem; color: #581C87; margin-top: 6px; line-height: 1.4;" id="ai-rec-text">1 customer exceeds configured credit threshold ($12,644.30 excess over limit). Recommended: Review credit exposure before releasing orders.</div>
+                            <button class="btn-btn" style="background: #7C3AED; margin-top: 10px; font-size: 0.76rem; font-weight: 700; padding: 6px 14px;" id="ai-rec-btn" onclick="openProcedureModal('high', '30000')">Review Risk →</button>
                         </div>
                     </div>
                 </div>
@@ -1483,6 +1483,93 @@
             loadLiveCustomerData();
         });
     }
-    </script>
+    
+    let guidedWorkItems = [];
+    let guidedCurrentIdx = 0;
+
+    function startGuidedWorkMode() {
+        fetch('/api/ar-manager/control-tower')
+            .then(res => res.json())
+            .then(data => {
+                if (data.next_actions && data.next_actions.length > 0) {
+                    guidedWorkItems = data.next_actions;
+                    guidedCurrentIdx = 0;
+                    renderGuidedStep(0);
+                    document.getElementById('guided-work-modal').style.display = 'flex';
+                } else {
+                    alert('No items in work queue.');
+                }
+            });
+    }
+
+    function renderGuidedStep(idx) {
+        if (idx >= guidedWorkItems.length) {
+            closeGuidedWorkModal();
+            alert('🎉 Work Queue Complete! All prioritized accounts reviewed.');
+            return;
+        }
+
+        const item = guidedWorkItems[idx];
+        document.getElementById('gw-step-indicator').innerText = `Action ${idx + 1} of ${guidedWorkItems.length}`;
+        document.getElementById('gw-cust-name').innerText = item.customer;
+        document.getElementById('gw-opportunity-amt').innerText = formatMoney(item.opportunity);
+        document.getElementById('gw-priority-tag').innerText = (item.priority || 'High').toUpperCase() + ' - ' + (item.action || 'Action Required');
+        document.getElementById('gw-why-flagged').innerHTML = `<strong>WHY FLAGGED:</strong> ${escapeHtml(item.why_flagged || 'Priority balance requires review.')}`;
+        document.getElementById('gw-rec-action').innerHTML = `<strong>RECOMMENDED ACTION:</strong> ${escapeHtml(item.rec_action || item.action)}`;
+    }
+
+    function guidedOpenDetails() {
+        const item = guidedWorkItems[guidedCurrentIdx];
+        if (item) {
+            closeGuidedWorkModal();
+            openProcedureModal(item.tier || 'high', item.customer_no);
+        }
+    }
+
+    function nextGuidedStep() {
+        guidedCurrentIdx++;
+        renderGuidedStep(guidedCurrentIdx);
+    }
+
+    function closeGuidedWorkModal() {
+        document.getElementById('guided-work-modal').style.display = 'none';
+    }
+
+</script>
+
+    <!-- Interactive Guided Work Mode Modal (Sequential Step-by-Step Operator Workflow) -->
+    <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
+        <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 14px; margin-bottom: 18px;">
+                <div>
+                    <span style="background: #4F46E5; color: white; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase;" id="gw-step-indicator">Action 1 of 4</span>
+                    <h3 style="margin: 6px 0 0 0; font-size: 1.15rem; font-weight: 700; color: #111827;" id="gw-cust-name">30000 - School of Fine Art</h3>
+                </div>
+                <button class="btn-btn" style="background: #6B7280; font-size: 0.75rem;" onclick="closeGuidedWorkModal()">✕ Exit Mode</button>
+            </div>
+
+            <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.78rem; font-weight: 700; color: #DC2626; background: #FEE2E2; padding: 2px 8px; border-radius: 4px;" id="gw-priority-tag">CRITICAL CREDIT EXPOSURE</span>
+                    <span style="font-size: 0.85rem; font-weight: 800; color: #111827;" class="mono" id="gw-opportunity-amt">$32,644.30 USD</span>
+                </div>
+                <div style="font-size: 0.84rem; color: #374151; margin-bottom: 6px;" id="gw-why-flagged">
+                    <strong>WHY FLAGGED:</strong> Credit exposure exceeds configured threshold ($32,644.30 balance vs $20,000.00 limit = 163.2% utilization).
+                </div>
+                <div style="font-size: 0.84rem; color: #047857; font-weight: 600;" id="gw-rec-action">
+                    <strong>RECOMMENDED ACTION:</strong> Review credit exposure before releasing new orders.
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-btn" style="background: #4F46E5;" id="gw-btn-details" onclick="guidedOpenDetails()">Review Details</button>
+                    <button class="btn-btn" style="background: #374151;" onclick="alert('🔗 Opening Customer Account directly in Business Central...')">Open in BC ↗</button>
+                </div>
+                <button class="btn-btn" style="background: #059669; padding: 8px 18px; font-weight: 700;" onclick="nextGuidedStep()">Complete & Next →</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
