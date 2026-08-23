@@ -72,7 +72,11 @@ class BCMCPClient:
                 authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
                 token_cache=cache
             )
-            flow = app.initiate_device_flow(scopes=self.config.scopes)
+            scopes = ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"]
+            flow = app.initiate_device_flow(scopes=scopes)
+            if "user_code" not in flow:
+                scopes = ["https://api.businesscentral.dynamics.com/user_impersonation"]
+                flow = app.initiate_device_flow(scopes=scopes)
             return flow
         except Exception as e:
             return {"error": str(e)}
