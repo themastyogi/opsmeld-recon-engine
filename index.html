@@ -472,7 +472,7 @@
                                     Credit utilization surged 0% → 163.2% ($12,644.30 excess over limit)
                                 </div>
                                 <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openCustomerCreditExposureDrawer('30000')">Review Credit Exposure</button>
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="handleActionClick('Review Credit Exposure', '30000', 'high')">Review Credit Exposure</button>
                                 </div>
                             </div>
 
@@ -491,7 +491,7 @@
                                     Payment cycle latency increased 14 → 28 days
                                 </div>
                                 <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openCustomerCreditExposureDrawer('20000')">Pre-Due Check</button>
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="handleActionClick('Pre-Due Check', '20000', 'low')">Pre-Due Check</button>
                                 </div>
                             </div>
 
@@ -510,7 +510,7 @@
                                     Expected payment date moved 5 days later (Payment cycle: 14 → 22 days)
                                 </div>
                                 <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openPreDueCheckDrawer('40000')">Pre-Due Check</button>
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="handleActionClick('Pre-Due Check', '40000', 'low')">Pre-Due Check</button>
                                 </div>
                             </div>
                         </div>
@@ -547,7 +547,7 @@
                                     </td>
                                     <td>15 min</td>
                                     <td><span style="background: #FEE2E2; color: #DC2626; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">High</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openCustomerCreditExposureDrawer('30000')">Review Credit Exposure</button></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="handleActionClick('Review Credit Exposure', '30000', 'high')">Review Credit Exposure</button></td>
                                 </tr>
                                 <tr>
                                     <td>
@@ -560,7 +560,7 @@
                                     </td>
                                     <td>10 min</td>
                                     <td><span style="background: #FEF3C7; color: #D97706; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Medium</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openContactAPDrawer('50000')">Contact Customer AP</button></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="handleActionClick('Contact Customer AP', '50000', 'medium')">Contact Customer AP</button></td>
                                 </tr>
                                 <tr>
                                     <td>
@@ -573,7 +573,7 @@
                                     </td>
                                     <td>10 min</td>
                                     <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Low</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openPreDueCheckDrawer('40000')">Pre-Due Courtesy Check</button></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="handleActionClick('Pre-Due Courtesy Check', '40000', 'low')">Pre-Due Courtesy Check</button></td>
                                 </tr>
                                 <tr>
                                     <td>
@@ -586,7 +586,7 @@
                                     </td>
                                     <td>10 min</td>
                                     <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Low</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openPreDueCheckDrawer('20000')">Pre-Due Courtesy Check</button></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="handleActionClick('Pre-Due Courtesy Check', '20000', 'low')">Pre-Due Courtesy Check</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1121,7 +1121,7 @@
                                     ${escapeHtml(c.subtext)}
                                 </div>
                                 <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openProcedureModal(${tierArg}, ${custNoArg})">${escapeHtml(c.action_label || 'Investigate')}</button>
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="handleActionClick('${escapeHtml(c.action_label || 'Investigate')}', ${custNoArg}, ${tierArg})">${escapeHtml(c.action_label || 'Investigate')}</button>
                                 </div>
                             </div>`;
                         });
@@ -1157,7 +1157,7 @@
                                 </td>
                                 <td>${escapeHtml(a.effort)}</td>
                                 <td><span style="background: ${pBg}; color: ${pColor}; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">${escapeHtml(a.priority)}</span></td>
-                                <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal(${tierArg}, ${custNoArg})">${escapeHtml(a.action)}</button></td>
+                                <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="handleActionClick('${escapeHtml(a.action)}', ${custNoArg}, ${tierArg})">${escapeHtml(a.action)}</button></td>
                             </tr>`;
                         });
                         tbody.innerHTML = actHtml;
@@ -1910,6 +1910,26 @@ OpsMeld AR Team';
     function openInBC(custNo, type) {
         alert(`🔗 Deep-linking to Microsoft Dynamics 365 Business Central (CRONUS IN)
 Target: ${type || 'Customer'} #${custNo || '30000'}`);
+    }
+
+
+    function handleActionClick(actionText, customerNo, tier) {
+        if (!customerNo || customerNo === 'null' || customerNo === 'undefined') customerNo = '30000';
+        const act = (actionText || '').toLowerCase();
+        
+        if (act.includes('credit') || act.includes('exposure')) {
+            openCustomerCreditExposureDrawer(customerNo);
+        } else if (act.includes('contact') || act.includes('ap')) {
+            openContactAPDrawer(customerNo);
+        } else if (act.includes('pre-due') || act.includes('courtesy') || act.includes('check')) {
+            openPreDueCheckDrawer(customerNo);
+        } else if (act.includes('investigate')) {
+            openInvestigatePage(customerNo);
+        } else if (act.includes('limbo') || act.includes('resolve')) {
+            openCustomerCreditExposureDrawer(customerNo);
+        } else {
+            openCustomerCreditExposureDrawer(customerNo);
+        }
     }
 
 </script>
