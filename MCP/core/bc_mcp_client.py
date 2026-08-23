@@ -46,8 +46,8 @@ class BCMCPClient:
             result = app.acquire_token_silent(self.config.scopes, account=accounts[0])
 
         if not result:
-            flow = app.acquire_token_by_device_flow(scopes=self.config.scopes)
-            if "user_code" not in flow:
+            flow = app.initiate_device_flow(scopes=self.config.scopes)
+            if not flow or "user_code" not in flow:
                 return "mock_access_token"
             
             print(f"\n[AUTH REQUIRED] Navigate to {flow['verification_uri']} and enter code: {flow['user_code']}")
