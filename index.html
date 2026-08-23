@@ -457,7 +457,62 @@
                             <span style="color: #059669; font-size: 0.78rem; font-weight: 600; cursor: pointer;">View all changes →</span>
                         </div>
                         <div id="ct-overnight-container" style="display: flex; flex-direction: column; gap: 14px;">
-                            <!-- Dynamic Overnight Cards populated from BC -->
+                            <div style="border: 1px solid #FEE2E2; background: #FFF5F5; border-radius: 8px; padding: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <span style="background: #DC2626; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">CRITICAL</span>
+                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">30000 - School of Fine Art</div>
+                                        <div style="font-size: 0.75rem; color: #DC2626; font-weight: 600; margin-top: 2px;">Credit Exposure Exceeded</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">$32,644.30</div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.76rem; color: #4B5563; margin-top: 8px; border-top: 1px dashed #FEE2E2; padding-top: 6px;">
+                                    Credit utilization surged 0% → 163.2% ($12,644.30 excess over limit)
+                                </div>
+                                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openCustomerCreditExposureDrawer('30000')">Review Credit Exposure</button>
+                                </div>
+                            </div>
+
+                            <div style="border: 1px solid #FDE68A; background: #FFFBEB; border-radius: 8px; padding: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <span style="background: #D97706; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">ATTENTION</span>
+                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">20000 - Trey Research</div>
+                                        <div style="font-size: 0.75rem; color: #D97706; font-weight: 600; margin-top: 2px;">Payment Velocity Watch</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">$2,345.63</div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.76rem; color: #4B5563; margin-top: 8px; border-top: 1px dashed #FDE68A; padding-top: 6px;">
+                                    Payment cycle latency increased 14 → 28 days
+                                </div>
+                                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openCustomerCreditExposureDrawer('20000')">Pre-Due Check</button>
+                                </div>
+                            </div>
+
+                            <div style="border: 1px solid #FDE68A; background: #FFFBEB; border-radius: 8px; padding: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <span style="background: #D97706; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">ATTENTION</span>
+                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">40000 - Alpine Ski House</div>
+                                        <div style="font-size: 0.75rem; color: #D97706; font-weight: 600; margin-top: 2px;">Pre-Due Courtesy Trigger</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">$2,617.50</div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.76rem; color: #4B5563; margin-top: 8px; border-top: 1px dashed #FDE68A; padding-top: 6px;">
+                                    Expected payment date moved 5 days later (Payment cycle: 14 → 22 days)
+                                </div>
+                                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openPreDueCheckDrawer('40000')">Pre-Due Check</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -481,7 +536,58 @@
                                 </tr>
                             </thead>
                             <tbody id="ct-next-actions-tbody">
-                                <!-- Dynamic Rows populated from BC -->
+                                <tr>
+                                    <td>
+                                        <strong>30000 - School of Fine Art</strong>
+                                        <div style="font-size: 0.71rem; color: #6B7280; margin-top: 2px;" title="Credit limit exceeded (163.2% utilization • $12,644.30 excess)">💡 Credit limit exceeded (163.2% utilization • $12,644.30 excess)</div>
+                                    </td>
+                                    <td>
+                                        <div class="mono" style="font-weight:700;">$32,644.30</div>
+                                        <div style="font-size: 0.69rem; color: #4B5563; font-weight: 500;">Exposure at Risk</div>
+                                    </td>
+                                    <td>15 min</td>
+                                    <td><span style="background: #FEE2E2; color: #DC2626; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">High</span></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openCustomerCreditExposureDrawer('30000')">Review Credit Exposure</button></td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <strong>50000 - Relecloud</strong>
+                                        <div style="font-size: 0.71rem; color: #6B7280; margin-top: 2px;" title="Exposure nearing credit threshold (67.6% utilization • $6,762.38)">💡 Exposure nearing credit threshold (67.6% utilization • $6,762.38)</div>
+                                    </td>
+                                    <td>
+                                        <div class="mono" style="font-weight:700;">$6,762.38</div>
+                                        <div style="font-size: 0.69rem; color: #4B5563; font-weight: 500;">Amount to Monitor</div>
+                                    </td>
+                                    <td>10 min</td>
+                                    <td><span style="background: #FEF3C7; color: #D97706; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Medium</span></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openContactAPDrawer('50000')">Contact Customer AP</button></td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <strong>40000 - Alpine Ski House</strong>
+                                        <div style="font-size: 0.71rem; color: #6B7280; margin-top: 2px;" title="Payment cycle latency watch (52.4% utilization • $2,617.50)">💡 Payment cycle latency watch (52.4% utilization • $2,617.50)</div>
+                                    </td>
+                                    <td>
+                                        <div class="mono" style="font-weight:700;">$2,617.50</div>
+                                        <div style="font-size: 0.69rem; color: #4B5563; font-weight: 500;">Amount to Monitor</div>
+                                    </td>
+                                    <td>10 min</td>
+                                    <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Low</span></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openPreDueCheckDrawer('40000')">Pre-Due Courtesy Check</button></td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <strong>20000 - Trey Research</strong>
+                                        <div style="font-size: 0.71rem; color: #6B7280; margin-top: 2px;" title="Payment velocity watch (78.2% utilization • $2,345.63)">💡 Payment velocity watch (78.2% utilization • $2,345.63)</div>
+                                    </td>
+                                    <td>
+                                        <div class="mono" style="font-weight:700;">$2,345.63</div>
+                                        <div style="font-size: 0.69rem; color: #4B5563; font-weight: 500;">Amount to Monitor</div>
+                                    </td>
+                                    <td>10 min</td>
+                                    <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Low</span></td>
+                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openPreDueCheckDrawer('20000')">Pre-Due Courtesy Check</button></td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -543,7 +649,30 @@
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; margin-bottom: 16px;">Recent Activity</h3>
                         <div id="ct-activity-feed-container" style="display: flex; flex-direction: column; gap: 14px;">
-                            <!-- Dynamic Feed populated from BC -->
+                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
+                                <span style="background:#FEE2E2; color:#DC2626; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">🚨</span>
+                                <div style="flex:1;">
+                                    <div style="font-weight: 700;">AI flagged School of Fine Art for credit exposure ($12,644.30 excess over limit)</div>
+                                    <div style="font-size: 0.72rem; color: #6B7280;">Trigger: Credit utilization reached 163.2% ($32,644.30 balance vs $20,000.00 limit)</div>
+                                </div>
+                                <span style="font-size: 0.7rem; color: #9CA3AF;">10:42 AM</span>
+                            </div>
+                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
+                                <span style="background:#EFF6FF; color:#2563EB; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">🔄</span>
+                                <div style="flex:1;">
+                                    <div style="font-weight: 700;">Business Central OData sync completed (CRONUS IN)</div>
+                                    <div style="font-size: 0.72rem; color: #6B7280;">Refreshed 5 customer ledger accounts & open entries</div>
+                                </div>
+                                <span style="font-size: 0.7rem; color: #9CA3AF;">10:25 AM</span>
+                            </div>
+                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
+                                <span style="background:#F0FDF4; color:#059669; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">✉️</span>
+                                <div style="flex:1;">
+                                    <div style="font-weight: 700;">Pre-due courtesy statement prepared for Alpine Ski House</div>
+                                    <div style="font-size: 0.72rem; color: #6B7280;">Amount: $2,617.50 USD • Courtesy Check scheduled before due date</div>
+                                </div>
+                                <span style="font-size: 0.7rem; color: #9CA3AF;">Yesterday</span>
+                            </div>
                         </div>
                     </div>
 
