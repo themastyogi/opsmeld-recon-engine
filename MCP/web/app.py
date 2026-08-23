@@ -143,5 +143,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"400 Bad Request")
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
 def create_server(host: str = "0.0.0.0", port: int = 8000) -> HTTPServer:
-    return HTTPServer((host, port), OpsmeldWebHandler)
+    return ReusableHTTPServer((host, port), OpsmeldWebHandler)
