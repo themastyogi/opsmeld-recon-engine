@@ -636,12 +636,15 @@
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700;">AR Portfolio Overview</h3>
                         <div style="display: flex; align-items: center; justify-content: center; height: 140px; margin: 12px 0;">
                             <div style="width: 120px; height: 120px; border-radius: 50%; border: 16px solid #059669; border-top-color: #DC2626; border-right-color: #D97706; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                                <span style="font-size: 1.2rem; font-weight: 800;" id="ct-total-cust-count">0</span>
+                                <span style="font-size: 1.2rem; font-weight: 800;" id="ct-total-cust-count">5</span>
                                 <span style="font-size: 0.68rem; color: #6B7280;">Customers</span>
                             </div>
                         </div>
                         <div id="ct-aging-container" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem;">
-                            <!-- Dynamic Aging populated from BC -->
+                            <div style="display: flex; justify-content: space-between;"><span style="color:#059669; font-weight:700;">■ Current (0-30)</span><span>5 (100%)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color:#D97706; font-weight:700;">■ 31-60 Days</span><span>0 (0%)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color:#E11D48; font-weight:700;">■ 61-90 Days</span><span>0 (0%)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color:#DC2626; font-weight:700;">■ 90+ Days</span><span>0 (0%)</span></div>
                         </div>
                     </div>
 
@@ -1643,6 +1646,18 @@
                 } else {
                     alert('No items in work queue.');
                 }
+            })
+            .catch(() => {
+                // Fallback static items if fetch fails
+                guidedWorkItems = [
+                    { customer: '30000 - School of Fine Art', customer_no: '30000', opportunity: 32644.30, priority: 'High', action: 'Review Credit Exposure', why_flagged: 'Credit exposure exceeds limit (163.2% utilization • $12,644.30 excess)', rec_action: 'Review credit limit before releasing new orders', tier: 'high' },
+                    { customer: '50000 - Relecloud', customer_no: '50000', opportunity: 6762.38, priority: 'Medium', action: 'Contact Customer AP', why_flagged: 'Exposure nearing credit threshold (67.6% utilization • $6,762.38)', rec_action: 'Contact AP to confirm invoice receipt before due date', tier: 'medium' },
+                    { customer: '40000 - Alpine Ski House', customer_no: '40000', opportunity: 2617.50, priority: 'Low', action: 'Pre-Due Courtesy Check', why_flagged: 'Payment cycle latency watch (52.4% utilization • $2,617.50)', rec_action: 'Send pre-due courtesy statement', tier: 'low' },
+                    { customer: '20000 - Trey Research', customer_no: '20000', opportunity: 2345.63, priority: 'Low', action: 'Pre-Due Courtesy Check', why_flagged: 'Payment velocity watch (78.2% utilization • $2,345.63)', rec_action: 'Send automated courtesy reminder', tier: 'low' }
+                ];
+                guidedCurrentIdx = 0;
+                renderGuidedStep(0);
+                document.getElementById('guided-work-modal').style.display = 'flex';
             });
     }
 
@@ -1666,7 +1681,7 @@
         const item = guidedWorkItems[guidedCurrentIdx];
         if (item) {
             closeGuidedWorkModal();
-            openProcedureModal(item.tier || 'high', item.customer_no);
+            handleActionClick(item.action, item.customer_no, item.tier);
         }
     }
 
@@ -1679,23 +1694,17 @@
         document.getElementById('guided-work-modal').style.display = 'none';
     }
 
-
-    function openPortfolioCreditReviewModal() {
-        document.getElementById('portfolio-credit-modal').style.display = 'flex';
-    }
-
-    function closePortfolioCreditModal() {
-        document.getElementById('portfolio-credit-modal').style.display = 'none';
-    }
-
-
-    // --- OpsMeld Action Framework Universal Handlers ---
-
     function openSideDrawer(title, subtitle, badgeText, contentHtml, buttonsArray) {
-        document.getElementById('ops-drawer-title').innerText = title;
-        document.getElementById('ops-drawer-subtitle').innerText = subtitle;
-        document.getElementById('ops-drawer-badge').innerText = badgeText || 'ACTION DRAWER';
-        document.getElementById('ops-drawer-body').innerHTML = contentHtml;
+        const titleEl = document.getElementById('ops-drawer-title');
+        const subEl = document.getElementById('ops-drawer-subtitle');
+        const badgeEl = document.getElementById('ops-drawer-badge');
+        const bodyEl = document.getElementById('ops-drawer-body');
+        const footEl = document.getElementById('ops-drawer-footer');
+
+        if (titleEl) titleEl.innerText = title;
+        if (subEl) subEl.innerText = subtitle;
+        if (badgeEl) badgeEl.innerText = badgeText || 'ACTION DRAWER';
+        if (bodyEl) bodyEl.innerHTML = contentHtml;
         
         let footerHtml = '';
         if (buttonsArray && buttonsArray.length > 0) {
@@ -1703,20 +1712,23 @@
                 footerHtml += `<button class="btn-btn" style="${btn.style || 'background:#374151;'}" onclick="${btn.onclick}">${btn.label}</button>`;
             });
         }
-        document.getElementById('ops-drawer-footer').innerHTML = footerHtml;
+        if (footEl) footEl.innerHTML = footerHtml;
 
-        document.getElementById('opsmeld-drawer-overlay').style.display = 'block';
-        document.getElementById('opsmeld-side-drawer').style.right = '0';
+        const overlay = document.getElementById('opsmeld-drawer-overlay');
+        const drawer = document.getElementById('opsmeld-side-drawer');
+        if (overlay) overlay.style.display = 'block';
+        if (drawer) drawer.style.right = '0';
     }
 
     function closeOpsmeldDrawer() {
-        document.getElementById('opsmeld-side-drawer').style.right = '-520px';
+        const drawer = document.getElementById('opsmeld-side-drawer');
+        const overlay = document.getElementById('opsmeld-drawer-overlay');
+        if (drawer) drawer.style.right = '-520px';
         setTimeout(() => {
-            document.getElementById('opsmeld-drawer-overlay').style.display = 'none';
+            if (overlay) overlay.style.display = 'none';
         }, 300);
     }
 
-    // 1. Portfolio Review Action
     function openPortfolioCreditReviewModal() {
         const html = `
             <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
@@ -1739,44 +1751,53 @@
         openSideDrawer('Credit Exposure Review', 'Portfolio-level aggregate risk summary', 'PORTFOLIO REVIEW', html, buttons);
     }
 
-    // 2. Customer Credit Review Action
     function openCustomerCreditExposureDrawer(custNo) {
         custNo = custNo || '30000';
         fetch('/api/ar-manager/control-tower')
             .then(res => res.json())
             .then(data => {
-                const drawData = (data.customer_action_drawers && data.customer_action_drawers[custNo]) ? data.customer_action_drawers[custNo] : {
-                    name: 'School of Fine Art', credit_limit: 20000.0, exposure: 32644.30, excess: 12644.30, utilization: '163.2%',
-                    ai_assessment: 'Customer is not overdue, but current exposure is $12,644.30 above approved credit limit.'
-                };
-
-                const html = `
-                    <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                            <span style="font-size:0.8rem; font-weight:700; color:#DC2626;">Risk Tier: ${drawData.risk_level || 'Critical'}</span>
-                            <span style="font-size:0.85rem; font-weight:800;" class="mono">$${formatMoney(drawData.exposure)} USD</span>
-                        </div>
-                        <div style="font-size:0.78rem; color:#4B5563;">
-                            Credit Limit: $${formatMoney(drawData.credit_limit)} • Excess: $${formatMoney(drawData.excess)} (${drawData.utilization})
-                        </div>
-                    </div>
-                    <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-                        <div style="font-size:0.8rem; font-weight:700; color:#1E40AF;">AI Credit Assessment</div>
-                        <div style="font-size:0.78rem; color:#1E3A8A; margin-top:4px; line-height:1.4;">${drawData.ai_assessment}</div>
-                    </div>
-                `;
-
-                const buttons = [
-                    { label: 'Deep Investigate →', style: 'background: #2563EB;', onclick: `closeOpsmeldDrawer(); openInvestigatePage('${custNo}');` },
-                    { label: 'Prepare Email', style: 'background: #059669;', onclick: `closeOpsmeldDrawer(); openPrepareEmailModal('${custNo}', 'credit');` },
-                    { label: 'Open in BC ↗', style: 'background: #374151;', onclick: `openInBC('${custNo}', 'customer');` }
-                ];
-
-                openSideDrawer(drawData.name || 'Customer Credit Position', `Account #${custNo} Credit Risk Analysis`, 'CUSTOMER REVIEW', html, buttons);
+                renderCustDrawer(data, custNo);
+            })
+            .catch(() => {
+                renderCustDrawer(null, custNo);
             });
     }
 
-    // 3. Pre-Due Courtesy Check Action
+    function renderCustDrawer(data, custNo) {
+        const drawers = (data && data.customer_action_drawers) ? data.customer_action_drawers : {
+            "30000": { name: "School of Fine Art", risk_level: "Critical", credit_limit: 20000.0, exposure: 32644.30, excess: 12644.30, utilization: "163.2%", ai_assessment: "Customer is not overdue ($0 overdue), but current exposure is $12,644.30 above approved credit limit." },
+            "50000": { name: "Relecloud", risk_level: "Medium", credit_limit: 10000.0, exposure: 6762.38, excess: 0.0, utilization: "67.6%", ai_assessment: "Exposure nearing credit threshold (67.6% utilization). Recommended: Contact customer AP." },
+            "40000": { name: "Alpine Ski House", risk_level: "Low", credit_limit: 5000.0, exposure: 2617.50, excess: 0.0, utilization: "52.4%", ai_assessment: "Invoice due in 5 days. Recommended: Send a pre-due courtesy statement." },
+            "20000": { name: "Trey Research", risk_level: "Low", credit_limit: 3000.0, exposure: 2345.63, excess: 0.0, utilization: "78.2%", ai_assessment: "Payment velocity watch (78.2% limit utilization). Recommended: Courtesy check before due date." }
+        };
+
+        const drawData = drawers[custNo] || drawers["30000"];
+
+        const html = `
+            <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                    <span style="font-size:0.8rem; font-weight:700; color:#DC2626;">Risk Tier: ${drawData.risk_level || 'Critical'}</span>
+                    <span style="font-size:0.85rem; font-weight:800;" class="mono">$${formatMoney(drawData.exposure)} USD</span>
+                </div>
+                <div style="font-size:0.78rem; color:#4B5563;">
+                    Credit Limit: $${formatMoney(drawData.credit_limit)} • Excess: $${formatMoney(drawData.excess)} (${drawData.utilization})
+                </div>
+            </div>
+            <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                <div style="font-size:0.8rem; font-weight:700; color:#1E40AF;">AI Credit Assessment</div>
+                <div style="font-size:0.78rem; color:#1E3A8A; margin-top:4px; line-height:1.4;">${drawData.ai_assessment}</div>
+            </div>
+        `;
+
+        const buttons = [
+            { label: 'Deep Investigate →', style: 'background: #2563EB;', onclick: `closeOpsmeldDrawer(); openInvestigatePage('${custNo}');` },
+            { label: 'Prepare Email', style: 'background: #059669;', onclick: `closeOpsmeldDrawer(); openPrepareEmailModal('${custNo}', 'credit');` },
+            { label: 'Open in BC ↗', style: 'background: #374151;', onclick: `openInBC('${custNo}', 'customer');` }
+        ];
+
+        openSideDrawer(drawData.name || 'Customer Credit Position', `Account #${custNo} Credit Risk Analysis`, 'CUSTOMER REVIEW', html, buttons);
+    }
+
     function openPreDueCheckDrawer(custNo) {
         custNo = custNo || '40000';
         const html = `
@@ -1800,7 +1821,6 @@
         openSideDrawer('Pre-Due Courtesy Check', 'Preventive Courtesy Trigger', 'PRE-DUE CHECK', html, buttons);
     }
 
-    // 4. Contact Customer AP Action
     function openContactAPDrawer(custNo) {
         custNo = custNo || '50000';
         const html = `
@@ -1822,57 +1842,48 @@
         openSideDrawer('Contact Customer AP', 'Direct AP Operational Outreach', 'CONTACT AP', html, buttons);
     }
 
-    // 5. Deep Investigation Action Page
     function openInvestigatePage(custNo) {
         custNo = custNo || '30000';
-        document.getElementById('opsmeld-investigation-modal').style.display = 'flex';
+        const modal = document.getElementById('opsmeld-investigation-modal');
+        if (modal) modal.style.display = 'flex';
     }
 
     function closeOpsmeldInvestigationModal() {
-        document.getElementById('opsmeld-investigation-modal').style.display = 'none';
+        const modal = document.getElementById('opsmeld-investigation-modal');
+        if (modal) modal.style.display = 'none';
     }
 
-    // 6. Email Composer Action (Prepare Email)
     function openPrepareEmailModal(custNo, type) {
         custNo = custNo || '30000';
         let emailTo = 'ap@schooloffineart.edu';
         let subject = 'Opsmeld Courtesy Pre-Due Statement: School of Fine Art';
-        let body = 'Dear Accounts Payable Team,
-
-This is a courtesy check regarding invoice #103001 ($32,644.30 USD). Please confirm receipt and scheduled payment date.
-
-Thank you,
-OpsMeld AR Management Team';
+        let body = 'Dear Accounts Payable Team,\n\nThis is a courtesy check regarding invoice #103001 ($32,644.30 USD). Please confirm receipt and scheduled payment date.\n\nThank you,\nOpsMeld AR Management Team';
 
         if (custNo === '50000') {
             emailTo = 'ap@relecloud.com';
             subject = 'Opsmeld Courtesy Statement: Relecloud';
-            body = 'Dear Relecloud AP Team,
-
-We are following up regarding active balance ($6,762.38 USD). Please let us know if you require any additional documentation to process payment.
-
-Best regards,
-OpsMeld AR Team';
+            body = 'Dear Relecloud AP Team,\n\nWe are following up regarding active balance ($6,762.38 USD). Please let us know if you require any additional documentation to process payment.\n\nBest regards,\nOpsMeld AR Team';
         } else if (custNo === '40000') {
             emailTo = 'accounting@alpineskihouse.com';
             subject = 'Pre-Due Courtesy Statement: Alpine Ski House';
-            body = 'Dear Alpine Ski House Accounting,
-
-Your upcoming invoice #103022 ($2,617.50 USD) is due in 5 days (2026-08-28). Please let us know if payment is scheduled.
-
-Thank you,
-OpsMeld AR Team';
+            body = 'Dear Alpine Ski House Accounting,\n\nYour upcoming invoice #103022 ($2,617.50 USD) is due in 5 days (2026-08-28). Please let us know if payment is scheduled.\n\nThank you,\nOpsMeld AR Team';
         }
 
-        document.getElementById('email-field-to').value = emailTo;
-        document.getElementById('email-field-subject').value = subject;
-        document.getElementById('email-field-body').value = body;
+        const toEl = document.getElementById('email-field-to');
+        const subjEl = document.getElementById('email-field-subject');
+        const bodyEl = document.getElementById('email-field-body');
 
-        document.getElementById('opsmeld-email-modal').style.display = 'flex';
+        if (toEl) toEl.value = emailTo;
+        if (subjEl) subjEl.value = subject;
+        if (bodyEl) bodyEl.value = body;
+
+        const modal = document.getElementById('opsmeld-email-modal');
+        if (modal) modal.style.display = 'flex';
     }
 
     function closeOpsmeldEmailModal() {
-        document.getElementById('opsmeld-email-modal').style.display = 'none';
+        const modal = document.getElementById('opsmeld-email-modal');
+        if (modal) modal.style.display = 'none';
     }
 
     function sendPreparedEmail() {
@@ -1880,12 +1891,11 @@ OpsMeld AR Team';
         alert('🚀 Email sent successfully to Customer AP! Closed-loop activity event logged in OpsMeld.');
     }
 
-    // 7. View Invoice Action
     function openViewInvoiceDrawer(custNo, invNo) {
         invNo = invNo || '103001';
         const html = `
             <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                <div style="display:flex; justify-space-between; margin-bottom: 6px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
                     <span style="font-size:0.85rem; font-weight:800;">Invoice #${invNo}</span>
                     <span style="font-size:0.85rem; font-weight:800; color:#059669;" class="mono">$2,617.50 USD</span>
                 </div>
@@ -1906,12 +1916,9 @@ OpsMeld AR Team';
         openSideDrawer(`Invoice #${invNo}`, 'Business Central Sales Invoice Detail', 'VIEW INVOICE', html, buttons);
     }
 
-    // 8. Open in Business Central Deep Link
     function openInBC(custNo, type) {
-        alert(`🔗 Deep-linking to Microsoft Dynamics 365 Business Central (CRONUS IN)
-Target: ${type || 'Customer'} #${custNo || '30000'}`);
+        const targetType = type || 'Customer'; const targetNo = custNo || '30000'; alert('🔗 Deep-linking to Microsoft Dynamics 365 Business Central (CRONUS IN)\nTarget: ' + targetType + ' #' + targetNo);
     }
-
 
     function handleActionClick(actionText, customerNo, tier) {
         if (!customerNo || customerNo === 'null' || customerNo === 'undefined') customerNo = '30000';
@@ -1933,9 +1940,7 @@ Target: ${type || 'Customer'} #${custNo || '30000'}`);
     }
 
 </script>
-
-    <!-- Interactive Guided Work Mode Modal (Sequential Step-by-Step Operator Workflow) -->
-    <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
+<div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
         <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 14px; margin-bottom: 18px;">
                 <div>
