@@ -478,18 +478,18 @@
                 
                 <div style="font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 8px;">▼ Autopilot</div>
                 <div style="padding-left: 12px;">
-                    <div style="font-size: 0.85rem; color: #4B5563; font-weight: 600; margin-bottom: 4px;">▼ High risk</div>
-                    <div style="padding-left: 12px; font-size: 0.8rem;">
+                    <div style="font-size: 0.85rem; color: #4B5563; font-weight: 600; margin-bottom: 4px; cursor: pointer;" onclick="openProcedureModal('high')">▼ High risk</div>
+                    <div id="left-tree-high" style="padding-left: 12px; font-size: 0.8rem;">
                         <div style="background: #E0E7FF; color: #3730A3; padding: 6px 8px; border-radius: 4px; font-weight: 600; margin-bottom: 4px; cursor: pointer;">
-                            Autopilot high risk <span style="font-size: 0.75rem;">Opsmeld Global Enterprise Segment ⚠️</span>
+                            10000 <span style="font-size: 0.75rem;">Cannon Group PLC ⚠️</span>
                         </div>
-                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Opsmeld Commercial Key Accounts ⚠️</span></div>
-                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Opsmeld Mid-Market Portfolio</span></div>
-                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">Autopilot high risk <span style="font-size: 0.75rem;">Opsmeld Government Accounts</span></div>
+                        <div style="color: #6B7280; padding: 4px 8px; cursor: pointer;">20000 <span style="font-size: 0.75rem;">Progressive Home Furnishings ⚠️</span></div>
                     </div>
-                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Medium risk</div>
-                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Low risk</div>
-                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;">► Optimal</div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;" onclick="openProcedureModal('medium')">► Medium risk</div>
+                    <div id="left-tree-medium" style="padding-left: 12px; font-size: 0.8rem;"></div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;" onclick="openProcedureModal('low')">► Low risk</div>
+                    <div id="left-tree-low" style="padding-left: 12px; font-size: 0.8rem;"></div>
+                    <div style="font-size: 0.85rem; color: #4B5563; margin-top: 8px; cursor: pointer;" onclick="openProcedureModal('optimal')">► Optimal</div>
                 </div>
                 <div style="font-size: 0.85rem; font-weight: 600; color: #374151; margin-top: 16px;">► Custom</div>
             </div>
@@ -498,7 +498,7 @@
             <div style="flex: 1; padding: 24px 32px; overflow-y: auto; background: white; position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <h2 style="margin: 0; font-size: 1.3rem; font-weight: 700;" id="proc-modal-title">Opsmeld Global Enterprise Segment » High Risk Autopilot Procedure</h2>
+                        <h2 style="margin: 0; font-size: 1.3rem; font-weight: 700;" id="proc-modal-title">10000 - Cannon Group PLC » Opsmeld High Risk Autopilot Procedure</h2>
                         <span style="background: #D1FAE5; color: #065F46; font-size: 0.75rem; padding: 3px 10px; border-radius: 12px; font-weight: 600;">🟢 Opsmeld Autopilot Engine ✓</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
@@ -507,6 +507,19 @@
                         <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openAddStepModal()">Add New Step</button>
                         <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openCopyProcModal()">Copy</button>
                         <button class="btn-btn" style="background: #6B7280; margin-left: 8px;" onclick="closeProcedureModal()">✕ Close</button>
+                    </div>
+                </div>
+
+                <!-- Customer Account Selector Bar -->
+                <div id="customer-selector-bar" style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: #374151;">👤 Customer Account Lookup:</span>
+                        <select id="proc-customer-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #D1D5DB; font-size: 0.85rem; font-weight: 600; background: white;" onchange="onCustomerSelectChange(this.value)">
+                            <!-- Dynamic Customer Options -->
+                        </select>
+                    </div>
+                    <div id="proc-customer-stats" style="font-size: 0.8rem; color: #6B7280; font-weight: 500;">
+                        Open Balance: <strong id="cust-stat-bal" style="color:#111827;">$0.00</strong> | Overdue: <strong id="cust-stat-overdue" style="color:#DC2626;">$0.00</strong>
                     </div>
                 </div>
 
@@ -848,14 +861,59 @@
         }
     }
 
-    function openProcedureModal(tier) {
+    let currentModalTier = 'high';
+
+    function onCustomerSelectChange(custNo) {
+        openProcedureModal(currentModalTier, custNo);
+    }
+
+    function openProcedureModal(tier, customer_no) {
         tier = tier || 'high';
-        fetch('/api/ar-manager/procedure-detail?tier=' + tier)
+        currentModalTier = tier;
+
+        let url = '/api/ar-manager/procedure-detail?tier=' + tier;
+        if (customer_no) {
+            url += '&customer_no=' + encodeURIComponent(customer_no);
+        }
+
+        fetch(url)
             .then(res => res.json())
             .then(data => {
                 if (data.title) {
-                    document.getElementById('proc-modal-title').innerText = 'Opsmeld Global Enterprise Segment » ' + data.title;
+                    document.getElementById('proc-modal-title').innerText = data.title;
                 }
+
+                // Populate Customer Selector Dropdown
+                const sel = document.getElementById('proc-customer-select');
+                if (data.customers && data.customers.length > 0) {
+                    let optionsHtml = '';
+                    data.customers.forEach(c => {
+                        const isSel = data.selected_customer && String(c.number) === String(data.selected_customer.number);
+                        optionsHtml += `<option value="${escapeHtml(c.number)}" ${isSel ? 'selected' : ''}>${escapeHtml(c.number)} - ${escapeHtml(c.name)}</option>`;
+                    });
+                    sel.innerHTML = optionsHtml;
+                }
+
+                if (data.selected_customer) {
+                    document.getElementById('cust-stat-bal').innerText = formatMoney(data.selected_customer.balance_due || 0);
+                    document.getElementById('cust-stat-overdue').innerText = formatMoney(data.selected_customer.trapped_cash || 0);
+                }
+
+                // Populate Left Sidebar Customer Tree
+                const treeContainer = document.getElementById('left-tree-' + tier);
+                if (treeContainer && data.customers) {
+                    let treeHtml = '';
+                    data.customers.forEach(c => {
+                        const isSel = data.selected_customer && String(c.number) === String(data.selected_customer.number);
+                        const bgStyle = isSel ? 'background: #E0E7FF; color: #3730A3; font-weight: 600;' : 'color: #6B7280;';
+                        treeHtml += `
+                        <div style="${bgStyle} padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; cursor: pointer;" onclick="openProcedureModal('${tier}', '${c.number}')">
+                            ${escapeHtml(c.number)} <span style="font-size: 0.75rem;">${escapeHtml(c.name)} ⚠️</span>
+                        </div>`;
+                    });
+                    treeContainer.innerHTML = treeHtml;
+                }
+
                 document.getElementById('procedure-modal').style.display = 'flex';
             })
             .catch(() => {

@@ -151,14 +151,20 @@ class ARManagerReport:
             "custom_segments": custom_segments
         }
 
-    def get_procedure_detail(self, tier: str = "high") -> Dict[str, Any]:
-        """Calculates AI Payment Probability curve, customer list, and procedure steps for a risk tier."""
+    def get_procedure_detail(self, tier: str = "high", customer_no: Optional[str] = None) -> Dict[str, Any]:
+        """Calculates AI Payment Probability curve, customer list, and procedure steps for a risk tier and specific customer."""
         data = self.fetch_data()
         customers = data.get("customers", [])
         
         tier_customers = [c for c in customers if c.get("segment") == tier]
         if not tier_customers and customers:
             tier_customers = customers[:5]
+
+        selected_customer = None
+        if customer_no:
+            selected_customer = next((c for c in customers if str(c.get("number")) == str(customer_no)), None)
+        if not selected_customer and tier_customers:
+            selected_customer = tier_customers[0]
 
         # AI Payment Probability distribution curve calculation
         probability_bars = [
@@ -182,9 +188,15 @@ class ARManagerReport:
             {"step": 4, "trigger": "30 Days Overdue", "action": "Dispute / Credit Hold", "template": "Opsmeld Account Credit Suspension Notice", "behavior": "Review Required", "notification": "VP of Finance"},
         ]
 
+        if selected_customer:
+            title = f"{selected_customer.get('number')} - {selected_customer.get('name')} » Opsmeld {tier.capitalize()} Risk Autopilot Procedure"
+        else:
+            title = f"Opsmeld {tier.capitalize()} Risk Autopilot Procedure"
+
         return {
             "tier": tier,
-            "title": f"Opsmeld {tier.capitalize()} Risk Autopilot Procedure",
+            "selected_customer": selected_customer,
+            "title": title,
             "customers": tier_customers,
             "probability_bars": probability_bars,
             "steps": steps

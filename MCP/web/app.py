@@ -100,11 +100,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/ar-manager/procedure-detail":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             tier = query_params.get("tier", ["high"])[0]
+            customer_no_list = query_params.get("customer_no", [None])
+            customer_no = customer_no_list[0] if customer_no_list else None
             config = load_client_config()
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
-            detail = report.get_procedure_detail(tier)
+            detail = report.get_procedure_detail(tier, customer_no=customer_no)
             self._set_headers("application/json")
             self.wfile.write(json.dumps(detail).encode("utf-8"))
 
