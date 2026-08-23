@@ -57,9 +57,11 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
-            customers = report.fetch_data()
+            res = report.fetch_data()
+            error_msg = res.get("error")
+            customers = res.get("customers", [])
             tiered = [report.tier_customer(c) for c in customers]
-            html = report.render_html(tiered, config.name)
+            html = report.render_html(tiered, config.name, error_msg=error_msg)
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
 
@@ -68,11 +70,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
-            customers = report.fetch_data()
+            res = report.fetch_data()
+            error_msg = res.get("error")
+            customers = res.get("customers", [])
             tiered = [report.tier_customer(c) for c in customers]
             
             data = {
                 "client_name": config.name,
+                "error": error_msg,
                 "total_balance": sum(c.get("balance_due", 0.0) for c in tiered),
                 "total_trapped_cash": sum(c.get("trapped_cash", 0.0) for c in tiered),
                 "total_unapplied_limbo": sum(c.get("unapplied_cash", 0.0) for c in tiered if c.get("has_unapplied_limbo")),
