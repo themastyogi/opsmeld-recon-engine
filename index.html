@@ -518,10 +518,10 @@
                 <!-- AI Payment Probability Chart Card -->
                 <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px; position: relative;">
                     <!-- AI Tooltip -->
-                    <div style="position: absolute; top: 12px; right: 24px; background: #E0F2FE; border: 1px solid #7DD3FC; border-radius: 12px; padding: 12px 16px; max-width: 320px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); z-index: 10;">
+                    <div id="ai-tooltip" style="position: absolute; top: 12px; right: 24px; background: #E0F2FE; border: 1px solid #7DD3FC; border-radius: 12px; padding: 12px 16px; max-width: 320px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); z-index: 10;">
                         <div style="font-size: 0.82rem; color: #0369A1; font-weight: 500;">
                             AI analyzes historical data to determine their payment probability, so <strong>you don't have to</strong>.
-                            <button style="background: #4F46E5; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; float: right; margin-top: 8px; cursor: pointer;">Next</button>
+                            <button style="background: #4F46E5; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; float: right; margin-top: 8px; cursor: pointer;" onclick="dismissAiTooltip()">Next</button>
                         </div>
                     </div>
 
@@ -693,6 +693,11 @@
             .catch(() => {
                 document.getElementById('procedure-modal').style.display = 'flex';
             });
+    }
+
+    function dismissAiTooltip() {
+        const tooltip = document.getElementById('ai-tooltip');
+        if (tooltip) tooltip.style.display = 'none';
     }
 
     function closeProcedureModal() {
