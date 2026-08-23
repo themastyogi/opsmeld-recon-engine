@@ -155,7 +155,11 @@ class BCMCPClient:
                 if sess_header:
                     self._mcp_session_id = sess_header
 
-                res_data = json.loads(resp.read().decode("utf-8"))
+                raw_bytes = resp.read()
+                if not raw_bytes:
+                    return {}
+
+                res_data = json.loads(raw_bytes.decode("utf-8"))
                 if "error" in res_data:
                     return {"error": f"JSON-RPC Error: {res_data['error'].get('message', res_data['error'])}"}
                 return res_data.get("result", {})
