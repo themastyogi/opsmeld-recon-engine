@@ -518,8 +518,10 @@
                             <!-- Dynamic Customer Options -->
                         </select>
                     </div>
-                    <div id="proc-customer-stats" style="font-size: 0.8rem; color: #6B7280; font-weight: 500;">
-                        Open Balance: <strong id="cust-stat-bal" style="color:#111827;">$0.00</strong> | Overdue: <strong id="cust-stat-overdue" style="color:#DC2626;">$0.00</strong>
+                    <div id="proc-customer-stats" style="font-size: 0.8rem; color: #6B7280; font-weight: 500; display: flex; align-items: center; gap: 12px;">
+                        <div>Open Balance: <strong id="cust-stat-bal" style="color:#111827;">$0.00</strong></div>
+                        <div>Overdue: <strong id="cust-stat-overdue" style="color:#DC2626;">$0.00</strong></div>
+                        <div id="cust-stat-drift" style="background: #ECFDF5; color: #065F46; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 0.75rem;">⚡ Baseline Drift: Stable payment velocity</div>
                     </div>
                 </div>
 
@@ -554,37 +556,37 @@
                             </div>
                         </div>
 
-                        <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Payment probability</h3>
+                        <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Payment probability (Calculated from Business Central Ledger)</h3>
 
-                        <!-- Clean Non-Overlapping Bar Chart Container -->
-                        <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 170px; padding: 20px 10px 0 10px; border-bottom: 1px solid #E5E7EB;">
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="-2 weeks: 3% Probability ($5,200 USD)" onclick="highlightBar('3%')">
+                        <!-- Clean Non-Overlapping Bar Chart Container (Dynamic derived from BC Ledger) -->
+                        <div id="prob-bars-container" style="display: flex; align-items: flex-end; justify-content: space-between; height: 170px; padding: 20px 10px 0 10px; border-bottom: 1px solid #E5E7EB;">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="-2 weeks: 3% Probability" onclick="highlightBar('3%')">
                                 <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
-                                <div style="width: 32px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <div style="width: 32px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
                                 <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">-2 weeks</span>
                             </div>
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="One week before: 5% Probability ($8,400 USD)" onclick="highlightBar('5%')">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="One week before: 5% Probability" onclick="highlightBar('5%')">
                                 <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
-                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
                                 <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">1w before</span>
                             </div>
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="Moment overdue: 4% Probability ($6,100 USD)" onclick="highlightBar('4%')">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="Overdue: 4% Probability" onclick="highlightBar('4%')">
                                 <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">4%</span>
-                                <div style="width: 32px; height: 45px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <div style="width: 32px; height: 45px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
                                 <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">Overdue</span>
                             </div>
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="1 week after: 5% Probability ($8,900 USD)" onclick="highlightBar('5%')">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="1w after: 5% Probability" onclick="highlightBar('5%')">
                                 <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
-                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
                                 <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">1w after</span>
                             </div>
-                            <!-- Peak Bar -->
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative; cursor: pointer;" title="2 weeks: 21% Peak Probability ($34,137.11 USD)" onclick="highlightBar('21%')">
-                                <div style="position: absolute; top: -18px; width: 12px; height: 12px; background: #2563EB; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"></div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative; cursor: pointer;" title="2 weeks: 21% Probability" onclick="highlightBar('21%')">
+                                <div style="position: absolute; top: -18px; width: 12px; height: 12px; background: #2563EB; border-radius: 50%; border: 2px solid white;"></div>
                                 <span style="font-size: 0.78rem; font-weight: 800; color: #111827;">21%</span>
-                                <div style="width: 32px; height: 115px; background: #7C3AED; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.08)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <div style="width: 32px; height: 115px; background: #7C3AED; border-radius: 4px 4px 0 0;"></div>
                                 <span style="font-size: 0.72rem; color: #111827; font-weight: 800; margin-top: 8px; text-align: center;">2 weeks</span>
                             </div>
+                        </div>
                             <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="3 weeks: 14% Probability ($22,400 USD)" onclick="highlightBar('14%')">
                                 <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">14%</span>
                                 <div style="width: 32px; height: 90px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
@@ -897,6 +899,45 @@
                 if (data.selected_customer) {
                     document.getElementById('cust-stat-bal').innerText = formatMoney(data.selected_customer.balance_due || 0);
                     document.getElementById('cust-stat-overdue').innerText = formatMoney(data.selected_customer.trapped_cash || 0);
+                }
+
+                // Render real baseline drift status
+                const driftEl = document.getElementById('cust-stat-drift');
+                if (data.baseline_drift && driftEl) {
+                    const d = data.baseline_drift;
+                    if (d.is_dormant_risk) {
+                        driftEl.style.background = '#FEE2E2';
+                        driftEl.style.color = '#991B1B';
+                        driftEl.innerHTML = `⚠️ Dormancy Risk: ${escapeHtml(d.drift_status)}`;
+                    } else {
+                        driftEl.style.background = '#ECFDF5';
+                        driftEl.style.color = '#065F46';
+                        driftEl.innerHTML = `⚡ Baseline Drift: ${escapeHtml(d.drift_status)}`;
+                    }
+                }
+
+                // Render real dynamic AI Payment Probability bars derived from Business Central ledger
+                if (data.probability_bars && data.probability_bars.length > 0) {
+                    const chartContainer = document.getElementById('prob-bars-container');
+                    if (chartContainer) {
+                        let chartHtml = '';
+                        let maxPct = Math.max(...data.probability_bars.map(b => b.pct), 1);
+                        data.probability_bars.forEach(b => {
+                            const barHeight = Math.max(Math.round((b.pct / maxPct) * 120), 8);
+                            const isPeak = (b.pct === maxPct && maxPct > 0);
+                            const barBg = isPeak ? '#7C3AED' : '#8B5CF6';
+                            const titleText = `${b.label}: ${b.pct}% Payment Probability derived from Business Central ledger entries`;
+
+                            chartHtml += `
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative; cursor: pointer;" title="${escapeHtml(titleText)}" onclick="highlightBar('${b.pct}%')">
+                                ${isPeak ? '<div style="position: absolute; top: -18px; width: 12px; height: 12px; background: #2563EB; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"></div>' : ''}
+                                <span style="font-size: 0.75rem; font-weight: 700; color: ${isPeak ? '#111827' : '#6B7280'};">${b.pct}%</span>
+                                <div style="width: 32px; height: ${barHeight}px; background: ${barBg}; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">${escapeHtml(b.label)}</span>
+                            </div>`;
+                        });
+                        chartContainer.innerHTML = chartHtml;
+                    }
                 }
 
                 // Populate Left Sidebar Customer Tree

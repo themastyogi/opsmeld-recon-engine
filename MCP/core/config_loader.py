@@ -38,7 +38,7 @@ class ClientConfig:
 @dataclass
 class EngineRules:
     safety_mode: str = "staged"
-    allow_write_operations: bool = True
+    allow_write_operations: bool = False
     default_do_not_post: bool = True
     max_query_records: int = 500
     raw_rules: Dict[str, Any] = field(default_factory=dict)

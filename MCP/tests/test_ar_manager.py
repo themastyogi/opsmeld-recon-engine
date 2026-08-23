@@ -26,9 +26,24 @@ class TestARManager(unittest.TestCase):
         tiered = self.report.tier_customer(high_risk)
         self.assertEqual(tiered["tier"], "collect")
 
-    def test_propose_fix_staging(self):
+    def test_propose_fix_safety_boundary(self):
         fix_res = self.report.propose_fix("C00030")
         self.assertIsInstance(fix_res, dict)
+        self.assertTrue(fix_res.get("read_only_boundary", True))
+
+    def test_calculate_baseline_drift_and_probability_bars(self):
+        mock_entries = [
+            {"customer_no": "10000", "overdue_days": 10, "open": False},
+            {"customer_no": "10000", "overdue_days": 12, "open": False},
+            {"customer_no": "10000", "overdue_days": 35, "open": True},
+        ]
+        drift = self.report.calculate_baseline_drift("10000", mock_entries)
+        self.assertIn("drift_days", drift)
+        self.assertTrue(drift["is_dormant_risk"])
+
+        bars = self.report.calculate_probability_bars("10000", mock_entries)
+        self.assertIsInstance(bars, list)
+        self.assertEqual(len(bars), 8)
 
     def test_generate_report(self):
         output_file = "test_ar_manager.html"

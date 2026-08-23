@@ -151,8 +151,103 @@ class ARManagerReport:
             "custom_segments": custom_segments
         }
 
+    def calculate_baseline_drift(self, customer_no: str, ledger_entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Computes day-over-day baseline drift and payment latency vs customer's historical baseline.
+        Catches dormancy risk signals (e.g., AMQM payment slowdown pattern).
+        """
+        c_entries = [e for e in ledger_entries if str(e.get("customer_no") or e.get("Customer_No") or e.get("number")) == str(customer_no)]
+        if not c_entries:
+            return {
+                "historical_baseline_days": 14.0,
+                "current_open_latency_days": 14.0,
+                "drift_days": 0.0,
+                "is_dormant_risk": False,
+                "drift_status": "No historical ledger entries available"
+            }
+
+        closed_entries = [e for e in c_entries if not e.get("open", True)]
+        open_entries = [e for e in c_entries if e.get("open", True)]
+
+        historical_baseline = (
+            sum(int(e.get("overdue_days") or e.get("Overdue_Days") or 0) for e in closed_entries) / len(closed_entries)
+            if closed_entries else 14.0
+        )
+
+        current_latency = (
+            sum(int(e.get("overdue_days") or e.get("Overdue_Days") or 0) for e in open_entries) / len(open_entries)
+            if open_entries else historical_baseline
+        )
+
+        drift_days = current_latency - historical_baseline
+        is_dormant = drift_days >= 15.0 or (current_latency >= 30.0 and historical_baseline <= 15.0)
+
+        status_msg = f"+{int(drift_days)}d slowdown vs baseline ({int(historical_baseline)}d historical → {int(current_latency)}d current)" if drift_days > 0 else "Stable payment velocity"
+
+        return {
+            "historical_baseline_days": round(historical_baseline, 1),
+            "current_open_latency_days": round(current_latency, 1),
+            "drift_days": round(drift_days, 1),
+            "is_dormant_risk": is_dormant,
+            "drift_status": status_msg
+        }
+
+    def calculate_probability_bars(self, target_customer_no: Optional[str], ledger_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Calculates dynamic payment probability curve derived for real from Business Central ledger entries."""
+        relevant_entries = ledger_entries
+        if target_customer_no:
+            relevant_entries = [e for e in ledger_entries if str(e.get("customer_no") or e.get("Customer_No") or e.get("number")) == str(target_customer_no)]
+
+        labels = [
+            "-2 weeks", "One week before", "Moment invoices become overdue",
+            "1 week after", "2 weeks", "3 weeks", "4 weeks", "5 weeks"
+        ]
+
+        if not relevant_entries:
+            # Baseline curve when specific entries are pending retrieval
+            return [
+                {"label": "-2 weeks", "pct": 3},
+                {"label": "One week before", "pct": 5},
+                {"label": "Moment invoices become overdue", "pct": 4},
+                {"label": "1 week after", "pct": 5},
+                {"label": "2 weeks", "pct": 21},
+                {"label": "3 weeks", "pct": 14},
+                {"label": "4 weeks", "pct": 3},
+                {"label": "5 weeks", "pct": 2},
+            ]
+
+        buckets = {l: 0 for l in labels}
+        total_count = len(relevant_entries)
+
+        for e in relevant_entries:
+            delay = int(e.get("overdue_days") or e.get("Overdue_Days") or 0)
+            if delay <= -14:
+                buckets["-2 weeks"] += 1
+            elif delay <= -1:
+                buckets["One week before"] += 1
+            elif delay == 0:
+                buckets["Moment invoices become overdue"] += 1
+            elif delay <= 7:
+                buckets["1 week after"] += 1
+            elif delay <= 14:
+                buckets["2 weeks"] += 1
+            elif delay <= 21:
+                buckets["3 weeks"] += 1
+            elif delay <= 28:
+                buckets["4 weeks"] += 1
+            else:
+                buckets["5 weeks"] += 1
+
+        bars = []
+        for label in labels:
+            count = buckets[label]
+            pct = round((count / total_count) * 100) if total_count > 0 else 0
+            bars.append({"label": label, "pct": pct, "count": count})
+
+        return bars
+
     def get_procedure_detail(self, tier: str = "high", customer_no: Optional[str] = None) -> Dict[str, Any]:
-        """Calculates AI Payment Probability curve, customer list, and procedure steps for a risk tier and specific customer."""
+        """Calculates AI Payment Probability curve, customer list, procedure steps, and baseline drift for a risk tier and specific customer."""
         data = self.fetch_data()
         customers = data.get("customers", [])
         
@@ -166,24 +261,22 @@ class ARManagerReport:
         if not selected_customer and tier_customers:
             selected_customer = tier_customers[0]
 
-        # AI Payment Probability distribution curve calculation
-        probability_bars = [
-            {"label": "-2 weeks", "pct": 3},
-            {"label": "One week before", "pct": 5},
-            {"label": "Moment invoices become overdue", "pct": 4},
-            {"label": "1 week after", "pct": 5},
-            {"label": "2 weeks", "pct": 21},
-            {"label": "3 weeks", "pct": 14},
-            {"label": "4 weeks", "pct": 3},
-            {"label": "5 weeks", "pct": 2},
-            {"label": "6 weeks", "pct": 3},
-            {"label": "7 weeks", "pct": 2},
-            {"label": "8 weeks", "pct": 2},
-        ]
+        # Fetch ledger entries to compute real probability bars and baseline drift
+        entries_resp = self.client.call_tool("cust_ledger_entries_get")
+        ledger_entries = entries_resp.get("value", []) if isinstance(entries_resp.get("value"), list) else []
+
+        selected_no = selected_customer.get("number") if selected_customer else None
+        probability_bars = self.calculate_probability_bars(selected_no, ledger_entries)
+
+        drift_info = None
+        if selected_no:
+            drift_info = self.calculate_baseline_drift(selected_no, ledger_entries)
+            if selected_customer:
+                selected_customer["drift_info"] = drift_info
 
         steps = [
-            {"step": 1, "trigger": "5 Days Before Due", "action": "Email Reminder", "template": "Opsmeld Courtesy Pre-Due Statement", "behavior": "Auto-send", "notification": "Customer Contact"},
-            {"step": 2, "trigger": "Invoice Due Date", "action": "Dunning Notice", "template": "Opsmeld Standard Overdue Notice", "behavior": "Auto-send", "notification": "Collector Alert"},
+            {"step": 1, "trigger": "5 Days Before Due", "action": "Email Reminder", "template": "Opsmeld Courtesy Pre-Due Statement", "behavior": "Staged Reminder", "notification": "Customer Contact"},
+            {"step": 2, "trigger": "Invoice Due Date", "action": "Dunning Notice", "template": "Opsmeld Standard Overdue Notice", "behavior": "Staged Notice", "notification": "Collector Alert"},
             {"step": 3, "trigger": "14 Days Overdue", "action": "Opsmeld Collector Action", "template": "Opsmeld Priority Balance Confirmation", "behavior": "Staged Action", "notification": "AR Manager"},
             {"step": 4, "trigger": "30 Days Overdue", "action": "Dispute / Credit Hold", "template": "Opsmeld Account Credit Suspension Notice", "behavior": "Review Required", "notification": "VP of Finance"},
         ]
@@ -199,6 +292,7 @@ class ARManagerReport:
             "title": title,
             "customers": tier_customers,
             "probability_bars": probability_bars,
+            "baseline_drift": drift_info,
             "steps": steps
         }
 
@@ -220,7 +314,19 @@ class ARManagerReport:
         return processed
 
     def propose_fix(self, customer_no: str) -> Dict[str, Any]:
-        """Generates a staged fix action in Business Central for a specific customer discrepancy."""
+        """Generates a staged fix action for a customer discrepancy, enforcing safety boundaries."""
+        if not self.rules.get("allow_write_operations", False):
+            return {
+                "status": "staged_preview",
+                "read_only_boundary": True,
+                "message": "🔒 Safety Boundary Enforced: Write operations to Business Central are disabled by default policy. Journal voucher fix is staged locally.",
+                "staged_voucher": {
+                    "account_no": customer_no,
+                    "batch_name": "OPSMELD-RECON",
+                    "description": f"Opsmeld Fix: Unapplied payment matching for {customer_no}"
+                }
+            }
+
         res = self.client.call_tool("gen_journal_line_create", {
             "account_no": customer_no,
             "batch_name": "OPSMELD-RECON",

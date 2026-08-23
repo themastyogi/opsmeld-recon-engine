@@ -22,7 +22,7 @@ class TestConfigLoader(unittest.TestCase):
         rules = load_engine_rules()
         self.assertIsInstance(rules, EngineRules)
         self.assertTrue(rules.default_do_not_post)
-        self.assertTrue(rules.allow_write_operations)
+        self.assertFalse(rules.allow_write_operations)
 
     def test_escape_html_safety(self):
         unsafe_input = "<script>alert('xss')</script>"
