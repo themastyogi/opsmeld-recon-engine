@@ -1,0 +1,26 @@
+{
+  "general": {
+    "safety_mode": "staged",
+    "allow_write_operations": true,
+    "default_do_not_post": true,
+    "max_query_records": 500
+  },
+  "ar_manager": {
+    "tier_critical_overdue_days": 60,
+    "tier_watch_overdue_days": 30,
+    "credit_limit_warning_pct": 0.85
+  },
+  "ap_manager": {
+    "tier_pay_now_days": 7,
+    "tier_pay_soon_days": 15,
+    "early_discount_window_days": 5
+  },
+  "journal_vouchers": {
+    "default_batch_name": "OPSMELD-RECON",
+    "require_line_balancing": true
+  },
+  "demand_forecast": {
+    "historical_months_lookback": 6,
+    "safety_stock_buffer_pct": 0.20
+  }
+}
