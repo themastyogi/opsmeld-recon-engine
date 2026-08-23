@@ -1,6 +1,6 @@
 """
 Opsmeld Reconciliation Engine - Business Central MCP Client
-Handles MSAL OAuth 2.0 authentication, token caching, and live JSON-RPC MCP tool execution.
+Handles MSAL OAuth 2.0 authentication, token caching, MCP 2.0 session initialization, and live JSON-RPC tool execution.
 Strictly queries live Business Central endpoints with zero mock/stub fallback data.
 """
 
@@ -23,6 +23,7 @@ class BCMCPClient:
         self.config = config or load_client_config()
         self.token_cache_path = self.config.get_absolute_cache_path()
         self._available_tools: Optional[List[Dict[str, Any]]] = None
+        self._mcp_session_id: Optional[str] = None
 
     def get_access_token(self) -> str:
         """Acquires OAuth2 token via MSAL (silent cache persistence or Client Secret flow)."""
@@ -101,8 +102,28 @@ class BCMCPClient:
         except Exception as e:
             return {"error": str(e)}
 
-    def _execute_jsonrpc(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _ensure_mcp_session(self):
+        """Performs MCP 2.0 handshake initialization protocol."""
+        if self._mcp_session_id:
+            return
+        
+        init_params = {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "OpsmeldReconEngine", "version": "1.0.0"}
+        }
+        res = self._execute_jsonrpc("initialize", init_params, is_init=True)
+        if isinstance(res, dict) and "sessionId" in res:
+            self._mcp_session_id = res["sessionId"]
+
+        # Send initialized notification
+        self._execute_jsonrpc("notifications/initialized", {}, is_init=True)
+
+    def _execute_jsonrpc(self, method: str, params: Dict[str, Any], is_init: bool = False) -> Dict[str, Any]:
         """Executes a live HTTP JSON-RPC 2.0 POST request against the BC MCP server."""
+        if not is_init and method != "initialize" and not self._mcp_session_id:
+            self._ensure_mcp_session()
+
         token = self.get_access_token()
         if not token:
             return {"error": "Authentication token missing. Please sign in via MSAL or configure BC_CLIENT_SECRET."}
@@ -122,12 +143,18 @@ class BCMCPClient:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream"
         }
+        if self._mcp_session_id:
+            headers["Mcp-Session-Id"] = self._mcp_session_id
         if self.config.company_name:
             headers["Company"] = self.config.company_name
 
         req = urllib.request.Request(self.config.mcp_server_url, data=data, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
+                sess_header = resp.headers.get("Mcp-Session-Id") or resp.headers.get("mcp-session-id")
+                if sess_header:
+                    self._mcp_session_id = sess_header
+
                 res_data = json.loads(resp.read().decode("utf-8"))
                 if "error" in res_data:
                     return {"error": f"JSON-RPC Error: {res_data['error'].get('message', res_data['error'])}"}
@@ -176,16 +203,13 @@ class BCMCPClient:
         arguments = arguments or {}
         live_result = self._execute_jsonrpc("tools/call", {"name": name, "arguments": arguments})
         
-        # Automatic REST API fallback if Business Central MCP endpoint returns 403 for App Tokens
         if "error" in live_result and "403" in str(live_result.get("error")):
             if name == "customers_get_list":
-                # Step 1: Get company ID
                 companies_resp = self._execute_bc_rest("companies")
                 if "value" in companies_resp and len(companies_resp["value"]) > 0:
                     comp_id = companies_resp["value"][0].get("id")
                     cust_resp = self._execute_bc_rest(f"companies({comp_id})/customers")
                     if "value" in cust_resp:
-                        # Map BC REST customer fields to expected schema
                         mapped_custs = []
                         for c in cust_resp["value"]:
                             mapped_custs.append({
