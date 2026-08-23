@@ -24,8 +24,9 @@ def main():
 
     print(f"============================================================")
     print(f"  Opsmeld Reconciliation Engine Web Management Console")
+    print(f"  Running at: http://127.0.0.1:{port}")
     print(f"  Running at: http://localhost:{port}")
-    print(f"  Settings:   http://localhost:{port}/settings")
+    print(f"  Settings:   http://127.0.0.1:{port}/settings")
     print(f"============================================================")
     try:
         server.serve_forever()
