@@ -153,8 +153,42 @@ class BCMCPClient:
 
         return []
 
+    def _execute_bc_rest(self, path: str) -> Dict[str, Any]:
+        """Executes a direct GET request against standard Business Central v2.0 REST API."""
+        token = self.get_access_token()
+        if not token:
+            return {"error": "Authentication token missing."}
+        url = f"https://api.businesscentral.dynamics.com/v2.0/{self.config.tenant_id}/{self.config.environment}/api/v2.0/{path}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            return {"error": str(e)}
+
     def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Executes a named tool on the Business Central MCP server strictly without fallback data."""
+        """Executes a named tool on Business Central MCP server, with automatic REST API fallback for Client Secrets."""
         arguments = arguments or {}
         live_result = self._execute_jsonrpc("tools/call", {"name": name, "arguments": arguments})
+        
+        # Automatic REST API fallback if Business Central MCP endpoint returns 403 for App Tokens
+        if "error" in live_result and "403" in str(live_result.get("error")):
+            if name == "customers_get_list":
+                # Step 1: Get company ID
+                companies_resp = self._execute_bc_rest("companies")
+                if "value" in companies_resp and len(companies_resp["value"]) > 0:
+                    comp_id = companies_resp["value"][0].get("id")
+                    cust_resp = self._execute_bc_rest(f"companies({comp_id})/customers")
+                    if "value" in cust_resp:
+                        # Map BC REST customer fields to expected schema
+                        mapped_custs = []
+                        for c in cust_resp["value"]:
+                            mapped_custs.append({
+                                "number": c.get("number"),
+                                "name": c.get("displayName", c.get("name")),
+                                "balance_due": float(c.get("balanceDue", c.get("balance_due", 0.0))),
+                                "credit_limit": float(c.get("creditLimit", 0.0)),
+                            })
+                        return {"value": mapped_custs}
+
         return live_result
