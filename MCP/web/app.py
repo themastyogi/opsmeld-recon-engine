@@ -15,9 +15,13 @@ from web.templates import render_dashboard_html, render_settings_html
 
 class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
-    def _set_headers(self, content_type="text/html", status=200):
-        self.send_response(status)
-        self.send_header("Content-type", content_type)
+    def _set_headers(self, content_type: str = "text/html", status_code: int = 200):
+        self.send_response(status_code)
+        self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
 
     def do_GET(self):
