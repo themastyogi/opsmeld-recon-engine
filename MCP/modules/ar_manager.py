@@ -282,9 +282,31 @@ class ARManagerReport:
         ]
 
         if selected_customer:
-            title = f"{selected_customer.get('number')} - {selected_customer.get('name')} » Opsmeld {tier.capitalize()} Risk Autopilot Procedure"
+            bal = float(selected_customer.get("balance_due", 0.0))
+            trapped = float(selected_customer.get("trapped_cash", 0.0))
+            avg_days = int(selected_customer.get("avg_days_to_pay", 0))
+            
+            if trapped > 0:
+                why = f"Invoice payment latency exceeded payment terms (${trapped:,.2f} USD is overdue >14 days). Historical payment velocity is {avg_days} days."
+                rec = "Contact AP immediately to request payment commitment and send formal dunning notice."
+            elif bal > 0:
+                why = f"Payment cycle velocity is {avg_days} days. Customer has an open balance of ${bal:,.2f} USD across active invoices; 0 overdue invoices currently."
+                rec = "Send a pre-due courtesy statement and confirm invoice receipt with AP before due date."
+            else:
+                why = "Account balance is clear ($0.00 USD). No active overdue or open balance risk detected."
+                rec = "No immediate collection action required. Continue automated monitoring."
+                
+            selected_customer["investigation_analysis"] = {
+                "why_changed": why,
+                "recommended_action": rec,
+                "balance_due": bal,
+                "trapped_cash": trapped,
+                "avg_days_to_pay": avg_days
+            }
+
+            title = f"{selected_customer.get('number')} - {selected_customer.get('name')} » Opsmeld {tier.capitalize()} Risk Procedure"
         else:
-            title = f"Opsmeld {tier.capitalize()} Risk Autopilot Procedure"
+            title = f"Opsmeld {tier.capitalize()} Risk Procedure"
 
         return {
             "tier": tier,
@@ -347,20 +369,19 @@ class ARManagerReport:
         overdue_receivables = sum(c.get("trapped_cash", 0.0) for c in customers)
         high_risk_amount = sum(c.get("balance_due", 0.0) for c in customers if c.get("segment") == "high")
         unapplied_limbo = sum(c.get("unapplied_cash", 0.0) for c in customers if c.get("has_unapplied_limbo"))
-        disputed_amount = unapplied_limbo if unapplied_limbo > 0 else round(total_receivables * 0.15, 2)
+        disputed_amount = unapplied_limbo
 
         expected_collections_7d = round(total_receivables * 0.23, 2)
         
         # Calculate real DSO (Days Sales Outstanding) across customers
         all_avg_days = [c.get("avg_days_to_pay", 0) for c in customers if c.get("avg_days_to_pay", 0) > 0]
-        dso_days = round(sum(all_avg_days) / len(all_avg_days), 1) if all_avg_days else 47.6
+        dso_days = round(sum(all_avg_days) / len(all_avg_days), 1) if all_avg_days else 0.0
 
         # Build overnight changes dynamically from real BC customer risk deltas
         overnight_changes = []
         for c in customers:
             if len(overnight_changes) >= 3:
                 break
-            seg = c.get("segment")
             bal = c.get("balance_due", 0.0)
             trapped = c.get("trapped_cash", 0.0)
             c_num = c.get("number")
@@ -375,7 +396,8 @@ class ARManagerReport:
                     "customer": f"{c_num} - {c_name}",
                     "risk_change": "Medium → Critical",
                     "amount": bal,
-                    "subtext": f"Overdue trapped cash: ${trapped:,.2f} • Critical Overdue Latency Alert",
+                    "subtext": f"Overdue trapped cash: ${trapped:,.2f} • Critical Overdue Alert",
+                    "why_changed": f"Invoice payment latency exceeded payment terms (${trapped:,.2f} overdue >14 days).",
                     "action_label": "Investigate",
                     "tier": "high"
                 })
@@ -384,10 +406,11 @@ class ARManagerReport:
                     "type": "ATTENTION",
                     "customer_no": c_num,
                     "customer": f"{c_num} - {c_name}",
-                    "risk_change": "Due / Watch Tier",
+                    "risk_change": "Watch / Pre-Due Balance",
                     "amount": bal,
-                    "subtext": f"Balance: ${bal:,.2f} • Pre-Due Payment Reminder Required",
-                    "action_label": "Prepare Email",
+                    "subtext": f"Balance: ${bal:,.2f} (0 overdue) • Payment velocity watch",
+                    "why_changed": f"Payment velocity watch: ${bal:,.2f} open balance exists; no overdue invoices currently.",
+                    "action_label": "Pre-Due Check",
                     "tier": "medium"
                 })
             elif c.get("has_unapplied_limbo"):
@@ -398,6 +421,7 @@ class ARManagerReport:
                     "risk_change": "Unapplied Payment Limbo Found",
                     "amount": c.get("unapplied_cash", 0.0),
                     "subtext": f"Unapplied payment: ${c.get('unapplied_cash', 0.0):,.2f} • Staging Voucher Fix",
+                    "why_changed": f"Unapplied payment limbo detected (${c.get('unapplied_cash', 0.0):,.2f}).",
                     "action_label": "View Payment",
                     "tier": "high"
                 })
@@ -413,7 +437,7 @@ class ARManagerReport:
             
             tier = "high" if trapped > 0 else ("medium" if bal > 0 else "low")
             priority = "High" if tier == "high" else ("Medium" if tier == "medium" else "Low")
-            act_text = "Resolve dispute + Contact AP" if c.get("has_unapplied_limbo") else ("Follow up on balance" if trapped > 0 else "Send reminder")
+            act_text = "Resolve dispute + Contact AP" if c.get("has_unapplied_limbo") else ("Follow up on balance" if trapped > 0 else "Pre-Due Courtesy Check")
             next_actions.append({
                 "customer_no": c_num,
                 "customer": f"{c_num} - {c_name}",
@@ -424,7 +448,7 @@ class ARManagerReport:
                 "tier": tier
             })
 
-        # Calculate exact aging distribution buckets from open ledger entries
+        # Calculate exact aging distribution buckets from open ledger entries strictly from current dataset
         c_0_30, c_31_60, c_61_90, c_90_plus = 0, 0, 0, 0
         total_open_entries = 0
         for e in ledger_entries:
@@ -442,22 +466,28 @@ class ARManagerReport:
 
         tot_entries_calc = total_open_entries if total_open_entries > 0 else 1
         aging_summary = {
-            "total_customers": len(customers) if len(customers) > 0 else 327,
-            "current_0_30": {"count": c_0_30 if c_0_30 > 0 else 158, "pct": round((c_0_30 / tot_entries_calc) * 100) if total_open_entries > 0 else 48},
-            "days_31_60": {"count": c_31_60 if c_31_60 > 0 else 72, "pct": round((c_31_60 / tot_entries_calc) * 100) if total_open_entries > 0 else 22},
-            "days_61_90": {"count": c_61_90 if c_61_90 > 0 else 43, "pct": round((c_61_90 / tot_entries_calc) * 100) if total_open_entries > 0 else 13},
-            "days_90_plus": {"count": c_90_plus if c_90_plus > 0 else 54, "pct": round((c_90_plus / tot_entries_calc) * 100) if total_open_entries > 0 else 17}
+            "total_customers": len(customers),
+            "current_0_30": {"count": c_0_30, "pct": round((c_0_30 / tot_entries_calc) * 100) if total_open_entries > 0 else 0},
+            "days_31_60": {"count": c_31_60, "pct": round((c_31_60 / tot_entries_calc) * 100) if total_open_entries > 0 else 0},
+            "days_61_90": {"count": c_61_90, "pct": round((c_61_90 / tot_entries_calc) * 100) if total_open_entries > 0 else 0},
+            "days_90_plus": {"count": c_90_plus, "pct": round((c_90_plus / tot_entries_calc) * 100) if total_open_entries > 0 else 0}
         }
 
-        # Calculate dynamic AI risk drivers directly from BC source data
+        # Calculate dynamic AI risk drivers directly from BC source data (ZERO mock fallbacks)
         trapped_custs = [c for c in customers if c.get("trapped_cash", 0.0) > 0]
         limbo_custs = [c for c in customers if c.get("has_unapplied_limbo")]
         credit_exceeded_custs = [c for c in customers if c.get("credit_limit", 0.0) > 0 and c.get("balance_due", 0.0) >= c.get("credit_limit", 0.0)]
 
         ai_risk_drivers = {
-            "broken_promises": {"count": len(trapped_custs) if trapped_custs else 2, "amount": sum(c.get("trapped_cash", 0.0) for c in trapped_custs) if trapped_custs else 1200000.0},
-            "open_disputes": {"count": len(limbo_custs) if limbo_custs else 1, "amount": sum(c.get("unapplied_cash", 0.0) for c in limbo_custs) if limbo_custs else 820000.0},
-            "credit_limit_exceeded": {"count": len(credit_exceeded_custs) if credit_exceeded_custs else 1, "amount": sum(c.get("balance_due", 0.0) for c in credit_exceeded_custs) if credit_exceeded_custs else 680000.0}
+            "broken_promises": {"count": len(trapped_custs), "amount": sum(c.get("trapped_cash", 0.0) for c in trapped_custs)},
+            "open_disputes": {"count": len(limbo_custs), "amount": sum(c.get("unapplied_cash", 0.0) for c in limbo_custs)},
+            "credit_limit_exceeded": {"count": len(credit_exceeded_custs), "amount": sum(c.get("balance_due", 0.0) for c in credit_exceeded_custs)}
+        }
+
+        priority_custs = [c for c in customers if c.get("balance_due", 0.0) > 0]
+        ai_recommendation = {
+            "count": len(priority_custs),
+            "text": f"Found {len(priority_custs)} priority account{'s' if len(priority_custs)!=1 else ''} identified from your Business Central ledger requiring attention today."
         }
 
         # Build recent activity feed from open BC entries
@@ -485,6 +515,7 @@ class ARManagerReport:
             "next_actions": next_actions,
             "aging_summary": aging_summary,
             "ai_risk_drivers": ai_risk_drivers,
+            "ai_recommendation": ai_recommendation,
             "activity_feed": activity_feed
         }
 

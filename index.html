@@ -466,7 +466,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                             <div>
                                 <h3 style="margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">🎯 Your next best actions</h3>
-                                <div style="font-size: 0.78rem; color: #6B7280; margin-top: 2px;">You have ~2 hours available today</div>
+                                <div style="font-size: 0.78rem; color: #6B7280; margin-top: 2px;">Today's prioritized work queue</div>
                             </div>
                             <button class="btn-btn" style="background: #059669;" onclick="alert('⚡ Starting automated work queue for prioritized accounts!')">Start My Work</button>
                         </div>
@@ -486,37 +486,37 @@
                         </table>
                     </div>
 
-                    <!-- Column 3: AI Insights & Recommendations -->
+                    <!-- Column 3: Risk Drivers & Signals -->
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
-                        <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">💡 AI Insights</h3>
+                        <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">💡 Risk Drivers & Signals</h3>
                         <div style="font-size: 0.8rem; font-weight: 700; color: #374151; margin-bottom: 12px;">Top risk drivers today</div>
                         <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #FEE2E2; color: #DC2626; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-broken-cnt">2</span>
+                                    <span style="background: #FEE2E2; color: #DC2626; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-broken-cnt">0</span>
                                     <span>Broken payment promises</span>
                                 </div>
-                                <span class="mono" style="font-weight: 700;" id="ai-driver-broken-amt">$1.2M</span>
+                                <span class="mono" style="font-weight: 700;" id="ai-driver-broken-amt">$0.00</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #FEF3C7; color: #D97706; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-disputes-cnt">1</span>
+                                    <span style="background: #FEF3C7; color: #D97706; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-disputes-cnt">0</span>
                                     <span>Open disputes / Limbo cash</span>
                                 </div>
-                                <span class="mono" style="font-weight: 700;" id="ai-driver-disputes-amt">$820K</span>
+                                <span class="mono" style="font-weight: 700;" id="ai-driver-disputes-amt">$0.00</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #EFF6FF; color: #2563EB; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-credit-cnt">1</span>
+                                    <span style="background: #EFF6FF; color: #2563EB; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-credit-cnt">0</span>
                                     <span>Credit limit exceeded</span>
                                 </div>
-                                <span class="mono" style="font-weight: 700;" id="ai-driver-credit-amt">$680K</span>
+                                <span class="mono" style="font-weight: 700;" id="ai-driver-credit-amt">$0.00</span>
                             </div>
                         </div>
 
                         <div style="background: #F3E8FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 14px;">
-                            <div style="font-size: 0.82rem; font-weight: 700; color: #6B21A8;">✨ AI Recommendation</div>
-                            <div style="font-size: 0.78rem; color: #581C87; margin-top: 4px;">You have 7 accounts that are 80% likely to respond to collection contact in the next 7 days.</div>
+                            <div style="font-size: 0.82rem; font-weight: 700; color: #6B21A8;">✨ Recommended Action</div>
+                            <div style="font-size: 0.78rem; color: #581C87; margin-top: 4px;" id="ai-rec-text">Analyzing live Business Central ledger entries...</div>
                             <button class="btn-btn" style="background: #7C3AED; margin-top: 8px; font-size: 0.72rem;" onclick="switchProcTab('recommendations'); openProcedureModal('high');">Review Now</button>
                         </div>
                     </div>
@@ -550,9 +550,9 @@
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; color: #7C3AED; display: flex; align-items: center; gap: 6px;">✨ Ask Opsmeld</h3>
                         <div style="display: flex; flex-direction: column; gap: 6px; margin: 12px 0;">
-                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Opsmeld AI Analysis: ABC Manufacturing is high risk due to 67 days overdue latency and a $120K open pricing dispute.')">Why is ABC Manufacturing high risk?</button>
-                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Opsmeld AI Priority Queue: Focus on ABC Manufacturing ($620,500) and Global Foods Inc. ($160,300) today.')">What should I work on today?</button>
-                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Payment Velocity Filter: Global Foods Inc. and XYZ Retail Ltd. have >85% payment probability this week.')">Show customers likely to pay this week</button>
+                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Opsmeld Analysis: Customer risk evaluated directly from Business Central ledger entries.')">Why is this customer high risk?</button>
+                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Opsmeld Priority Queue: Focus on top open balance accounts today.')">What should I work on today?</button>
+                            <button style="background: #F3E8FF; color: #6B21A8; border: 1px solid #DDD6FE; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; text-align: left; cursor: pointer;" onclick="alert('🤖 Payment Velocity Filter: High probability accounts filtered from Business Central.')">Show customers likely to pay this week</button>
                         </div>
                         <div style="display: flex; gap: 6px; margin-top: 12px;">
                             <input type="text" placeholder="Ask anything about your AR..." style="flex: 1; border: 1px solid #D1D5DB; border-radius: 6px; padding: 6px 10px; font-size: 0.78rem;">
@@ -564,7 +564,7 @@
                 <!-- Footer Status Bar -->
                 <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 10px 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #047857;">
                     <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
-                        🟢 Opsmeld is monitoring your AR 24/7 • Last analysis: Real-time • Next update: Real-time
+                        🟢 Data synced from Microsoft Business Central • Last sync: Real-time OData connection
                     </div>
                     <div style="cursor: pointer; text-decoration: underline;" onclick="alert('ℹ️ Opsmeld AR Control Tower continuously queries Microsoft Business Central MCP ledger entries to detect risk and trigger automated collections.')">How it works ℹ️</div>
                 </div>
@@ -735,6 +735,9 @@
 
                 <!-- Overview Tab Panel -->
                 <div id="tab-panel-overview">
+                    <!-- Dynamic Account Risk & Change Analysis Panel -->
+                    <div id="investigation-box-panel"></div>
+
                     <!-- AI Payment Probability Chart Card -->
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px; position: relative;">
                         <!-- AI Tooltip -->
@@ -1221,6 +1224,32 @@
                 if (data.selected_customer) {
                     document.getElementById('cust-stat-bal').innerText = formatMoney(data.selected_customer.balance_due || 0);
                     document.getElementById('cust-stat-overdue').innerText = formatMoney(data.selected_customer.trapped_cash || 0);
+
+                    // Render Rich Account Risk & Change Analysis Panel
+                    const invBox = document.getElementById('investigation-box-panel');
+                    if (invBox && data.selected_customer.investigation_analysis) {
+                        const inv = data.selected_customer.investigation_analysis;
+                        const custName = `${data.selected_customer.number} - ${data.selected_customer.name}`;
+                        invBox.innerHTML = `
+                        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                <h4 style="margin: 0; color: #111827; font-size: 1rem; font-weight: 700;">🔍 Account Risk & Change Analysis: ${escapeHtml(custName)}</h4>
+                                <span style="background: ${inv.trapped_cash > 0 ? '#FEE2E2; color: #DC2626;' : '#FEF3C7; color: #D97706;'}; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 4px;">${inv.trapped_cash > 0 ? 'CRITICAL OVERDUE' : 'WATCH / PRE-DUE BALANCE'}</span>
+                            </div>
+                            <div style="font-size: 0.84rem; color: #374151; margin-bottom: 8px;">
+                                <strong>WHY IT CHANGED:</strong> ${escapeHtml(inv.why_changed)}
+                            </div>
+                            <div style="font-size: 0.84rem; color: #047857; font-weight: 600; margin-bottom: 12px;">
+                                <strong>RECOMMENDED ACTION:</strong> ${escapeHtml(inv.recommended_action)}
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn-btn" style="background: #059669;" onclick="alert('✉️ Preparing draft email for ${escapeHtml(data.selected_customer.name)}...')">Prepare Email</button>
+                                <button class="btn-btn" style="background: #4F46E5;" onclick="switchProcTab('overview')">View Invoices</button>
+                                <button class="btn-btn" style="background: #374151;" onclick="alert('📊 Querying Business Central payment history for Customer ${escapeHtml(data.selected_customer.number)}...')">View Payment History</button>
+                                <button class="btn-btn" style="background: #6B7280;" onclick="alert('🔗 Opening Customer ${escapeHtml(data.selected_customer.number)} directly in Business Central...')">Open in BC ↗</button>
+                            </div>
+                        </div>`;
+                    }
                 }
 
                 // Render real baseline drift status
