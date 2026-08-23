@@ -122,6 +122,8 @@ class BCMCPClient:
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
+        if self.config.company_name:
+            headers["Company"] = self.config.company_name
 
         req = urllib.request.Request(self.config.mcp_server_url, data=data, headers=headers, method="POST")
         try:
@@ -159,7 +161,10 @@ class BCMCPClient:
         if not token:
             return {"error": "Authentication token missing."}
         url = f"https://api.businesscentral.dynamics.com/v2.0/{self.config.tenant_id}/{self.config.environment}/api/v2.0/{path}"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        if self.config.company_name:
+            headers["Company"] = self.config.company_name
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 return json.loads(resp.read().decode("utf-8"))
