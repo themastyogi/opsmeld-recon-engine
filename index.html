@@ -510,7 +510,10 @@
         document.getElementById('tenant-modal').style.display = 'none';
     }
 
+    let loginPollTimer = null;
+
     function closeLoginModal() {
+        if (loginPollTimer) clearInterval(loginPollTimer);
         document.getElementById('login-modal').style.display = 'none';
         loadLiveCustomerData();
     }
@@ -521,8 +524,21 @@
             .then(data => {
                 if (data.user_code) {
                     document.getElementById('login-user-code').innerText = data.user_code;
-                    document.getElementById('login-link').href = data.verification_uri || 'https://microsoft.com/devicelogin';
+                    document.getElementById('login-link').href = data.verification_uri || 'https://login.microsoft.com/device';
                     document.getElementById('login-modal').style.display = 'flex';
+
+                    // Start background polling to detect when sign-in completes on Microsoft's site
+                    if (loginPollTimer) clearInterval(loginPollTimer);
+                    loginPollTimer = setInterval(() => {
+                        fetch('/api/auth/poll')
+                            .then(res => res.json())
+                            .then(pollRes => {
+                                if (pollRes.status === 'success') {
+                                    clearInterval(loginPollTimer);
+                                    closeLoginModal();
+                                }
+                            });
+                    }, 3000);
                 } else {
                     alert('Unable to initiate login: ' + JSON.stringify(data));
                 }

@@ -25,6 +25,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        global CURRENT_DEVICE_FLOW
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
@@ -100,8 +101,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config()
             client = BCMCPClient(config)
             flow = client.start_device_flow()
+            CURRENT_DEVICE_FLOW = flow
             self._set_headers("application/json")
             self.wfile.write(json.dumps(flow).encode("utf-8"))
+
+        elif path == "/api/auth/poll":
+            config = load_client_config()
+            client = BCMCPClient(config)
+            if not CURRENT_DEVICE_FLOW:
+                res = {"error": "No login flow active."}
+            else:
+                res = client.complete_device_flow(CURRENT_DEVICE_FLOW)
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(res).encode("utf-8"))
 
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
