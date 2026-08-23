@@ -63,6 +63,27 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
 
+        elif path == "/api/ar-manager/data":
+            config = load_client_config()
+            rules = load_engine_rules()
+            client = BCMCPClient(config)
+            report = ARManagerReport(client, rules)
+            customers = report.fetch_data()
+            tiered = [report.tier_customer(c) for c in customers]
+            
+            data = {
+                "client_name": config.name,
+                "total_balance": sum(c.get("balance_due", 0.0) for c in tiered),
+                "total_trapped_cash": sum(c.get("trapped_cash", 0.0) for c in tiered),
+                "total_unapplied_limbo": sum(c.get("unapplied_cash", 0.0) for c in tiered if c.get("has_unapplied_limbo")),
+                "collect_count": sum(1 for c in tiered if c["tier"] == "collect"),
+                "watch_count": sum(1 for c in tiered if c["tier"] == "watch"),
+                "clear_count": sum(1 for c in tiered if c["tier"] == "clear"),
+                "customers": tiered
+            }
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(data).encode("utf-8"))
+
         else:
             self._set_headers("text/plain", 404)
             self.wfile.write(b"404 Not Found")

@@ -216,7 +216,7 @@
                 <label style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
                     <input type="checkbox" id="auto-refresh-check" onchange="toggleAutoRefresh(this)"> ⏱️ Auto-Refresh (Every 10s)
                 </label>
-                <button class="btn-action btn-sec" style="padding: 6px 14px; font-size: 0.85rem;" onclick="refreshData()">🔄 Refresh Live Data</button>
+                <button class="btn-action btn-sec" style="padding: 6px 14px; font-size: 0.85rem;" onclick="loadLiveCustomerData()">🔄 Refresh Live Data</button>
             </div>
         </div>
 
@@ -225,26 +225,23 @@
             <div class="stat-grid">
                 <div class="stat-tile">
                     <div class="label">Total Outstanding AR</div>
-                    <div class="value mono">$35,000.50</div>
+                    <div class="value mono" id="kpi-total-ar">Loading...</div>
                 </div>
                 <div class="stat-tile">
                     <div class="label">Trapped Cash (>60 Days)</div>
-                    <div class="value mono" style="color: var(--rust-text);">$18,500.50</div>
+                    <div class="value mono" style="color: var(--rust-text);" id="kpi-trapped-cash">Loading...</div>
                 </div>
                 <div class="stat-tile">
                     <div class="label">Unapplied Cash Limbo</div>
-                    <div class="value mono" style="color: var(--amber-text);">$5,000.00</div>
+                    <div class="value mono" style="color: var(--amber-text);" id="kpi-unapplied-cash">Loading...</div>
                 </div>
                 <div class="stat-tile">
                     <div class="label">High Risk Accounts</div>
-                    <div class="value mono" style="color: var(--rust-text);">2</div>
+                    <div class="value mono" style="color: var(--rust-text);" id="kpi-risk-accounts">Loading...</div>
                 </div>
             </div>
 
-            <div class="alert-banner">
-                <h3 style="color: var(--amber-text); margin: 0 0 8px 0;">⚠️ Unapplied Cash Limbo Alert ($5,000.00)</h3>
-                <p style="margin: 0; font-size: 0.9rem;">Customer <strong>School of Fine Art (C00030)</strong> has $5,000.00 in unapplied credit payments sitting idle while open invoices remain unpaid. Applying these will immediately free up working capital.</p>
-            </div>
+            <div id="limbo-banner-container"></div>
 
             <div class="ledger-card">
                 <h2>Accounts Receivable Ledger & Action Priorities</h2>
@@ -261,46 +258,9 @@
                             <th>Action</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="ar-table-body">
                         <tr>
-                            <td class="mono">C00010</td>
-                            <td><strong>Adatum Corporation</strong></td>
-                            <td class="mono">$18,500.50</td>
-                            <td class="mono" style="color: var(--rust-text);">$18,500.50</td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$15,000.00</td>
-                            <td><span class="stamp stamp-collect">COLLECT / CRITICAL</span></td>
-                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00010')">⚡ Stage Fix</button></td>
-                        </tr>
-                        <tr>
-                            <td class="mono">C00030</td>
-                            <td><strong>School of Fine Art</strong></td>
-                            <td class="mono">$12,000.00</td>
-                            <td class="mono" style="color: var(--rust-text);">$12,000.00</td>
-                            <td class="mono" style="color: var(--amber-text);">$5,000.00</td>
-                            <td class="mono">$12,000.00</td>
-                            <td><span class="stamp stamp-collect">COLLECT / CRITICAL</span></td>
-                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00030')">⚡ Stage Fix</button></td>
-                        </tr>
-                        <tr>
-                            <td class="mono">C00020</td>
-                            <td><strong>Trey Research</strong></td>
-                            <td class="mono">$4,500.00</td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$10,000.00</td>
-                            <td><span class="stamp stamp-watch">WATCH / ATTENTION</span></td>
-                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00020')">⚡ Stage Fix</button></td>
-                        </tr>
-                        <tr>
-                            <td class="mono">C00040</td>
-                            <td><strong>Alpine Ski House</strong></td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$0.00</td>
-                            <td class="mono">$25,000.00</td>
-                            <td><span class="stamp stamp-clear">CLEAR / HEALTHY</span></td>
-                            <td><span style="color: var(--text-muted); font-size: 0.8rem;">No Action Required</span></td>
+                            <td colspan="8" style="text-align:center; padding: 24px; color: var(--text-muted);">🔄 Querying live Business Central MCP engine...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -360,6 +320,10 @@
     <script>
     let autoRefreshTimer = null;
 
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLiveCustomerData();
+    });
+
     function switchTab(tabId, evt) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -368,19 +332,80 @@
         if (evt && evt.target) evt.target.classList.add('active');
     }
 
-    function refreshData() {
+    function formatMoney(num) {
+        return '$' + (Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function loadLiveCustomerData() {
         const container = document.getElementById('notice-container');
-        container.innerHTML = '<div class="alert-success">🔄 Refreshing live Business Central ledger data...</div>';
-        setTimeout(() => {
-            container.innerHTML = '<div class="alert-success">✅ Live Business Central data up to date!</div>';
-            setTimeout(() => { container.innerHTML = ''; }, 3000);
-        }, 600);
+        fetch('/api/ar-manager/data')
+            .then(res => res.json())
+            .then(data => {
+                // Update KPIs
+                document.getElementById('kpi-total-ar').innerText = formatMoney(data.total_balance);
+                document.getElementById('kpi-trapped-cash').innerText = formatMoney(data.total_trapped_cash);
+                document.getElementById('kpi-unapplied-cash').innerText = formatMoney(data.total_unapplied_limbo);
+                document.getElementById('kpi-risk-accounts').innerText = data.collect_count;
+
+                // Build Limbo Banner
+                const limboBanner = document.getElementById('limbo-banner-container');
+                const limboCusts = (data.customers || []).filter(c => c.has_unapplied_limbo);
+                if (limboCusts.length > 0) {
+                    const items = limboCusts.map(c => `<li><strong>${escapeHtml(c.name)} (${escapeHtml(c.number)})</strong>: ${formatMoney(c.unapplied_cash)} unapplied payment sitting idle against ${formatMoney(c.balance_due)} balance due.</li>`).join('');
+                    limboBanner.innerHTML = `
+                    <div class="alert-banner">
+                        <h3 style="color: var(--amber-text); margin: 0 0 8px 0;">⚠️ Unapplied Cash Limbo Alert (${formatMoney(data.total_unapplied_limbo)})</h3>
+                        <p style="margin: 0 0 8px 0; font-size: 0.9rem;">The following accounts have open unapplied payments sitting idle while overdue balance exists. Applying these will immediately free up working capital:</p>
+                        <ul style="margin: 0; padding-left: 20px; font-size: 0.9rem;">${items}</ul>
+                    </div>`;
+                } else {
+                    limboBanner.innerHTML = '';
+                }
+
+                // Render Table Rows
+                const tbody = document.getElementById('ar-table-body');
+                if (!data.customers || data.customers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 24px;">No customer records found.</td></tr>';
+                    return;
+                }
+
+                let rowsHtml = '';
+                data.customers.forEach(c => {
+                    let fixBtn = '';
+                    if (c.tier === 'collect' || c.tier === 'watch') {
+                        fixBtn = `<button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('${escapeHtml(c.number)}')">⚡ Stage Fix</button>`;
+                    } else {
+                        fixBtn = `<span style="color: var(--text-muted); font-size: 0.8rem;">No Action Required</span>`;
+                    }
+
+                    rowsHtml += `
+                    <tr>
+                        <td class="mono">${escapeHtml(c.number)}</td>
+                        <td><strong>${escapeHtml(c.name)}</strong></td>
+                        <td class="mono">${formatMoney(c.balance_due)}</td>
+                        <td class="mono" style="color: var(--rust-text);">${formatMoney(c.trapped_cash)}</td>
+                        <td class="mono" style="color: var(--amber-text);">${formatMoney(c.unapplied_cash)}</td>
+                        <td class="mono">${formatMoney(c.credit_limit)}</td>
+                        <td><span class="stamp stamp-${c.tier}">${escapeHtml(c.tier_label)}</span></td>
+                        <td>${fixBtn}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = rowsHtml;
+            })
+            .catch(err => {
+                console.error('Error fetching live AR data:', err);
+            });
     }
 
     function toggleAutoRefresh(checkbox) {
         if (checkbox.checked) {
-            refreshData();
-            autoRefreshTimer = setInterval(refreshData, 10000);
+            loadLiveCustomerData();
+            autoRefreshTimer = setInterval(loadLiveCustomerData, 10000);
         } else {
             if (autoRefreshTimer) clearInterval(autoRefreshTimer);
         }
@@ -397,9 +422,7 @@
             const container = document.getElementById('notice-container');
             container.innerHTML = `<div class="alert-success">⚡ Fix Staged Successfully! Draft General Journal Voucher line created for Customer ${customerNo} (Batch: OPSMELD-RECON).</div>`;
             window.scrollTo({ top: 0, behavior: 'smooth' });
-        })
-        .catch(err => {
-            alert('Fix Staged! Draft General Journal line created for ' + customerNo);
+            loadLiveCustomerData();
         });
     }
 
@@ -416,6 +439,7 @@
             const container = document.getElementById('notice-container');
             container.innerHTML = '<div class="alert-success">⚙️ Tenant configuration saved successfully!</div>';
             window.scrollTo({ top: 0, behavior: 'smooth' });
+            loadLiveCustomerData();
         });
     }
     </script>
