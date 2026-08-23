@@ -25,24 +25,50 @@ class ARManagerReport:
         if "error" in customers_resp:
             return {"error": customers_resp["error"], "customers": [], "autopilot": [], "custom_segments": []}
 
-        customers = customers_resp.get("value", [])
-        if not isinstance(customers, list):
-            customers = []
+        raw_customers = customers_resp.get("value", [])
+        if not isinstance(raw_customers, list):
+            raw_customers = []
 
         entries_resp = self.client.call_tool("cust_ledger_entries_get")
         ledger_entries = entries_resp.get("value", []) if isinstance(entries_resp.get("value"), list) else []
 
+        # Normalize field names across Business Central OData / MCP payload variations
+        customers = []
+        for raw_c in raw_customers:
+            if not isinstance(raw_c, dict):
+                continue
+            number = str(raw_c.get("number") or raw_c.get("no") or raw_c.get("No.") or raw_c.get("id") or raw_c.get("Customer_No") or "")
+            name = str(raw_c.get("name") or raw_c.get("displayName") or raw_c.get("Name") or f"Customer {number}")
+            
+            try:
+                balance = float(raw_c.get("balance_due") or raw_c.get("balanceDue") or raw_c.get("balance") or raw_c.get("Balance_Due") or raw_c.get("Balance Due") or 0.0)
+            except (ValueError, TypeError):
+                balance = 0.0
+
+            try:
+                credit_limit = float(raw_c.get("credit_limit") or raw_c.get("creditLimit") or raw_c.get("Credit_Limit") or raw_c.get("Credit Limit ($)") or 0.0)
+            except (ValueError, TypeError):
+                credit_limit = 0.0
+
+            customers.append({
+                "number": number,
+                "name": name,
+                "balance_due": balance,
+                "credit_limit": credit_limit
+            })
+
+        # Process ledger entries & trapped cash metrics
         for c in customers:
             c_number = c.get("number")
-            c_entries = [e for e in ledger_entries if e.get("customer_no") == c_number]
+            c_entries = [e for e in ledger_entries if str(e.get("customer_no") or e.get("Customer_No") or e.get("number")) == c_number]
             
-            balance = float(c.get("balance_due", 0.0))
-            credit_limit = float(c.get("credit_limit", 0.0))
-            trapped_cash = sum(e.get("amount", 0.0) for e in c_entries if e.get("overdue_days", 0) >= self.critical_days and e.get("doc_type") == "Invoice")
-            unapplied_cash = sum(abs(e.get("amount", 0.0)) for e in c_entries if e.get("doc_type") == "Payment" and e.get("open"))
-            avg_days = int(sum(e.get("overdue_days", 0) for e in c_entries) / len(c_entries)) if c_entries else 0
+            balance = c["balance_due"]
+            credit_limit = c["credit_limit"]
+            
+            trapped_cash = sum(float(e.get("amount") or e.get("Amount") or 0.0) for e in c_entries if int(e.get("overdue_days") or e.get("Overdue_Days") or 0) >= self.critical_days)
+            unapplied_cash = sum(abs(float(e.get("amount") or e.get("Amount") or 0.0)) for e in c_entries if str(e.get("doc_type") or e.get("Document_Type")).lower() in ["payment", "credit_memo"] and e.get("open", True))
+            avg_days = int(sum(int(e.get("overdue_days") or e.get("Overdue_Days") or 0) for e in c_entries) / len(c_entries)) if c_entries else 0
 
-            c["balance_due"] = balance
             c["trapped_cash"] = trapped_cash
             c["unapplied_cash"] = unapplied_cash
             c["avg_days_to_pay"] = avg_days
