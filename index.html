@@ -457,42 +457,8 @@
                             <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">What changed overnight?</h3>
                             <span style="color: #059669; font-size: 0.78rem; font-weight: 600; cursor: pointer;">View all changes →</span>
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 14px;">
-                            <!-- Critical Card -->
-                            <div style="border: 1px solid #FEE2E2; background: #FFF5F5; border-radius: 8px; padding: 14px;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                    <div>
-                                        <span style="background: #DC2626; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">CRITICAL</span>
-                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">ABC Manufacturing</div>
-                                        <div style="font-size: 0.75rem; color: #DC2626; font-weight: 600; margin-top: 2px;">Risk changed: Medium → Critical</div>
-                                    </div>
-                                    <div style="text-align: right;">
-                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">$620,500</div>
-                                        <div style="font-size: 0.72rem; color: #6B7280;">67 Days Overdue</div>
-                                    </div>
-                                </div>
-                                <div style="font-size: 0.76rem; color: #4B5563; margin-top: 8px; border-top: 1px dashed #FCA5A5; padding-top: 6px;">
-                                    • Missed payment promise<br>• $120K pricing dispute opened<br>• Credit utilization 124%
-                                </div>
-                                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openProcedureModal('high')">Investigate</button>
-                                </div>
-                            </div>
-                            <!-- Positive Card -->
-                            <div style="border: 1px solid #A7F3D0; background: #F0FDF4; border-radius: 8px; padding: 14px;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                    <div>
-                                        <span style="background: #059669; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">POSITIVE</span>
-                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">Global Foods Inc.</div>
-                                        <div style="font-size: 0.75rem; color: #059669; font-weight: 600; margin-top: 2px;">Risk reduced: High → Medium</div>
-                                    </div>
-                                    <div style="text-align: right;">
-                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">$410,300</div>
-                                        <div style="font-size: 0.72rem; color: #059669;">Payment received</div>
-                                    </div>
-                                </div>
-                                <div style="font-size: 0.76rem; color: #047857; margin-top: 6px;">$250K payment received cleanly.</div>
-                            </div>
+                        <div id="ct-overnight-container" style="display: flex; flex-direction: column; gap: 14px;">
+                            <!-- Dynamic Overnight Cards populated from BC -->
                         </div>
                     </div>
 
@@ -503,7 +469,7 @@
                                 <h3 style="margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">🎯 Your next best actions</h3>
                                 <div style="font-size: 0.78rem; color: #6B7280; margin-top: 2px;">You have ~2 hours available today</div>
                             </div>
-                            <button class="btn-btn" style="background: #059669;" onclick="alert('⚡ Starting automated work queue for 7 prioritized accounts!')">Start My Work (7)</button>
+                            <button class="btn-btn" style="background: #059669;" onclick="alert('⚡ Starting automated work queue for prioritized accounts!')">Start My Work</button>
                         </div>
                         <table class="table" style="font-size: 0.8rem;">
                             <thead>
@@ -515,35 +481,8 @@
                                     <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td><strong>ABC Manufacturing</strong></td>
-                                    <td class="mono" style="font-weight:700;">$620,500</td>
-                                    <td>20 min</td>
-                                    <td><span style="background: #FEE2E2; color: #DC2626; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">High</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal('high')">Resolve dispute + Contact AP</button></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Global Foods Inc.</strong></td>
-                                    <td class="mono" style="font-weight:700;">$160,300</td>
-                                    <td>15 min</td>
-                                    <td><span style="background: #FEE2E2; color: #DC2626; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">High</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal('medium')">Follow up on balance</button></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>XYZ Retail Ltd.</strong></td>
-                                    <td class="mono" style="font-weight:700;">$185,000</td>
-                                    <td>10 min</td>
-                                    <td><span style="background: #FEF3C7; color: #D97706; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Medium</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal('medium')">Send reminder</button></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Fresh Mart Stores</strong></td>
-                                    <td class="mono" style="font-weight:700;">$120,400</td>
-                                    <td>15 min</td>
-                                    <td><span style="background: #FEF3C7; color: #D97706; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">Medium</span></td>
-                                    <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal('low')">Review promise</button></td>
-                                </tr>
+                            <tbody id="ct-next-actions-tbody">
+                                <!-- Dynamic Rows populated from BC -->
                             </tbody>
                         </table>
                     </div>
@@ -591,38 +530,20 @@
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700;">AR Portfolio Overview</h3>
                         <div style="display: flex; align-items: center; justify-content: center; height: 140px; margin: 12px 0;">
                             <div style="width: 120px; height: 120px; border-radius: 50%; border: 16px solid #059669; border-top-color: #DC2626; border-right-color: #D97706; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                                <span style="font-size: 1.2rem; font-weight: 800;">327</span>
+                                <span style="font-size: 1.2rem; font-weight: 800;" id="ct-total-cust-count">0</span>
                                 <span style="font-size: 0.68rem; color: #6B7280;">Customers</span>
                             </div>
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem;">
-                            <div style="display: flex; justify-content: space-between;"><span style="color:#059669; font-weight:700;">■ Current (0-30)</span><span>158 (48%)</span></div>
-                            <div style="display: flex; justify-content: space-between;"><span style="color:#D97706; font-weight:700;">■ 31-60 Days</span><span>72 (22%)</span></div>
-                            <div style="display: flex; justify-content: space-between;"><span style="color:#E11D48; font-weight:700;">■ 61-90 Days</span><span>43 (13%)</span></div>
-                            <div style="display: flex; justify-content: space-between;"><span style="color:#DC2626; font-weight:700;">■ 90+ Days</span><span>54 (17%)</span></div>
+                        <div id="ct-aging-container" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem;">
+                            <!-- Dynamic Aging populated from BC -->
                         </div>
                     </div>
 
                     <!-- Recent Activity Stream -->
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; margin-bottom: 16px;">Recent Activity</h3>
-                        <div style="display: flex; flex-direction: column; gap: 14px;">
-                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
-                                <span style="background:#EFF6FF; color:#2563EB; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">✉️</span>
-                                <div style="flex:1;">
-                                    <div style="font-weight: 700;">Collection email sent to ABC Manufacturing</div>
-                                    <div style="font-size: 0.72rem; color: #6B7280;">Invoices: INV-10452, INV-10487, INV-10501</div>
-                                </div>
-                                <span style="font-size: 0.7rem; color: #9CA3AF;">10:42 AM Today</span>
-                            </div>
-                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
-                                <span style="background:#ECFDF5; color:#059669; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">🤝</span>
-                                <div style="flex:1;">
-                                    <div style="font-weight: 700;">Payment promise received from Global Foods Inc.</div>
-                                    <div style="font-size: 0.72rem; color: #6B7280;">$300,000 promised for May 24, 2024</div>
-                                </div>
-                                <span style="font-size: 0.7rem; color: #9CA3AF;">Yesterday 3:15 PM</span>
-                            </div>
+                        <div id="ct-activity-feed-container" style="display: flex; flex-direction: column; gap: 14px;">
+                            <!-- Dynamic Feed populated from BC -->
                         </div>
                     </div>
 
@@ -1048,20 +969,122 @@
         fetch('/api/ar-manager/control-tower')
             .then(res => res.json())
             .then(data => {
-                if (data.total_receivables) {
+                if (data.total_receivables !== undefined) {
                     document.getElementById('kpi-total-rec').innerText = formatMoney(data.total_receivables);
                 }
-                if (data.overdue_receivables) {
+                if (data.overdue_receivables !== undefined) {
                     document.getElementById('kpi-overdue-rec').innerText = formatMoney(data.overdue_receivables);
                 }
-                if (data.high_risk_amount) {
+                if (data.high_risk_amount !== undefined) {
                     document.getElementById('kpi-high-risk').innerText = formatMoney(data.high_risk_amount);
                 }
-                if (data.expected_collections_7d) {
+                if (data.expected_collections_7d !== undefined) {
                     document.getElementById('kpi-expected-col').innerText = formatMoney(data.expected_collections_7d);
                 }
-                if (data.disputed_amount) {
+                if (data.dso_days !== undefined) {
+                    document.getElementById('kpi-dso').innerText = data.dso_days + ' Days';
+                }
+                if (data.disputed_amount !== undefined) {
                     document.getElementById('kpi-disputed').innerText = formatMoney(data.disputed_amount);
+                }
+
+                // Render dynamic Overnight Changes cards from BC
+                if (data.overnight_changes && data.overnight_changes.length > 0) {
+                    const ovContainer = document.getElementById('ct-overnight-container');
+                    if (ovContainer) {
+                        let ovHtml = '';
+                        data.overnight_changes.forEach(c => {
+                            let cardBg = '#FFF5F5';
+                            let borderCol = '#FEE2E2';
+                            let badgeBg = '#DC2626';
+                            let textCol = '#DC2626';
+                            if (c.type === 'POSITIVE') {
+                                cardBg = '#F0FDF4'; borderCol = '#A7F3D0'; badgeBg = '#059669'; textCol = '#059669';
+                            } else if (c.type === 'ATTENTION') {
+                                cardBg = '#FFFBEB'; borderCol = '#FDE68A'; badgeBg = '#D97706'; textCol = '#D97706';
+                            }
+
+                            ovHtml += `
+                            <div style="border: 1px solid ${borderCol}; background: ${cardBg}; border-radius: 8px; padding: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <span style="background: ${badgeBg}; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">${escapeHtml(c.type)}</span>
+                                        <div style="font-weight: 700; font-size: 0.9rem; margin-top: 6px;">${escapeHtml(c.customer)}</div>
+                                        <div style="font-size: 0.75rem; color: ${textCol}; font-weight: 600; margin-top: 2px;">${escapeHtml(c.risk_change)}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 800; font-size: 0.9rem; color: #111827;">${formatMoney(c.amount)}</div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.76rem; color: #4B5563; margin-top: 8px; border-top: 1px dashed ${borderCol}; padding-top: 6px;">
+                                    ${escapeHtml(c.subtext)}
+                                </div>
+                                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                                    <button class="btn-btn" style="background: white; color: #374151; border: 1px solid #D1D5DB; font-size: 0.75rem;" onclick="openProcedureModal('high')">${escapeHtml(c.action_label || 'Investigate')}</button>
+                                </div>
+                            </div>`;
+                        });
+                        ovContainer.innerHTML = ovHtml;
+                    }
+                }
+
+                // Render dynamic Next Actions table from BC
+                if (data.next_actions && data.next_actions.length > 0) {
+                    const tbody = document.getElementById('ct-next-actions-tbody');
+                    if (tbody) {
+                        let actHtml = '';
+                        data.next_actions.forEach(a => {
+                            let pBg = '#FEE2E2'; let pColor = '#DC2626';
+                            if (a.priority === 'Medium') { pBg = '#FEF3C7'; pColor = '#D97706'; }
+                            else if (a.priority === 'Low') { pBg = '#E0E7FF'; pColor = '#3730A3'; }
+
+                            actHtml += `
+                            <tr>
+                                <td><strong>${escapeHtml(a.customer)}</strong></td>
+                                <td class="mono" style="font-weight:700;">${formatMoney(a.opportunity)}</td>
+                                <td>${escapeHtml(a.effort)}</td>
+                                <td><span style="background: ${pBg}; color: ${pColor}; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;">${escapeHtml(a.priority)}</span></td>
+                                <td><button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.72rem;" onclick="openProcedureModal('high')">${escapeHtml(a.action)}</button></td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = actHtml;
+                    }
+                }
+
+                // Render Aging Summary breakdown from BC
+                if (data.aging_summary) {
+                    const container = document.getElementById('ct-aging-container');
+                    if (container) {
+                        const a = data.aging_summary;
+                        container.innerHTML = `
+                        <div style="display: flex; justify-content: space-between;"><span style="color:#059669; font-weight:700;">■ Current (0-30)</span><span>${a.current_0_30.count} (${a.current_0_30.pct}%)</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color:#D97706; font-weight:700;">■ 31-60 Days</span><span>${a.days_31_60.count} (${a.days_31_60.pct}%)</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color:#E11D48; font-weight:700;">■ 61-90 Days</span><span>${a.days_61_90.count} (${a.days_61_90.pct}%)</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color:#DC2626; font-weight:700;">■ 90+ Days</span><span>${a.days_90_plus.count} (${a.days_90_plus.pct}%)</span></div>`;
+                        
+                        const custCountEl = document.getElementById('ct-total-cust-count');
+                        if (custCountEl) custCountEl.innerText = a.total_customers;
+                    }
+                }
+
+                // Render Activity Feed from BC
+                if (data.activity_feed && data.activity_feed.length > 0) {
+                    const container = document.getElementById('ct-activity-feed-container');
+                    if (container) {
+                        let feedHtml = '';
+                        data.activity_feed.forEach(f => {
+                            feedHtml += `
+                            <div style="display: flex; gap: 12px; font-size: 0.8rem;">
+                                <span style="background:#EFF6FF; color:#2563EB; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">✉️</span>
+                                <div style="flex:1;">
+                                    <div style="font-weight: 700;">${escapeHtml(f.title)}</div>
+                                    <div style="font-size: 0.72rem; color: #6B7280;">${escapeHtml(f.subtitle)}</div>
+                                </div>
+                                <span style="font-size: 0.7rem; color: #9CA3AF;">${escapeHtml(f.time)}</span>
+                            </div>`;
+                        });
+                        container.innerHTML = feedHtml;
+                    }
                 }
             })
             .catch(err => console.error('Error fetching Control Tower data:', err));
