@@ -393,7 +393,7 @@
                 </div>
             </div>
 
-            <!-- Autopilot Procedures Table (Dynamic BC MCP Data) -->
+            <!-- Autopilot Procedures Table -->
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">Autopilot ℹ️</h3>
@@ -416,7 +416,7 @@
                 </table>
             </div>
 
-            <!-- Custom Segments Table (Dynamic BC MCP Data) -->
+            <!-- Custom Segments Table -->
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">Custom segments ℹ️</h3>
@@ -452,6 +452,7 @@
         </div>
     </div>
 
+    <!-- Tenant Settings Modal (Includes Client Secret input field for non-interactive auth) -->
     <div id="tenant-modal" class="modal-overlay" style="display:none;">
         <div class="modal-box" style="width: 520px; text-align: left;">
             <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0;">⚙️ Business Central Connection Setup</h2>
@@ -464,6 +465,9 @@
 
                 <label style="font-size:0.85rem; font-weight:600;">Azure App Client ID</label>
                 <input type="text" id="m_app_client_id" class="form-control mono" value="5accae97-5fc5-4a13-9600-2cbe0065d83a" required>
+
+                <label style="font-size:0.85rem; font-weight:600;">Azure App Client Secret (Optional for Server Auth)</label>
+                <input type="password" id="m_client_secret" class="form-control mono" placeholder="Enter Client Secret value to enable instant automatic auth">
 
                 <label style="font-size:0.85rem; font-weight:600;">Business Central Company Name</label>
                 <input type="text" id="m_company_name" class="form-control" value="CRONUS IN" required>
@@ -510,9 +514,9 @@
                 if (data.error) {
                     container.innerHTML = `
                     <div style="background: #FDEDEC; border: 1px solid #F5B7B1; color: #78281F; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-                        <h3 style="margin-top:0;">⚠️ Live Business Central Query Error</h3>
+                        <h3 style="margin-top:0;">⚠️ Live Business Central Connection Status</h3>
                         <p>${escapeHtml(data.error)}</p>
-                        <p style="font-size:0.85rem; margin-bottom:0;">Configure credentials via <strong>Company Details</strong> in the left menu.</p>
+                        <p style="font-size:0.85rem; margin-bottom:0;">Open <strong>Company Details</strong> in the left menu to enter your <strong>Azure Client Secret</strong> or MSAL credentials.</p>
                     </div>`;
                     document.getElementById('autopilot-body').innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#78281F;">Live Business Central connection unauthenticated or offline.</td></tr>';
                     document.getElementById('custom-segments-body').innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#78281F;">Live Business Central connection unauthenticated or offline.</td></tr>';
@@ -524,7 +528,6 @@
                     document.getElementById('user-company-label').innerText = data.client_name;
                 }
 
-                // Render Autopilot Procedures Table dynamically from live BC MCP calculations
                 const autoTbody = document.getElementById('autopilot-body');
                 if (data.autopilot && data.autopilot.length > 0) {
                     let autoHtml = '';
@@ -544,7 +547,6 @@
                     autoTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No procedures calculated.</td></tr>';
                 }
 
-                // Render Custom Segments Table dynamically from live BC MCP calculations
                 const customTbody = document.getElementById('custom-segments-body');
                 if (data.custom_segments && data.custom_segments.length > 0) {
                     let customHtml = '';
@@ -577,6 +579,7 @@
             name: document.getElementById('m_name').value,
             tenant_id: document.getElementById('m_tenant_id').value,
             app_client_id: document.getElementById('m_app_client_id').value,
+            client_secret: document.getElementById('m_client_secret').value,
             environment: 'Production',
             company_name: document.getElementById('m_company_name').value
         });

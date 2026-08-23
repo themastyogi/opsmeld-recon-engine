@@ -19,6 +19,7 @@ class ClientConfig:
     name: str
     tenant_id: str
     app_client_id: str
+    client_secret: str = ""
     environment: str = "Production"
     company_name: str = ""
     mcp_server_url: str = ""
@@ -73,12 +74,14 @@ def load_client_config(client_key: Optional[str] = None) -> ClientConfig:
     # Environment variable overrides for production deployment security
     tenant_id = os.environ.get("BC_TENANT_ID", client_data.get("tenant_id", ""))
     app_client_id = os.environ.get("BC_CLIENT_ID", client_data.get("app_client_id", ""))
+    client_secret = os.environ.get("BC_CLIENT_SECRET", client_data.get("client_secret", ""))
 
     return ClientConfig(
         client_key=target_key,
         name=client_data.get("name", target_key),
         tenant_id=tenant_id,
         app_client_id=app_client_id,
+        client_secret=client_secret,
         environment=client_data.get("environment", "Production"),
         company_name=client_data.get("company_name", ""),
         mcp_server_url=client_data.get("mcp_server_url", ""),

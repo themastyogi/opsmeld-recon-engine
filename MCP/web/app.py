@@ -108,6 +108,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_name = post_data.get("name", ["My Business Central Company"])[0]
             tenant_id = post_data.get("tenant_id", [""])[0]
             app_client_id = post_data.get("app_client_id", [""])[0]
+            client_secret = post_data.get("client_secret", [""])[0]
             environment = post_data.get("environment", ["Production"])[0]
             company_name = post_data.get("company_name", ["CRONUS USA, Inc."])[0]
 
@@ -119,6 +120,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                         "name": client_name,
                         "tenant_id": tenant_id,
                         "app_client_id": app_client_id,
+                        "client_secret": client_secret,
                         "environment": environment,
                         "company_name": company_name,
                         "mcp_server_url": f"https://api.businesscentral.dynamics.com/v2.0/{tenant_id}/{environment}/mcp",
