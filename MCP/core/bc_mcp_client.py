@@ -159,7 +159,21 @@ class BCMCPClient:
                 if not raw_bytes:
                     return {}
 
-                res_data = json.loads(raw_bytes.decode("utf-8"))
+                raw_text = raw_bytes.decode("utf-8").strip()
+                if not raw_text:
+                    return {}
+
+                # Handle Business Central MCP Server-Sent Events (SSE) data: prefix
+                if "data:" in raw_text or "event:" in raw_text:
+                    json_parts = []
+                    for line in raw_text.splitlines():
+                        line_s = line.strip()
+                        if line_s.startswith("data:"):
+                            json_parts.append(line_s[5:].strip())
+                    if json_parts:
+                        raw_text = "".join(json_parts)
+
+                res_data = json.loads(raw_text)
                 if "error" in res_data:
                     return {"error": f"JSON-RPC Error: {res_data['error'].get('message', res_data['error'])}"}
                 return res_data.get("result", {})
