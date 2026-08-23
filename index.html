@@ -502,136 +502,207 @@
                         <span style="background: #D1FAE5; color: #065F46; font-size: 0.75rem; padding: 3px 10px; border-radius: 12px; font-weight: 600;">🤖 Billtrust Autopilot ✓</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Edit</button>
-                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Delete</button>
-                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Add New Step</button>
-                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;">Copy</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openEditProcModal()">Edit</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openDeleteProcModal()">Delete</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openAddStepModal()">Add New Step</button>
+                        <button class="btn-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB;" onclick="openCopyProcModal()">Copy</button>
                         <button class="btn-btn" style="background: #6B7280; margin-left: 8px;" onclick="closeProcedureModal()">✕ Close</button>
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 20px; border-bottom: 1px solid #E5E7EB; margin-top: 16px; margin-bottom: 20px;">
-                    <div style="font-size: 0.85rem; font-weight: 500; color: #6B7280; padding-bottom: 8px; cursor: pointer;">Recommendations</div>
-                    <div style="font-size: 0.85rem; font-weight: 700; color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px; cursor: pointer;">Overview</div>
+                    <div id="tab-btn-recommendations" style="font-size: 0.85rem; font-weight: 500; color: #6B7280; padding-bottom: 8px; cursor: pointer;" onclick="switchProcTab('recommendations')">Recommendations</div>
+                    <div id="tab-btn-overview" style="font-size: 0.85rem; font-weight: 700; color: #059669; border-bottom: 2px solid #059669; padding-bottom: 8px; cursor: pointer;" onclick="switchProcTab('overview')">Overview</div>
                 </div>
 
-                <!-- AI Payment Probability Chart Card -->
-                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px; position: relative;">
-                    <!-- AI Tooltip -->
-                    <div id="ai-tooltip" style="position: absolute; top: 12px; right: 24px; background: #E0F2FE; border: 1px solid #7DD3FC; border-radius: 12px; padding: 12px 16px; max-width: 320px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); z-index: 10;">
-                        <div style="font-size: 0.82rem; color: #0369A1; font-weight: 500;">
-                            AI analyzes historical data to determine their payment probability, so <strong>you don't have to</strong>.
-                            <button style="background: #4F46E5; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; float: right; margin-top: 8px; cursor: pointer;" onclick="dismissAiTooltip()">Next</button>
-                        </div>
+                <!-- Recommendations Tab Panel -->
+                <div id="tab-panel-recommendations" style="display: none;">
+                    <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="margin-top: 0; color: #065F46; font-size: 1rem;">🚀 AI Working Capital Acceleration Recommendation</h4>
+                        <p style="color: #047857; font-size: 0.88rem; margin-bottom: 12px;">Autopilot historical payment pattern analysis shows moving 3 High Risk accounts with balance >$15,000 to the 1-week overdue dunning step will accelerate cash recovery by <strong>12 days average</strong>.</p>
+                        <button class="btn-btn" style="background: #059669;" onclick="alert('⚡ AI Recommendation Applied! Autopilot workflow rules updated.')">Apply AI Recommendation</button>
                     </div>
-
-                    <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Payment probability</h3>
-
-                    <!-- Bar Chart Container -->
-                    <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 160px; padding: 20px 20px 0 20px; border-bottom: 1px dashed #E5E7EB;">
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
-                            <div style="width: 28px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">-2 weeks</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
-                            <div style="width: 28px; height: 50px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">One week before</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">4%</span>
-                            <div style="width: 28px; height: 42px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">Moment overdue</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
-                            <div style="width: 28px; height: 50px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">1 week after</span>
-                        </div>
-                        <!-- Peak Bar -->
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative;">
-                            <div style="position: absolute; top: -20px; width: 14px; height: 14px; background: #2563EB; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"></div>
-                            <span style="font-size: 0.75rem; font-weight: 800; color: #111827;">21%</span>
-                            <div style="width: 28px; height: 110px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #111827; font-weight: 700; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">2 weeks</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">14%</span>
-                            <div style="width: 28px; height: 85px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">3 weeks</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
-                            <div style="width: 28px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">4 weeks</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">2%</span>
-                            <div style="width: 28px; height: 25px; background: #8B5CF6; border-radius: 4px 4px 0 0;"></div>
-                            <span style="font-size: 0.7rem; color: #6B7280; margin-top: 6px; transform: rotate(-35deg); transform-origin: top left; white-space: nowrap;">5 weeks</span>
-                        </div>
-                    </div>
-
-                    <!-- Timeline Slider Control -->
-                    <div style="margin-top: 40px; padding: 0 20px;">
-                        <div style="height: 4px; background: #DDD6FE; border-radius: 2px; position: relative; display: flex; align-items: center; justify-content: space-between;">
-                            <span style="width: 22px; height: 22px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">-14</span>
-                            <span style="width: 22px; height: 22px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">-5</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">4</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">7</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">16</span>
-                            <span style="width: 22px; height: 22px; background: #7C3AED; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; transform: scale(1.2);">21</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">28</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">35</span>
-                            <span style="width: 22px; height: 22px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700;">40</span>
-                        </div>
+                    <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="margin-top: 0; color: #1E40AF; font-size: 1rem;">⚡ Limbo Cash Recovery Fix</h4>
+                        <p style="color: #1D4ED8; font-size: 0.88rem; margin-bottom: 12px;">Found 1 customer with open payment limbo. Auto-stage draft general journal voucher to apply unapplied cash against outstanding open invoice.</p>
+                        <button class="btn-btn" style="background: #2563EB;" onclick="alert('⚡ Fix Staged: Draft General Journal Voucher created for Customer 10000.')">Stage Fix Voucher</button>
                     </div>
                 </div>
 
-                <!-- Procedure Workflow Steps Table -->
-                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
-                    <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Procedure Steps</h3>
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Step</th>
-                                <th>Trigger Event</th>
-                                <th>Automated Action</th>
-                                <th>Email / Dunning Template</th>
-                                <th>Payment Behavior</th>
-                                <th>Notification</th>
-                            </tr>
-                        </thead>
-                        <tbody id="proc-steps-body">
-                            <tr>
-                                <td class="mono"><strong>Step 1</strong></td>
-                                <td>5 Days Before Due</td>
-                                <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Email Reminder</span></td>
-                                <td>Friendly Pre-Due Statement</td>
-                                <td>Auto-send</td>
-                                <td>Customer Contact</td>
-                            </tr>
-                            <tr>
-                                <td class="mono"><strong>Step 2</strong></td>
-                                <td>Invoice Due Date</td>
-                                <td><span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Dunning Notice</span></td>
-                                <td>Standard Overdue Notice</td>
-                                <td>Auto-send</td>
-                                <td>Collector Alert</td>
-                            </tr>
-                            <tr>
-                                <td class="mono"><strong>Step 3</strong></td>
-                                <td>14 Days Overdue</td>
-                                <td><span style="background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Autopilot Call Task</span></td>
-                                <td>Urgent Balance Confirmation</td>
-                                <td>Staged Action</td>
-                                <td>AR Manager</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- Overview Tab Panel -->
+                <div id="tab-panel-overview">
+                    <!-- AI Payment Probability Chart Card -->
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px; position: relative;">
+                        <!-- AI Tooltip -->
+                        <div id="ai-tooltip" style="position: absolute; top: 12px; right: 24px; background: #E0F2FE; border: 1px solid #7DD3FC; border-radius: 12px; padding: 12px 16px; max-width: 320px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); z-index: 10;">
+                            <div style="font-size: 0.82rem; color: #0369A1; font-weight: 500;">
+                                AI analyzes historical data to determine their payment probability, so <strong>you don't have to</strong>.
+                                <button style="background: #4F46E5; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; float: right; margin-top: 8px; cursor: pointer;" onclick="dismissAiTooltip()">Next</button>
+                            </div>
+                        </div>
+
+                        <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Payment probability</h3>
+
+                        <!-- Clean Non-Overlapping Bar Chart Container -->
+                        <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 170px; padding: 20px 10px 0 10px; border-bottom: 1px solid #E5E7EB;">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="-2 weeks: 3% Probability ($5,200 USD)" onclick="highlightBar('3%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
+                                <div style="width: 32px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">-2 weeks</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="One week before: 5% Probability ($8,400 USD)" onclick="highlightBar('5%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
+                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">1w before</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="Moment overdue: 4% Probability ($6,100 USD)" onclick="highlightBar('4%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">4%</span>
+                                <div style="width: 32px; height: 45px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">Overdue</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="1 week after: 5% Probability ($8,900 USD)" onclick="highlightBar('5%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">5%</span>
+                                <div style="width: 32px; height: 55px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">1w after</span>
+                            </div>
+                            <!-- Peak Bar -->
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative; cursor: pointer;" title="2 weeks: 21% Peak Probability ($34,137.11 USD)" onclick="highlightBar('21%')">
+                                <div style="position: absolute; top: -18px; width: 12px; height: 12px; background: #2563EB; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"></div>
+                                <span style="font-size: 0.78rem; font-weight: 800; color: #111827;">21%</span>
+                                <div style="width: 32px; height: 115px; background: #7C3AED; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.08)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #111827; font-weight: 800; margin-top: 8px; text-align: center;">2 weeks</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="3 weeks: 14% Probability ($22,400 USD)" onclick="highlightBar('14%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">14%</span>
+                                <div style="width: 32px; height: 90px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">3 weeks</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="4 weeks: 3% Probability ($4,800 USD)" onclick="highlightBar('3%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">3%</span>
+                                <div style="width: 32px; height: 35px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">4 weeks</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; cursor: pointer;" title="5 weeks: 2% Probability ($3,100 USD)" onclick="highlightBar('2%')">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #6B7280;">2%</span>
+                                <div style="width: 32px; height: 25px; background: #8B5CF6; border-radius: 4px 4px 0 0; transition: transform 0.2s;" onmouseover="this.style.transform='scaleY(1.1)'" onmouseout="this.style.transform='scaleY(1)'"></div>
+                                <span style="font-size: 0.72rem; color: #4B5563; font-weight: 600; margin-top: 8px; text-align: center;">5 weeks</span>
+                            </div>
+                        </div>
+
+                        <!-- Timeline Slider Control -->
+                        <div style="margin-top: 36px; padding: 0 20px;">
+                            <div style="height: 4px; background: #DDD6FE; border-radius: 2px; position: relative; display: flex; align-items: center; justify-content: space-between;">
+                                <span style="width: 24px; height: 24px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('-14')">-14</span>
+                                <span style="width: 24px; height: 24px; background: #A78BFA; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('-5')">-5</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('4')">4</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('7')">7</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('16')">16</span>
+                                <span style="width: 24px; height: 24px; background: #7C3AED; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; transform: scale(1.25); cursor: pointer;" onclick="selectNode('21')">21</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('28')">28</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('35')">35</span>
+                                <span style="width: 24px; height: 24px; background: #8B5CF6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="selectNode('40')">40</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Procedure Workflow Steps Table -->
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Procedure Steps</h3>
+                            <button class="btn-btn" style="background: #059669;" onclick="openAddStepModal()">+ Add Step</button>
+                        </div>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Step</th>
+                                    <th>Trigger Event</th>
+                                    <th>Automated Action</th>
+                                    <th>Email / Dunning Template</th>
+                                    <th>Payment Behavior</th>
+                                    <th>Notification</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proc-steps-body">
+                                <tr>
+                                    <td class="mono"><strong>Step 1</strong></td>
+                                    <td>5 Days Before Due</td>
+                                    <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Email Reminder</span></td>
+                                    <td>Friendly Pre-Due Statement</td>
+                                    <td>Auto-send</td>
+                                    <td>Customer Contact</td>
+                                </tr>
+                                <tr>
+                                    <td class="mono"><strong>Step 2</strong></td>
+                                    <td>Invoice Due Date</td>
+                                    <td><span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Dunning Notice</span></td>
+                                    <td>Standard Overdue Notice</td>
+                                    <td>Auto-send</td>
+                                    <td>Collector Alert</td>
+                                </tr>
+                                <tr>
+                                    <td class="mono"><strong>Step 3</strong></td>
+                                    <td>14 Days Overdue</td>
+                                    <td><span style="background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Autopilot Call Task</span></td>
+                                    <td>Urgent Balance Confirmation</td>
+                                    <td>Staged Action</td>
+                                    <td>AR Manager</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Action Modals (Edit, Delete, Add Step, Copy) -->
+    <div id="add-step-modal" class="modal-overlay" style="display:none; z-index: 4000;">
+        <div class="modal-box" style="width: 480px; text-align: left;">
+            <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0;">➕ Add Procedure Step</h2>
+            <form onsubmit="submitAddStep(event)">
+                <label style="font-size:0.85rem; font-weight:600;">Trigger Event</label>
+                <input type="text" id="step_trigger" class="form-control" value="30 Days Overdue" required>
+
+                <label style="font-size:0.85rem; font-weight:600;">Automated Action</label>
+                <select id="step_action" class="form-control">
+                    <option>Formal Demand Letter</option>
+                    <option>Credit Hold Warning</option>
+                    <option>Autopilot Collector Call</option>
+                    <option>Legal Escalation Notice</option>
+                </select>
+
+                <label style="font-size:0.85rem; font-weight:600;">Dunning / Email Template</label>
+                <input type="text" id="step_template" class="form-control" value="Final Notice & Credit Suspension" required>
+
+                <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:16px;">
+                    <button type="button" class="btn-btn" style="background:#6B7280;" onclick="closeAddStepModal()">Cancel</button>
+                    <button type="submit" class="btn-btn">Save New Step</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-proc-modal" class="modal-overlay" style="display:none; z-index: 4000;">
+        <div class="modal-box" style="width: 480px; text-align: left;">
+            <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0;">✏️ Edit Autopilot Procedure</h2>
+            <form onsubmit="submitEditProc(event)">
+                <label style="font-size:0.85rem; font-weight:600;">Procedure Name</label>
+                <input type="text" id="edit_proc_name" class="form-control" value="Autopilot High Risk Procedure" required>
+
+                <label style="font-size:0.85rem; font-weight:600;">Risk Category</label>
+                <select id="edit_proc_risk" class="form-control">
+                    <option selected>High Risk</option>
+                    <option>Medium Risk</option>
+                    <option>Low Risk</option>
+                </select>
+
+                <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:16px;">
+                    <button type="button" class="btn-btn" style="background:#6B7280;" onclick="closeEditProcModal()">Cancel</button>
+                    <button type="submit" class="btn-btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
         </div>
     </div>
 
@@ -678,6 +749,103 @@
 
     function closeTenantModal() {
         document.getElementById('tenant-modal').style.display = 'none';
+    }
+
+    function switchProcTab(tab) {
+        const recTab = document.getElementById('tab-btn-recommendations');
+        const ovTab = document.getElementById('tab-btn-overview');
+        const recPanel = document.getElementById('tab-panel-recommendations');
+        const ovPanel = document.getElementById('tab-panel-overview');
+
+        if (tab === 'recommendations') {
+            recTab.style.fontWeight = '700';
+            recTab.style.color = '#059669';
+            recTab.style.borderBottom = '2px solid #059669';
+            ovTab.style.fontWeight = '500';
+            ovTab.style.color = '#6B7280';
+            ovTab.style.borderBottom = 'none';
+
+            recPanel.style.display = 'block';
+            ovPanel.style.display = 'none';
+        } else {
+            ovTab.style.fontWeight = '700';
+            ovTab.style.color = '#059669';
+            ovTab.style.borderBottom = '2px solid #059669';
+            recTab.style.fontWeight = '500';
+            recTab.style.color = '#6B7280';
+            recTab.style.borderBottom = 'none';
+
+            ovPanel.style.display = 'block';
+            recPanel.style.display = 'none';
+        }
+    }
+
+    function highlightBar(prob) {
+        alert('📊 AI Probability Bucket Selected: ' + prob + ' Payment Probability.\nFiltering corresponding customer invoices for this payment window.');
+    }
+
+    function selectNode(val) {
+        alert('⏱️ Timeline Slider Node Selected: Day ' + val + '.\nAutopilot collection trigger window highlighted.');
+    }
+
+    function openAddStepModal() {
+        document.getElementById('add-step-modal').style.display = 'flex';
+    }
+
+    function closeAddStepModal() {
+        document.getElementById('add-step-modal').style.display = 'none';
+    }
+
+    function submitAddStep(e) {
+        e.preventDefault();
+        const trigger = document.getElementById('step_trigger').value;
+        const action = document.getElementById('step_action').value;
+        const template = document.getElementById('step_template').value;
+
+        const tbody = document.getElementById('proc-steps-body');
+        const stepNum = tbody.children.length + 1;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="mono"><strong>Step ${stepNum}</strong></td>
+            <td>${escapeHtml(trigger)}</td>
+            <td><span style="background: #E0E7FF; color: #3730A3; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${escapeHtml(action)}</span></td>
+            <td>${escapeHtml(template)}</td>
+            <td>Auto-send</td>
+            <td>AR Manager</td>
+        `;
+        tbody.appendChild(tr);
+        closeAddStepModal();
+        alert('✨ Step ' + stepNum + ' added successfully to Autopilot procedure!');
+    }
+
+    function openEditProcModal() {
+        document.getElementById('edit-proc-modal').style.display = 'flex';
+    }
+
+    function closeEditProcModal() {
+        document.getElementById('edit-proc-modal').style.display = 'none';
+    }
+
+    function submitEditProc(e) {
+        e.preventDefault();
+        const name = document.getElementById('edit_proc_name').value;
+        document.getElementById('proc-modal-title').innerText = 'Superior Supply - Chicago » ' + name;
+        closeEditProcModal();
+        alert('✏️ Procedure updated successfully!');
+    }
+
+    function openDeleteProcModal() {
+        if (confirm('⚠️ Are you sure you want to archive/delete this Autopilot Procedure?')) {
+            closeProcedureModal();
+            alert('🗑️ Procedure archived successfully.');
+        }
+    }
+
+    function openCopyProcModal() {
+        const copyName = prompt('Enter name for copied Procedure configuration:', 'Autopilot High Risk Procedure - Copy');
+        if (copyName) {
+            alert('📋 Procedure copied as: ' + copyName);
+        }
     }
 
     function openProcedureModal(tier) {
