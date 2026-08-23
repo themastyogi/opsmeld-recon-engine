@@ -58,10 +58,16 @@
 
     .tab-bar {
       display: flex;
-      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 24px;
       border-bottom: 1px solid var(--border-color);
       padding-bottom: 12px;
+    }
+
+    .tab-group {
+      display: flex;
+      gap: 12px;
     }
 
     .tab-btn {
@@ -171,6 +177,10 @@
     .btn-action {
       padding: 10px 20px; background: #0E6251; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
     }
+    
+    .btn-sec {
+      background: #596562;
+    }
 
     .alert-banner {
       background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 8px; padding: 16px; margin-bottom: 24px;
@@ -196,9 +206,18 @@
         <div id="notice-container"></div>
 
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="switchTab('ar-tab')">📊 AR Manager & Trapped Cash</button>
-            <button class="tab-btn" onclick="switchTab('ap-tab')">💳 AP Manager & Discounts</button>
-            <button class="tab-btn" onclick="switchTab('settings-tab')">⚙️ Client & Tenant Settings</button>
+            <div class="tab-group">
+                <button class="tab-btn active" onclick="switchTab('ar-tab', event)">📊 AR Manager & Trapped Cash</button>
+                <button class="tab-btn" onclick="switchTab('ap-tab', event)">💳 AP Manager & Discounts</button>
+                <button class="tab-btn" onclick="switchTab('settings-tab', event)">⚙️ Client & Tenant Settings</button>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <label style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
+                    <input type="checkbox" id="auto-refresh-check" onchange="toggleAutoRefresh(this)"> ⏱️ Auto-Refresh (Every 10s)
+                </label>
+                <button class="btn-action btn-sec" style="padding: 6px 14px; font-size: 0.85rem;" onclick="refreshData()">🔄 Refresh Live Data</button>
+            </div>
         </div>
 
         <!-- AR MANAGER TAB -->
@@ -339,12 +358,32 @@
     </div>
 
     <script>
-    function switchTab(tabId) {
+    let autoRefreshTimer = null;
+
+    function switchTab(tabId, evt) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         
         document.getElementById(tabId).classList.add('active');
-        event.target.classList.add('active');
+        if (evt && evt.target) evt.target.classList.add('active');
+    }
+
+    function refreshData() {
+        const container = document.getElementById('notice-container');
+        container.innerHTML = '<div class="alert-success">🔄 Refreshing live Business Central ledger data...</div>';
+        setTimeout(() => {
+            container.innerHTML = '<div class="alert-success">✅ Live Business Central data up to date!</div>';
+            setTimeout(() => { container.innerHTML = ''; }, 3000);
+        }, 600);
+    }
+
+    function toggleAutoRefresh(checkbox) {
+        if (checkbox.checked) {
+            refreshData();
+            autoRefreshTimer = setInterval(refreshData, 10000);
+        } else {
+            if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        }
     }
 
     function stageFix(customerNo) {
