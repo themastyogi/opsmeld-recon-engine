@@ -24,9 +24,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        if path == "/":
-            config = load_client_config()
-            html = render_dashboard_html(config.name, {})
+        if path in ["/", "/index.html", "/dashboard"]:
+            index_path = Path(__file__).resolve().parent.parent / "index.html"
+            if not index_path.exists():
+                index_path = Path(__file__).resolve().parent.parent.parent / "index.html"
+            
+            if index_path.exists():
+                html = index_path.read_text(encoding="utf-8")
+            else:
+                config = load_client_config()
+                html = render_dashboard_html(config.name, {})
+            
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
 

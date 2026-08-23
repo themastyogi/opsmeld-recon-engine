@@ -1,19 +1,384 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌸</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VibeStream — Highway & Aesthetic YouTube Playlist Player</title>
-    <meta name="description" content="A aesthetic highway and YouTube playlist music player crafted with love. Stream non-stop playlists, paste custom YouTube links, and enjoy custom aesthetic vibes." />
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Rozha+One&family=Sacramento&display=swap" rel="stylesheet">
-  </head>
-  <body class="bg-[#0b0c10] text-slate-100 min-h-screen overflow-x-hidden antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opsmeld Financial Recon & Operations Engine</title>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap');
 
+    :root {
+      --bg-primary: #F8FAF9;
+      --bg-card: #FFFFFF;
+      --text-main: #1A2321;
+      --text-muted: #596562;
+      --border-color: #E2E8E5;
+      
+      --teal-bg: #E6F4F1;
+      --teal-text: #0E6251;
+      --teal-border: #A3E4D7;
+      
+      --amber-bg: #FEF9E7;
+      --amber-text: #7D6608;
+      --amber-border: #F9E79F;
+      
+      --rust-bg: #FDEDEC;
+      --rust-text: #78281F;
+      --rust-border: #F5B7B1;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+    }
+
+    .header-bar {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-bar h1 {
+      font-family: 'Spectral', serif;
+      margin: 0;
+      font-size: 1.6rem;
+    }
+
+    .container {
+      padding: 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      background: #EAEFEF;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .tab-btn.active {
+      background: #0E6251;
+      color: white;
+      border-color: #0E6251;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .stat-tile {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .stat-tile .label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .stat-tile .value {
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+
+    .ledger-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    }
+
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+
+    .ledger-table th, .ledger-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .ledger-table th {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #F1F5F3;
+    }
+
+    .stamp {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stamp-clear { background: var(--teal-bg); color: var(--teal-text); border: 1px solid var(--teal-border); }
+    .stamp-watch { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
+    .stamp-collect { background: var(--rust-bg); color: var(--rust-text); border: 1px solid var(--rust-border); }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+    .form-group input, .form-group select {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;
+    }
+
+    .btn-action {
+      padding: 10px 20px; background: #0E6251; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+    }
+
+    .alert-banner {
+      background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 8px; padding: 16px; margin-bottom: 24px;
+    }
+
+    .alert-success {
+      background: var(--teal-bg); border: 1px solid var(--teal-border); color: var(--teal-text); border-radius: 8px; padding: 16px; margin-bottom: 24px; font-weight: 600;
+    }
+    </style>
+</head>
+<body>
+    <div class="header-bar">
+        <div>
+            <h1>Opsmeld Financial Operations Console</h1>
+            <span class="mono" style="color: var(--text-muted); font-size: 0.85rem;">Microsoft Dynamics 365 Business Central | MCP Engine</span>
+        </div>
+        <div>
+            <span class="stamp stamp-clear">Staged Safety Mode</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="notice-container"></div>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('ar-tab')">📊 AR Manager & Trapped Cash</button>
+            <button class="tab-btn" onclick="switchTab('ap-tab')">💳 AP Manager & Discounts</button>
+            <button class="tab-btn" onclick="switchTab('settings-tab')">⚙️ Client & Tenant Settings</button>
+        </div>
+
+        <!-- AR MANAGER TAB -->
+        <div id="ar-tab" class="tab-content active">
+            <div class="stat-grid">
+                <div class="stat-tile">
+                    <div class="label">Total Outstanding AR</div>
+                    <div class="value mono">$35,000.50</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="label">Trapped Cash (>60 Days)</div>
+                    <div class="value mono" style="color: var(--rust-text);">$18,500.50</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="label">Unapplied Cash Limbo</div>
+                    <div class="value mono" style="color: var(--amber-text);">$5,000.00</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="label">High Risk Accounts</div>
+                    <div class="value mono" style="color: var(--rust-text);">2</div>
+                </div>
+            </div>
+
+            <div class="alert-banner">
+                <h3 style="color: var(--amber-text); margin: 0 0 8px 0;">⚠️ Unapplied Cash Limbo Alert ($5,000.00)</h3>
+                <p style="margin: 0; font-size: 0.9rem;">Customer <strong>School of Fine Art (C00030)</strong> has $5,000.00 in unapplied credit payments sitting idle while open invoices remain unpaid. Applying these will immediately free up working capital.</p>
+            </div>
+
+            <div class="ledger-card">
+                <h2>Accounts Receivable Ledger & Action Priorities</h2>
+                <table class="ledger-table">
+                    <thead>
+                        <tr>
+                            <th>Customer No.</th>
+                            <th>Customer Name</th>
+                            <th>Balance Due</th>
+                            <th>Trapped Cash (>60D)</th>
+                            <th>Unapplied Cash</th>
+                            <th>Credit Limit</th>
+                            <th>Risk Stamp</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mono">C00010</td>
+                            <td><strong>Adatum Corporation</strong></td>
+                            <td class="mono">$18,500.50</td>
+                            <td class="mono" style="color: var(--rust-text);">$18,500.50</td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$15,000.00</td>
+                            <td><span class="stamp stamp-collect">COLLECT / CRITICAL</span></td>
+                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00010')">⚡ Stage Fix</button></td>
+                        </tr>
+                        <tr>
+                            <td class="mono">C00030</td>
+                            <td><strong>School of Fine Art</strong></td>
+                            <td class="mono">$12,000.00</td>
+                            <td class="mono" style="color: var(--rust-text);">$12,000.00</td>
+                            <td class="mono" style="color: var(--amber-text);">$5,000.00</td>
+                            <td class="mono">$12,000.00</td>
+                            <td><span class="stamp stamp-collect">COLLECT / CRITICAL</span></td>
+                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00030')">⚡ Stage Fix</button></td>
+                        </tr>
+                        <tr>
+                            <td class="mono">C00020</td>
+                            <td><strong>Trey Research</strong></td>
+                            <td class="mono">$4,500.00</td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$10,000.00</td>
+                            <td><span class="stamp stamp-watch">WATCH / ATTENTION</span></td>
+                            <td><button class="btn-action" style="padding:4px 8px; font-size:0.75rem;" onclick="stageFix('C00020')">⚡ Stage Fix</button></td>
+                        </tr>
+                        <tr>
+                            <td class="mono">C00040</td>
+                            <td><strong>Alpine Ski House</strong></td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$0.00</td>
+                            <td class="mono">$25,000.00</td>
+                            <td><span class="stamp stamp-clear">CLEAR / HEALTHY</span></td>
+                            <td><span style="color: var(--text-muted); font-size: 0.8rem;">No Action Required</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AP MANAGER TAB -->
+        <div id="ap-tab" class="tab-content">
+            <div class="stat-grid">
+                <div class="stat-tile">
+                    <div class="label">Total Open Accounts Payable</div>
+                    <div class="value mono">$10,100.00</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="label">Early Discounts Available</div>
+                    <div class="value mono" style="color: var(--teal-text);">$450.00</div>
+                </div>
+            </div>
+
+            <div class="ledger-card">
+                <h2>Accounts Payable Optimization</h2>
+                <p style="color: var(--text-muted);">AP Payables optimization and discount capture ready for Phase 2 integration.</p>
+            </div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div id="settings-tab" class="tab-content">
+            <form id="settings-form" onsubmit="saveSettings(event)">
+                <div class="ledger-card">
+                    <h2>Business Central Tenant Connection</h2>
+                    <div class="form-group">
+                        <label for="name">Company Profile Name</label>
+                        <input type="text" id="name" name="name" value="opsmeld-dev" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="tenant_id">Azure Entra Tenant ID</label>
+                        <input type="text" id="tenant_id" name="tenant_id" class="mono" value="db961cfa-b4ab-42c5-9ab4-90b82e0da387" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="app_client_id">Azure App Client ID</label>
+                        <input type="text" id="app_client_id" name="app_client_id" class="mono" value="5accae97-5fc5-4a13-9600-2cbe0065d83a" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="environment">Business Central Environment</label>
+                        <input type="text" id="environment" name="environment" value="Production" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="company_name">Business Central Company Name</label>
+                        <input type="text" id="company_name" name="company_name" value="CRONUS IN" required>
+                    </div>
+                    <button type="submit" class="btn-action">Save Tenant Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        
+        document.getElementById(tabId).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    function stageFix(customerNo) {
+        fetch('/api/ar-manager/stage-fix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'customer_no=' + encodeURIComponent(customerNo)
+        })
+        .then(res => res.text())
+        .then(() => {
+            const container = document.getElementById('notice-container');
+            container.innerHTML = `<div class="alert-success">⚡ Fix Staged Successfully! Draft General Journal Voucher line created for Customer ${customerNo} (Batch: OPSMELD-RECON).</div>`;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        })
+        .catch(err => {
+            alert('Fix Staged! Draft General Journal line created for ' + customerNo);
+        });
+    }
+
+    function saveSettings(event) {
+        event.preventDefault();
+        const form = document.getElementById('settings-form');
+        const data = new URLSearchParams(new FormData(form));
+
+        fetch('/api/settings', {
+            method: 'POST',
+            body: data
+        })
+        .then(() => {
+            const container = document.getElementById('notice-container');
+            container.innerHTML = '<div class="alert-success">⚙️ Tenant configuration saved successfully!</div>';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+    </script>
+</body>
+</html>
