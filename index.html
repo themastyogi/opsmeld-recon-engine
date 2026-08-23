@@ -444,6 +444,19 @@
         </div>
     </div>
 
+    <!-- Login Modal Popup -->
+    <div id="login-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-box" style="width: 480px;">
+            <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0; color: #1F2937;">🔑 Sign In with Microsoft Entra</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">To authorize Opsmeld with Business Central, open the link below and enter your code:</p>
+            <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                <div style="font-size: 0.85rem; color: #4B5563;">Step 1: Open <a id="login-link" href="https://microsoft.com/devicelogin" target="_blank" style="color: #4F46E5; font-weight: 700;">https://microsoft.com/devicelogin</a></div>
+                <div style="font-size: 1.4rem; font-weight: 800; color: #111827; letter-spacing: 0.08em; margin-top: 8px;" class="mono" id="login-user-code">FETCHING...</div>
+            </div>
+            <button class="modal-btn" onclick="closeLoginModal()">Done / Refresh</button>
+        </div>
+    </div>
+
     <div id="demo-modal" class="modal-overlay">
         <div class="modal-box">
             <h2 style="font-size: 1.3rem; font-weight: 700; margin-top: 0; color: #1F2937;">A smarter way to recover cash and protect customer relationships.</h2>
@@ -452,7 +465,7 @@
         </div>
     </div>
 
-    <!-- Tenant Settings Modal (Includes Client Secret input field for non-interactive auth) -->
+    <!-- Tenant Settings Modal -->
     <div id="tenant-modal" class="modal-overlay" style="display:none;">
         <div class="modal-box" style="width: 520px; text-align: left;">
             <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0;">⚙️ Business Central Connection Setup</h2>
@@ -497,6 +510,25 @@
         document.getElementById('tenant-modal').style.display = 'none';
     }
 
+    function closeLoginModal() {
+        document.getElementById('login-modal').style.display = 'none';
+        loadLiveCustomerData();
+    }
+
+    function startMicrosoftLogin() {
+        fetch('/api/auth/login')
+            .then(res => res.json())
+            .then(data => {
+                if (data.user_code) {
+                    document.getElementById('login-user-code').innerText = data.user_code;
+                    document.getElementById('login-link').href = data.verification_uri || 'https://microsoft.com/devicelogin';
+                    document.getElementById('login-modal').style.display = 'flex';
+                } else {
+                    alert('Unable to initiate login: ' + JSON.stringify(data));
+                }
+            });
+    }
+
     function formatMoney(num) {
         return '$' + (Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
     }
@@ -512,11 +544,15 @@
             .then(res => res.json())
             .then(data => {
                 if (data.error) {
+                    let loginBtnHtml = '';
+                    if (data.error.includes('403') || data.error.includes('Forbidden') || data.error.includes('Authentication token missing')) {
+                        loginBtnHtml = `<div style="margin-top:12px;"><button class="btn-btn" style="background:#4F46E5;" onclick="startMicrosoftLogin()">🔑 Sign In with Microsoft Entra</button></div>`;
+                    }
                     container.innerHTML = `
                     <div style="background: #FDEDEC; border: 1px solid #F5B7B1; color: #78281F; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                         <h3 style="margin-top:0;">⚠️ Live Business Central Connection Status</h3>
                         <p>${escapeHtml(data.error)}</p>
-                        <p style="font-size:0.85rem; margin-bottom:0;">Open <strong>Company Details</strong> in the left menu to enter your <strong>Azure Client Secret</strong> or MSAL credentials.</p>
+                        ${loginBtnHtml}
                     </div>`;
                     document.getElementById('autopilot-body').innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#78281F;">Live Business Central connection unauthenticated or offline.</td></tr>';
                     document.getElementById('custom-segments-body').innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#78281F;">Live Business Central connection unauthenticated or offline.</td></tr>';

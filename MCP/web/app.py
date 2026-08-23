@@ -96,9 +96,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps(data).encode("utf-8"))
 
-        else:
-            self._set_headers("text/plain", 404)
-            self.wfile.write(b"404 Not Found")
+        elif path == "/api/auth/login":
+            config = load_client_config()
+            client = BCMCPClient(config)
+            flow = client.start_device_flow()
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(flow).encode("utf-8"))
 
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)

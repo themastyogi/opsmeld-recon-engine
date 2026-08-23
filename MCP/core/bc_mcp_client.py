@@ -25,22 +25,11 @@ class BCMCPClient:
         self._available_tools: Optional[List[Dict[str, Any]]] = None
 
     def get_access_token(self) -> str:
-        """Acquires OAuth2 token via MSAL (silent cache or Client Secret non-interactive flow)."""
+        """Acquires OAuth2 token via MSAL (silent cache persistence or Client Secret flow)."""
         try:
             import msal
         except ImportError:
             return ""
-
-        client_secret = getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
-        if client_secret:
-            app = msal.ConfidentialClientApplication(
-                client_id=self.config.app_client_id,
-                client_credential=client_secret,
-                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
-            )
-            result = app.acquire_token_for_client(scopes=self.config.scopes)
-            if result and "access_token" in result:
-                return result["access_token"]
 
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
@@ -60,7 +49,53 @@ class BCMCPClient:
                 except Exception:
                     pass
 
+        client_secret = getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
+        if client_secret:
+            app = msal.ConfidentialClientApplication(
+                client_id=self.config.app_client_id,
+                client_credential=client_secret,
+                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+            )
+            result = app.acquire_token_for_client(scopes=self.config.scopes)
+            if result and "access_token" in result:
+                return result["access_token"]
+
         return ""
+
+    def start_device_flow(self) -> Dict[str, Any]:
+        """Initiates MSAL Device Code Flow for 1-click user authentication."""
+        try:
+            import msal
+            cache = msal.SerializableTokenCache()
+            app = msal.PublicClientApplication(
+                client_id=self.config.app_client_id,
+                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                token_cache=cache
+            )
+            flow = app.initiate_device_flow(scopes=self.config.scopes)
+            return flow
+        except Exception as e:
+            return {"error": str(e)}
+
+    def complete_device_flow(self, flow: Dict[str, Any]) -> Dict[str, Any]:
+        """Completes device code flow and persists token cache."""
+        try:
+            import msal
+            cache = msal.SerializableTokenCache()
+            app = msal.PublicClientApplication(
+                client_id=self.config.app_client_id,
+                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                token_cache=cache
+            )
+            result = app.acquire_token_by_device_flow(flow)
+            if "access_token" in result:
+                self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.token_cache_path, "w", encoding="utf-8") as f:
+                    f.write(cache.serialize())
+                return {"status": "success", "access_token": result["access_token"]}
+            return {"error": result.get("error_description", "Authentication pending or failed.")}
+        except Exception as e:
+            return {"error": str(e)}
 
     def _execute_jsonrpc(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Executes a live HTTP JSON-RPC 2.0 POST request against the BC MCP server."""
@@ -93,6 +128,14 @@ class BCMCPClient:
                 return res_data.get("result", {})
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode('utf-8') if e.fp else str(e)
+            if e.code == 403 and "user is expected to be authenticated" in err_msg.lower():
+                return {
+                    "error": (
+                        "HTTP 403 Forbidden: Business Central requires User Context or Entra App Permission. "
+                        f"In Business Central, search for 'Microsoft Entra Applications', add Client ID '{self.config.app_client_id}', "
+                        "and assign User Permissions (e.g. D365 FULL ACCESS), or click '🔑 Sign In with Microsoft'."
+                    )
+                }
             return {"error": f"HTTP {e.code}: {err_msg}"}
         except Exception as e:
             return {"error": f"Connection Error: {str(e)}"}
