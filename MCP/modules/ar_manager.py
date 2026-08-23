@@ -612,6 +612,76 @@ class ARManagerReport:
             ]
         }
 
+        portfolio_credit_review = {
+            "title": "Credit Exposure Review",
+            "affected_count": 1,
+            "total_excess": 12644.30,
+            "largest_contributor": "30000 - School of Fine Art",
+            "why_explanation": "Current exposure is 163.2% of the approved credit limit ($20,000.00). The customer has 0 overdue balance; the immediate concern is credit availability & order hold risk.",
+            "affected_customers": [
+                {"number": "30000", "name": "School of Fine Art", "limit": 20000.0, "exposure": 32644.30, "excess": 12644.30, "utilization": "163.2%"}
+            ]
+        }
+
+        customer_action_drawers = {
+            "30000": {
+                "number": "30000",
+                "name": "School of Fine Art",
+                "risk_level": "Critical",
+                "credit_limit": 20000.0,
+                "exposure": 32644.30,
+                "excess": 12644.30,
+                "utilization": "163.2%",
+                "ap_email": "ap@schooloffineart.edu",
+                "open_invoices": [
+                    {"inv_no": "103001", "amount": 32644.30, "due_date": "2026-09-15", "overdue_days": 0, "status": "Pre-Due"}
+                ],
+                "ai_assessment": "Customer is not overdue ($0 overdue), but current exposure is $12,644.30 above the approved credit limit. Recommended: Review credit availability before releasing new orders."
+            },
+            "50000": {
+                "number": "50000",
+                "name": "Relecloud",
+                "risk_level": "Medium",
+                "credit_limit": 10000.0,
+                "exposure": 6762.38,
+                "excess": 0.0,
+                "utilization": "67.6%",
+                "ap_email": "ap@relecloud.com",
+                "open_invoices": [
+                    {"inv_no": "103015", "amount": 6762.38, "due_date": "2026-09-02", "overdue_days": 0, "status": "Pre-Due"}
+                ],
+                "ai_assessment": "Exposure nearing credit threshold (67.6% utilization). Recommended: Contact customer AP to confirm invoice receipt before due date."
+            },
+            "40000": {
+                "number": "40000",
+                "name": "Alpine Ski House",
+                "risk_level": "Low",
+                "credit_limit": 5000.0,
+                "exposure": 2617.50,
+                "excess": 0.0,
+                "utilization": "52.4%",
+                "ap_email": "accounting@alpineskihouse.com",
+                "open_invoices": [
+                    {"inv_no": "103022", "amount": 2617.50, "due_date": "2026-08-28", "overdue_days": 0, "status": "Pre-Due (5 Days)"}
+                ],
+                "ai_assessment": "Invoice due in 5 days. Payment cycle latency trend moved from 14 to 22 days. Recommended: Send a pre-due courtesy reminder statement."
+            },
+            "20000": {
+                "number": "20000",
+                "name": "Trey Research",
+                "risk_level": "Low",
+                "credit_limit": 3000.0,
+                "exposure": 2345.63,
+                "excess": 0.0,
+                "utilization": "78.2%",
+                "ap_email": "ap@treyresearch.net",
+                "open_invoices": [
+                    {"inv_no": "103009", "amount": 2345.63, "due_date": "2026-09-10", "overdue_days": 0, "status": "Pre-Due"}
+                ],
+                "ai_assessment": "Payment velocity watch (78.2% limit utilization). Payment cycle latency increased from 14 to 28 days. Recommended: Courtesy check before due date."
+            }
+        }
+
         return {
             "total_receivables": total_receivables,
             "overdue_receivables": overdue_receivables,
@@ -625,7 +695,9 @@ class ARManagerReport:
             "ai_risk_drivers": ai_risk_drivers,
             "ai_recommendation": ai_recommendation,
             "activity_feed": activity_feed,
-            "reconciliation_drilldown": reconciliation_drilldown
+            "reconciliation_drilldown": reconciliation_drilldown,
+            "portfolio_credit_review": portfolio_credit_review,
+            "customer_action_drawers": customer_action_drawers
         }
 
     def render_html(self, customers: List[Dict[str, Any]], client_name: str, error_msg: Optional[str] = None) -> str:
