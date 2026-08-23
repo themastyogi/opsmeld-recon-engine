@@ -73,18 +73,21 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             res = report.fetch_data()
             error_msg = res.get("error")
             customers = res.get("customers", [])
-            tiered = [report.tier_customer(c) for c in customers]
+            autopilot = res.get("autopilot", [])
+            custom_segments = res.get("custom_segments", [])
             
             data = {
                 "client_name": config.name,
                 "error": error_msg,
-                "total_balance": sum(c.get("balance_due", 0.0) for c in tiered),
-                "total_trapped_cash": sum(c.get("trapped_cash", 0.0) for c in tiered),
-                "total_unapplied_limbo": sum(c.get("unapplied_cash", 0.0) for c in tiered if c.get("has_unapplied_limbo")),
-                "collect_count": sum(1 for c in tiered if c["tier"] == "collect"),
-                "watch_count": sum(1 for c in tiered if c["tier"] == "watch"),
-                "clear_count": sum(1 for c in tiered if c["tier"] == "clear"),
-                "customers": tiered
+                "total_balance": sum(c.get("balance_due", 0.0) for c in customers),
+                "total_trapped_cash": sum(c.get("trapped_cash", 0.0) for c in customers),
+                "total_unapplied_limbo": sum(c.get("unapplied_cash", 0.0) for c in customers if c.get("has_unapplied_limbo")),
+                "collect_count": sum(1 for c in customers if c.get("segment") == "high"),
+                "watch_count": sum(1 for c in customers if c.get("segment") == "medium"),
+                "clear_count": sum(1 for c in customers if c.get("segment") in ["low", "optimal"]),
+                "customers": customers,
+                "autopilot": autopilot,
+                "custom_segments": custom_segments
             }
             self._set_headers("application/json")
             self.wfile.write(json.dumps(data).encode("utf-8"))
