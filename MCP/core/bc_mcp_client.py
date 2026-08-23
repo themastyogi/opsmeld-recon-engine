@@ -120,7 +120,7 @@ class BCMCPClient:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json, text/event-stream"
         }
         if self.config.company_name:
             headers["Company"] = self.config.company_name
