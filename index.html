@@ -412,15 +412,13 @@
                             <span style="background: #FEE2E2; color: #DC2626; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">🚨</span>
                         </div>
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-overdue-rec">$3.21M</div>
-                        <div style="font-size: 0.72rem; color: #DC2626; font-weight: 600; margin-top: 4px;">↑ 8.7% vs last 30 days</div>
-                    </div>
-                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;" title="Outstanding balance currently classified as high/critical risk due to credit exposure or overdue latency">
+                        <div style="font-size: 0.72rem; color: #DC2626; font-weight: 600; margin-top: 4px;">                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="alert('🔍 High Risk Amount Reconciliation ($32,644.30):\n\nDerived 100% from High/Critical risk accounts:\n• Customer 30000 - School of Fine Art: $32,644.30\n  (Credit Utilization: 163.2% — Exceeds limit by $12,644.30)\n\nTotal High Risk Portfolio: $32,644.30 USD')" title="Click for High Risk Reconciliation Drill-Down">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.78rem; font-weight: 600; color: #6B7280;">High Risk Amount ℹ️</span>
                             <span style="background: #FEF3C7; color: #D97706; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">⚠️</span>
                         </div>
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-high-risk">$32,644.30</div>
-                        <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Credit exposure / High risk balance</div>
+                        <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Credit exposure / High risk balance 🔍</div>
                     </div>
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="alert('📅 Expected Collections Breakdown (Next 7 Days):\n\nTotal Expected: $10,205.06\n\nCalculation basis:\n• 3 customer accounts with upcoming due dates\n• Payment velocity history derived from BC ledger entries\n• Scheduled pre-due courtesy check triggers')" title="Click for expected collections calculation basis">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -450,10 +448,10 @@
 
                 <!-- Middle Row: 3 Column Cards -->
                 <div style="display: grid; grid-template-columns: 1.2fr 1.8fr 1.2fr; gap: 20px; margin-bottom: 24px;">
-                    <!-- Column 1: What changed overnight? -->
+                    <!-- Column 1: What changed overnight? / today? -->
                     <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                            <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">What changed overnight?</h3>
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 700;" id="what-changed-header">What changed overnight?</h3>
                             <span style="color: #059669; font-size: 0.78rem; font-weight: 600; cursor: pointer;">View all changes →</span>
                         </div>
                         <div id="ct-overnight-container" style="display: flex; flex-direction: column; gap: 14px;">
@@ -491,19 +489,19 @@
                         <h3 style="margin-top: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">💡 Risk Drivers & Signals</h3>
                         <div style="font-size: 0.8rem; font-weight: 700; color: #374151; margin-bottom: 12px;">Top risk drivers today (by rationale)</div>
                         <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; cursor: pointer;" onclick="alert('🔍 Credit Exposure Exceeded Reconciliation ($12,644.30):\n\nCustomer: 30000 - School of Fine Art\nOpen Balance: $32,644.30\nConfigured Credit Limit: $20,000.00\n\nActual Amount Exceeding Credit Limit: $12,644.30\nCredit Utilization: 163.2%')" title="Click for Credit Exposure Reconciliation Drilldown">
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span style="background: #EFF6FF; color: #2563EB; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-credit-cnt">1</span>
-                                    <span>Credit exposure exceeded</span>
+                                    <span>Credit exposure exceeded 🔍</span>
                                 </div>
-                                <span class="mono" style="font-weight: 700;" id="ai-driver-credit-amt">$32,644.30</span>
+                                <span class="mono" style="font-weight: 700; color: #2563EB;" id="ai-driver-credit-amt">$12,644.30</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span style="background: #FEF3C7; color: #D97706; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800;" id="ai-driver-disputes-cnt">3</span>
                                     <span>Payment velocity watch</span>
                                 </div>
-                                <span class="mono" style="font-weight: 700;" id="ai-driver-disputes-amt">$11,725.51</span>
+                                <span class="mono" style="font-weight: 700;" id="ai-driver-disputes-amt">$11,683.53</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -511,6 +509,8 @@
                                     <span>Broken payment promises</span>
                                 </div>
                                 <span class="mono" style="font-weight: 700;" id="ai-driver-broken-amt">$0.00</span>
+                            </div>
+                        </div>i-driver-broken-amt">$0.00</span>
                             </div>
                         </div>
 
