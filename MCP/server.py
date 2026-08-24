@@ -6,8 +6,16 @@ One-command web management console launcher.
 from web.app import create_server
 
 
+import os
+
+
 def main():
-    base_port = 8000
+    port_env = os.environ.get("PORT") or os.environ.get("WEBSITES_PORT") or "8000"
+    try:
+        base_port = int(port_env)
+    except ValueError:
+        base_port = 8000
+
     server = None
     port = base_port
     for try_port in range(base_port, base_port + 10):
