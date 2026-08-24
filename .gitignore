@@ -32,3 +32,9 @@ ENV/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local Admin Secrets
+config/admin_secret.json
+MCP/config/admin_secret.json
+data/
+MCP/data/

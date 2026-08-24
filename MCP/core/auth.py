@@ -4,8 +4,9 @@ Provides lightweight application Sign In authentication, session token managemen
 and security access controls for Azure F1 client previews.
 """
 
-import hashlib
+import json
 import os
+import pathlib
 import secrets
 import time
 from typing import Dict, Any, Optional
@@ -18,7 +19,29 @@ SESSION_TTL_SECONDS = 86400  # 24 hours
 class AuthManager:
     def __init__(self):
         self.admin_user = os.environ.get("OPSMELD_ADMIN_USER", "admin@opsmeld.com")
-        self.admin_pass = os.environ.get("OPSMELD_ADMIN_PASSWORD", "opsmeld2026")
+        self.admin_pass = self._resolve_admin_password()
+
+    def _resolve_admin_password(self) -> str:
+        """Resolves admin password from env var or git-ignored config/admin_secret.json."""
+        env_pass = os.environ.get("OPSMELD_ADMIN_PASSWORD")
+        if env_pass:
+            return env_pass
+
+        secret_file = pathlib.Path(__file__).resolve().parent.parent / "config" / "admin_secret.json"
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+
+        if secret_file.exists():
+            try:
+                data = json.loads(secret_file.read_text(encoding="utf-8"))
+                if "admin_password" in data:
+                    return data["admin_password"]
+            except Exception:
+                pass
+
+        # Generate local secret if not present
+        new_secret = secrets.token_urlsafe(12)
+        secret_file.write_text(json.dumps({"admin_password": new_secret}, indent=2), encoding="utf-8")
+        return new_secret
 
     def authenticate(self, username: str, password: str) -> Optional[str]:
         """Validates provisioned credentials and returns a session token if valid."""
@@ -40,9 +63,7 @@ class AuthManager:
         if not session_token:
             return False
         
-        # Strip Bearer or Cookie quotes if present
         session_token = session_token.replace("Bearer ", "").replace("session=", "").strip()
-        
         session = _ACTIVE_SESSIONS.get(session_token)
         if not session:
             return False
