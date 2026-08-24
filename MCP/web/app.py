@@ -6,6 +6,7 @@ Lightweight HTTP web app and routing server supporting report generation and fix
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
+from typing import Optional, Dict, Any
 import urllib.parse
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
