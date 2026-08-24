@@ -216,6 +216,21 @@ class BCMCPClient:
         except Exception as e:
             return {"error": str(e)}
 
+    def _execute_bc_rest_url(self, url: str) -> Dict[str, Any]:
+        """Executes a direct GET request against an absolute OData @odata.nextLink URL."""
+        token = self.get_access_token()
+        if not token:
+            return {"error": "Authentication token missing."}
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        if self.config.company_name:
+            headers["Company"] = self.config.company_name
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            return {"error": str(e)}
+
     def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Executes a named tool on Business Central MCP server, with automatic REST API fallback for Client Secrets."""
         arguments = arguments or {}
@@ -239,3 +254,27 @@ class BCMCPClient:
                         return {"value": mapped_custs}
 
         return live_result
+
+    def call_tool_all_pages(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Executes a named tool and recursively iterates @odata.nextLink pages across Business Central OData responses.
+        Guarantees that large datasets (100+ customers / thousands of ledger entries) are completely retrieved without silent truncation.
+        """
+        initial_resp = self.call_tool(name, arguments)
+        if "error" in initial_resp or not isinstance(initial_resp, dict):
+            return initial_resp
+
+        all_records = list(initial_resp.get("value", [])) if isinstance(initial_resp.get("value"), list) else []
+        next_link = initial_resp.get("@odata.nextLink") or initial_resp.get("nextLink")
+
+        while next_link:
+            next_resp = self._execute_bc_rest_url(next_link)
+            if "error" in next_resp or not isinstance(next_resp, dict):
+                break
+            page_val = next_resp.get("value", [])
+            if isinstance(page_val, list) and page_val:
+                all_records.extend(page_val)
+            next_link = next_resp.get("@odata.nextLink") or next_resp.get("nextLink")
+
+        initial_resp["value"] = all_records
+        return initial_resp

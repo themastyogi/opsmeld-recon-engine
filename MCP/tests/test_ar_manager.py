@@ -52,6 +52,19 @@ class TestARManager(unittest.TestCase):
         if Path(output_file).exists():
             Path(output_file).unlink()
 
+    def test_get_collections_workload_page_pagination(self):
+        page_data = self.report.get_collections_workload_page(page=1, page_size=20)
+        self.assertIn("current_page", page_data)
+        self.assertIn("items", page_data)
+        self.assertEqual(page_data["current_page"], 1)
+        self.assertEqual(page_data["page_size"], 20)
+        self.assertIsInstance(page_data["items"], list)
+
+    def test_call_tool_all_pages_structure(self):
+        resp = self.client.call_tool_all_pages("customers_get_list")
+        self.assertIsInstance(resp, dict)
+        self.assertTrue("value" in resp or "error" in resp)
+
 
 if __name__ == "__main__":
     unittest.main()

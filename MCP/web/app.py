@@ -29,7 +29,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        if path in ["/", "/index.html", "/dashboard"]:
+        if path in ["/", "/index.html", "/dashboard", "/collections"]:
             index_path = Path(__file__).resolve().parent.parent / "index.html"
             if not index_path.exists():
                 index_path = Path(__file__).resolve().parent.parent.parent / "index.html"
@@ -118,6 +118,25 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             ct_data = report.get_control_tower_data()
             self._set_headers("application/json")
             self.wfile.write(json.dumps(ct_data).encode("utf-8"))
+
+        elif path == "/api/ar-manager/collections":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            try:
+                page = int(query_params.get("page", ["1"])[0])
+            except ValueError:
+                page = 1
+            try:
+                page_size = int(query_params.get("page_size", ["20"])[0])
+            except ValueError:
+                page_size = 20
+
+            config = load_client_config()
+            rules = load_engine_rules()
+            client = BCMCPClient(config)
+            report = ARManagerReport(client, rules)
+            collections_data = report.get_collections_workload_page(page=page, page_size=page_size)
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(collections_data).encode("utf-8"))
 
         elif path == "/api/debug/bc":
             config = load_client_config()
