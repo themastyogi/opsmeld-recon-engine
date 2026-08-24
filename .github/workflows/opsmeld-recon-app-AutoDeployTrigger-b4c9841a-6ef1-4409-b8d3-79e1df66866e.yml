@@ -1,28 +1,21 @@
 name: Trigger auto deployment for opsmeld-recon-app
 
-# When this action will be executed
 on:
-  # Automatically trigger it when detected changes in repo
   push:
     branches: 
       [ main ]
-    paths:
-    - '**'
-    - '.github/workflows/opsmeld-recon-app-AutoDeployTrigger-b4c9841a-6ef1-4409-b8d3-79e1df66866e.yml'
-
-  # Allow manual trigger 
   workflow_dispatch:      
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions: 
-      id-token: write #This is required for requesting the OIDC JWT Token
-      contents: read #Required when GH token is used to authenticate with private repo
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout to the branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Azure Login
         uses: azure/login@v2
@@ -36,14 +29,5 @@ jobs:
         with:
           appSourcePath: ${{ github.workspace }}
           dockerfilePath: Dockerfile
-          
-          registryUrl: 
-          registryUsername: ${{ secrets.OPSMELDRECONAPP_REGISTRY_USERNAME }}
-          registryPassword: ${{ secrets.OPSMELDRECONAPP_REGISTRY_PASSWORD }}
           containerAppName: opsmeld-recon-app
           resourceGroup: rg-opsmeld-container
-          imageToBuild: default/[parameters('containerAppName')]:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
-
-
