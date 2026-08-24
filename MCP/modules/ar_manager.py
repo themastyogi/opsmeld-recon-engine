@@ -19,6 +19,38 @@ class ARManagerReport:
         self.watch_days = self.rules.get("tier_watch_overdue_days", 30)
         self.credit_limit_warning_pct = self.rules.get("credit_limit_warning_pct", 0.85)
 
+    def get_snapshot_path(self) -> Path:
+        """Returns application snapshot file path under data/snapshots/."""
+        snap_dir = Path(__file__).resolve().parent.parent / "data" / "snapshots"
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        return snap_dir / "latest_snapshot.json"
+
+    def save_snapshot(self, ct_data: Dict[str, Any]):
+        """Persists latest snapshot to server-side JSON file (never exposed publicly)."""
+        import json, time
+        try:
+            p = self.get_snapshot_path()
+            ct_data_copy = dict(ct_data)
+            ct_data_copy["_snapshot_timestamp"] = time.time()
+            p.write_text(json.dumps(ct_data_copy, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def load_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Loads latest cached snapshot if valid and less than 15 minutes old."""
+        import json, time
+        try:
+            p = self.get_snapshot_path()
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                ts = data.get("_snapshot_timestamp", 0)
+                # 15 minutes fresh cache window
+                if time.time() - ts < 900:
+                    return data
+        except Exception:
+            pass
+        return None
+
     def fetch_data(self) -> Dict[str, Any]:
         """Fetches live customer list and ledger entries from Business Central MCP server, iteratively retrieving all OData pages."""
         customers_resp = self.client.call_tool_all_pages("customers_get_list")
@@ -372,8 +404,13 @@ class ARManagerReport:
         })
         return res
 
-    def get_control_tower_data(self) -> Dict[str, Any]:
-        """Calculates live AR Control Tower Executive Dashboard metrics 100% dynamically from Business Central."""
+    def get_control_tower_data(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """Calculates live AR Control Tower Executive Dashboard metrics 100% dynamically from Business Central with snapshot caching."""
+        if not force_refresh:
+            cached_snap = self.load_snapshot()
+            if cached_snap:
+                return cached_snap
+
         data = self.fetch_data()
         customers = data.get("customers", [])
         
@@ -673,7 +710,7 @@ class ARManagerReport:
             }
         }
 
-        return {
+        res_dict = {
             "total_receivables": total_receivables,
             "overdue_receivables": overdue_receivables,
             "high_risk_amount": high_risk_amount,
@@ -691,6 +728,8 @@ class ARManagerReport:
             "portfolio_credit_review": portfolio_credit_review,
             "customer_action_drawers": customer_action_drawers
         }
+        self.save_snapshot(res_dict)
+        return res_dict
 
     def get_collections_workload_page(self, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
         """

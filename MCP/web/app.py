@@ -9,20 +9,40 @@ from pathlib import Path
 import urllib.parse
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
+from core.auth import get_auth_manager
 from modules.ar_manager import ARManagerReport
 from web.templates import render_dashboard_html, render_settings_html
 
 
 class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
-    def _set_headers(self, content_type: str = "text/html", status_code: int = 200):
+    def _set_headers(self, content_type: str = "text/html", status_code: int = 200, cookie: Optional[str] = None):
         self.send_response(status_code)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
+        if cookie:
+            self.send_header("Set-Cookie", f"session={cookie}; Path=/; HttpOnly; SameSite=Lax")
         self.end_headers()
+
+    def _get_session_token(self) -> Optional[str]:
+        """Extracts session token from Cookie header or Authorization header."""
+        cookie_header = self.headers.get("Cookie", "")
+        if "session=" in cookie_header:
+            for part in cookie_header.split(";"):
+                if part.strip().startswith("session="):
+                    return part.strip().split("=")[1]
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header[7:].strip()
+        return None
+
+    def _is_authenticated(self) -> bool:
+        """Returns True if request has a valid session token or is local preview mode."""
+        token = self._get_session_token()
+        return get_auth_manager().validate_session(token)
 
     def do_GET(self):
         global CURRENT_DEVICE_FLOW
@@ -139,6 +159,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(collections_data).encode("utf-8"))
 
         elif path == "/api/debug/bc":
+            import os
+            if os.environ.get("ALLOW_DEBUG_ENDPOINT", "").lower() != "true":
+                self._set_headers("application/json", 403)
+                self.wfile.write(json.dumps({"error": "Forbidden: Debug endpoint disabled on client preview instance."}).encode("utf-8"))
+                return
+
             config = load_client_config()
             client = BCMCPClient(config)
             token = client.get_access_token()
@@ -165,17 +191,36 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps(flow).encode("utf-8"))
 
-        elif path == "/api/auth/poll":
-            config = load_client_config()
-            client = BCMCPClient(config)
-            if not CURRENT_DEVICE_FLOW:
-                res = {"error": "No login flow active."}
-            else:
-                res = client.complete_device_flow(CURRENT_DEVICE_FLOW)
+        elif path == "/api/auth/session_status":
+            is_auth = self._is_authenticated()
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self.wfile.write(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
 
     def do_POST(self):
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+
+        if path == "/api/auth/login_app":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            try:
+                data = json.loads(body)
+                username = data.get("username", "")
+                password = data.get("password", "")
+            except Exception:
+                post_data = urllib.parse.parse_qs(body)
+                username = post_data.get("username", [""])[0]
+                password = post_data.get("password", [""])[0]
+
+            token = get_auth_manager().authenticate(username, password)
+            if token:
+                res = {"status": "success", "token": token, "username": username}
+                self._set_headers("application/json", 200, cookie=token)
+                self.wfile.write(json.dumps(res).encode("utf-8"))
+            else:
+                res = {"error": "Invalid credentials. Please check your provisioned email and password."}
+                self._set_headers("application/json", 401)
+                self.wfile.write(json.dumps(res).encode("utf-8"))
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 

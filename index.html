@@ -2140,5 +2140,36 @@
         </div>
     </div>
 
+
+    <!-- Application Sign In Login Wall Modal Overlay -->
+    <div id="opsmeld-app-login-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#F3F4F6; z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:white; border:1px solid #E5E7EB; border-radius:12px; width:400px; padding:36px; box-shadow:0 10px 25px rgba(0,0,0,0.08); text-align:center;">
+            <div style="font-weight:800; font-size:1.6rem; color:#059669; letter-spacing:-0.03em; margin-bottom:4px;">🟢 opsmeld</div>
+            <div style="font-weight:700; font-size:1.1rem; color:#111827; margin-bottom:4px;">AR CONTROL TOWER</div>
+            <div style="font-size:0.82rem; color:#6B7280; margin-bottom:24px;">Manage receivables better • Client Evaluation Preview</div>
+
+            <form onsubmit="performAppLogin(event)">
+                <div style="text-align:left; margin-bottom:14px;">
+                    <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Email / Username</label>
+                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
+                </div>
+                <div style="text-align:left; margin-bottom:20px;">
+                    <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Password</label>
+                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" value="opsmeld2026" required>
+                </div>
+
+                <div id="app-login-error" style="display:none; background:#FEE2E2; color:#DC2626; font-size:0.78rem; font-weight:600; padding:8px; border-radius:6px; margin-bottom:14px;">
+                    Invalid credentials. Please check your provisioned email and password.
+                </div>
+
+                <button type="submit" class="btn-btn" style="width:100%; background:#059669; font-weight:800; font-size:0.95rem; padding:10px; border-radius:6px;">Sign In</button>
+            </form>
+
+            <div style="font-size:0.72rem; color:#9CA3AF; margin-top:20px;">
+                🔒 Provisioned preview access • No public registration
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
