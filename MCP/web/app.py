@@ -14,6 +14,9 @@ from core.auth import get_auth_manager
 from modules.ar_manager import ARManagerReport
 from web.templates import render_dashboard_html, render_settings_html
 
+CURRENT_DEVICE_FLOW = None
+
+
 
 class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
@@ -191,6 +194,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             CURRENT_DEVICE_FLOW = flow
             self._set_headers("application/json")
             self.wfile.write(json.dumps(flow).encode("utf-8"))
+
+        elif path == "/api/auth/poll":
+            if not CURRENT_DEVICE_FLOW:
+                self._set_headers("application/json")
+                self.wfile.write(json.dumps({"status": "error", "message": "No active device flow"}).encode("utf-8"))
+            else:
+                config = load_client_config()
+                client = BCMCPClient(config)
+                result = client.complete_device_flow(CURRENT_DEVICE_FLOW)
+                if result and result.get("status") == "success":
+                    CURRENT_DEVICE_FLOW = None
+                self._set_headers("application/json")
+                self.wfile.write(json.dumps(result).encode("utf-8"))
 
         elif path == "/api/auth/session_status":
             is_auth = self._is_authenticated()
