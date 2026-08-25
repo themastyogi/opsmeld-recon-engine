@@ -417,7 +417,7 @@
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-overdue-rec">$3.21M</div>
                         <div style="font-size: 0.72rem; color: #DC2626; font-weight: 600; margin-top: 4px;">0 overdue trapped cash</div>
                     </div>
-                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openInvestigatePage('30000')" title="Click for High Risk Reconciliation Drill-Down">
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openDataTrustModal()" title="Click for High Risk Reconciliation Drill-Down">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.78rem; font-weight: 600; color: #6B7280;">High Risk Amount ℹ️</span>
                             <span style="background: #FEF3C7; color: #D97706; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">⚠️</span>
@@ -425,7 +425,7 @@
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-high-risk">$32,644.30</div>
                         <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Total balance on high-risk accounts 🔍</div>
                     </div>
-                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openInvestigatePage('40000')" title="Click for expected collections calculation basis">
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openDataTrustModal()" title="Click for expected collections calculation basis">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.78rem; font-weight: 600; color: #6B7280;">Expected (7 Days) ℹ️</span>
                             <span style="background: #EFF6FF; color: #2563EB; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">📅</span>
@@ -1954,6 +1954,71 @@
         }
     }
 
+
+    function openDataTrustModal(payload) {
+        if (!payload) {
+            payload = {
+                "id": "DT-BYPASS-TX-1001",
+                "dedup_key": "Subledger Bypass:10200:TX-1001",
+                "rule_pack": "Subledger Bypass",
+                "classification": "Policy Violation",
+                "evidence_strength": "HIGH",
+                "severity": "HIGH",
+                "signals_fired_count": 4,
+                "evidence_chain": [
+                    "G/L Account 10200 (Accounts Payable Control) is a mapped VENDOR Subledger Control Account.",
+                    "Transaction posting source 'GENJNL' is outside Expected Posting Sources: ['Purchase', 'Payables', 'Purchases', 'VendorLedger'].",
+                    "Direct Posting Allowed flag is set to False for Account 10200.",
+                    "Transaction context: Document 'GJV-2026-0891', Amount $45,000.00, Posted by User 'JSMITH' on Date '2026-08-25'."
+                ],
+                "transaction_details": {
+                    "id": "TX-1001",
+                    "document_no": "GJV-2026-0891",
+                    "account_no": "10200",
+                    "gl_account_no": "10200",
+                    "account_name": "Accounts Payable Control",
+                    "posting_date": "2026-08-25",
+                    "amount": 45000.0,
+                    "user": "JSMITH",
+                    "source_code": "GENJNL",
+                    "document_type": "General Journal",
+                    "narration": "Standard AP control ledger adjustment"
+                },
+                "business_impact": "Direct G/L bypass on Control Account 10200 creates a subledger-to-GL mismatch for VENDOR subledger. Subledger reports will fail to reconcile with General Ledger balance by $45,000.00.",
+                "recommended_action": "Human review required (never auto-corrected)",
+                "status": "Confirmed"
+            };
+        }
+
+        const modal = document.getElementById('opsmeld-datatrust-modal');
+        if (modal) {
+            if (payload.id) document.getElementById('dt-modal-id').innerText = `🚨 Data Trust Anomaly: ${payload.rule_pack || 'Policy Violation'} (${payload.id})`;
+            if (payload.transaction_details) {
+                document.getElementById('dt-doc-no').innerText = payload.transaction_details.document_no || 'N/A';
+                document.getElementById('dt-user').innerText = payload.transaction_details.user || 'N/A';
+                document.getElementById('dt-amount').innerText = `$${(Number(payload.transaction_details.amount) || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} USD`;
+                document.getElementById('dt-account').innerText = `${payload.transaction_details.account_no || ''} (${payload.transaction_details.account_name || ''})`;
+            }
+            if (payload.business_impact) document.getElementById('dt-impact').innerText = payload.business_impact;
+            if (payload.recommended_action) document.getElementById('dt-rec-action').innerText = payload.recommended_action;
+            if (payload.dedup_key) document.getElementById('dt-dedup-key').innerText = payload.dedup_key;
+
+            if (payload.evidence_chain && Array.isArray(payload.evidence_chain)) {
+                const chainEl = document.getElementById('dt-evidence-chain');
+                if (chainEl) {
+                    chainEl.innerHTML = payload.evidence_chain.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+                }
+            }
+
+            modal.style.display = 'flex';
+        }
+    }
+
+    function closeDataTrustModal() {
+        const modal = document.getElementById('opsmeld-datatrust-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
 </script>
 <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
         <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
@@ -2180,6 +2245,65 @@
 
             <div style="font-size:0.72rem; color:#9CA3AF; margin-top:20px;">
                 🔒 Provisioned preview access • No public registration
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Data Trust Subledger Bypass Anomaly Evidence Inspector Modal -->
+    <div id="opsmeld-datatrust-modal" class="modal-overlay" style="display:none; z-index:4200;">
+        <div class="modal-box" style="width: 680px; text-align: left; padding: 28px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 14px; margin-bottom: 18px;">
+                <div>
+                    <span style="background: #FEE2E2; color: #DC2626; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase;">Policy Violation • HIGH Severity</span>
+                    <h3 style="margin: 6px 0 0 0; font-size: 1.2rem; font-weight: 800; color: #111827;" id="dt-modal-id">🚨 Data Trust Anomaly: Subledger Bypass (DT-BYPASS-TX-1001)</h3>
+                </div>
+                <button class="btn-btn" style="background: #F3F4F6; color: #374151; padding: 4px 10px; font-weight: 700;" onclick="closeDataTrustModal()">✕</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 14px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-bottom: 4px;">Document Number</div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: #111827;" class="mono" id="dt-doc-no">GJV-2026-0891</div>
+                    <div style="font-size: 0.78rem; color: #6B7280; margin-top: 4px;">General Journal Entry • User: <strong id="dt-user">JSMITH</strong></div>
+                </div>
+                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 14px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-bottom: 4px;">Bypass Amount</div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: #DC2626;" class="mono" id="dt-amount">$45,000.00 USD</div>
+                    <div style="font-size: 0.78rem; color: #6B7280; margin-top: 4px;">G/L Control Account: <strong id="dt-account">10200 (AP Control)</strong></div>
+                </div>
+            </div>
+
+            <div style="background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 6px 0; font-size: 0.88rem; font-weight: 700; color: #92400E;">💥 Business Impact</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: #78350F; line-height: 1.45;" id="dt-impact">
+                    Direct G/L bypass on Control Account 10200 creates a subledger-to-GL mismatch for VENDOR subledger. Subledger reports will fail to reconcile with General Ledger balance by $45,000.00.
+                </p>
+            </div>
+
+            <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; font-weight: 700; color: #374151;">⛓️ Evidence Chain (4 Fired Signals)</h4>
+                <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: #4B5563; line-height: 1.5;" id="dt-evidence-chain">
+                    <li>G/L Account 10200 (Accounts Payable Control) is a mapped VENDOR Subledger Control Account.</li>
+                    <li>Transaction posting source 'GENJNL' is outside Expected Posting Sources: ['Purchase', 'Payables', 'Purchases', 'VendorLedger'].</li>
+                    <li>Direct Posting Allowed flag is set to False for Account 10200.</li>
+                    <li>Transaction context: Document 'GJV-2026-0891', Amount $45,000.00, Posted by User 'JSMITH' on Date '2026-08-25'.</li>
+                </ul>
+            </div>
+
+            <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 4px 0; font-size: 0.88rem; font-weight: 700; color: #1E40AF;">🎯 Recommended Action</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: #1E3A8A; font-weight: 600;" id="dt-rec-action">
+                    Human review required (never auto-corrected)
+                </p>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.78rem; color: #6B7280;">Deduplication Key: <code style="background:#F3F4F6; padding:2px 6px; border-radius:4px;" id="dt-dedup-key">Subledger Bypass:10200:TX-1001</code></span>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-btn" style="background: #374151;" onclick="closeDataTrustModal()">Close</button>
+                    <button class="btn-btn" style="background: #2563EB; font-weight: 700;" onclick="window.open('https://businesscentral.dynamics.com/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production?company=CRONUS%20IN&page=17', '_blank');">Inspect G/L Entry #10200 in BC ↗</button>
+                </div>
             </div>
         </div>
     </div>
