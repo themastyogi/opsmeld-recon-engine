@@ -32,6 +32,7 @@ class DataTrustFinding:
     business_impact: str
     recommended_action: str  # "Human review required"
     status: str = "Open"  # "Open" | "Under Review" | "Confirmed" | "False Positive" | "Ignored"
+    data_source: str = "LIVE_BUSINESS_CENTRAL"  # "LIVE_BUSINESS_CENTRAL" | "SNAPSHOT_SEED"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_evaluated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
