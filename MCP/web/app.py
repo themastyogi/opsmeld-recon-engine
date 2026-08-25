@@ -12,6 +12,7 @@ from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
 from core.auth import get_auth_manager
 from modules.ar_manager import ARManagerReport
+from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
 
 CURRENT_DEVICE_FLOW = None
@@ -213,6 +214,81 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
 
+        elif path == "/api/data-trust/findings":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            classification = query_params.get("classification", [None])[0]
+            evidence_strength = query_params.get("evidence_strength", [None])[0]
+            rule_pack = query_params.get("rule_pack", [None])[0]
+            severity = query_params.get("severity", [None])[0]
+            status = query_params.get("status", [None])[0]
+            search = query_params.get("search", [None])[0]
+            include_insufficient = query_params.get("include_insufficient", ["false"])[0].lower() == "true"
+
+            config = load_client_config()
+            client = BCMCPClient(config)
+            engine = DataTrustEngine(client)
+            all_findings = engine.load_stored_findings()
+
+            filtered = []
+            for f in all_findings:
+                # Default filter: Exclude Insufficient Evidence from main action table unless explicitly selected
+                if not classification and not include_insufficient and f.get("classification") == "Insufficient Evidence":
+                    continue
+                if classification and f.get("classification") != classification:
+                    continue
+                if evidence_strength and f.get("evidence_strength") != evidence_strength:
+                    continue
+                if rule_pack and f.get("rule_pack") != rule_pack:
+                    continue
+                if severity and f.get("severity") != severity:
+                    continue
+                if status and f.get("status") != status:
+                    continue
+                if search:
+                    s_lower = search.lower()
+                    text_corpus = json.dumps(f).lower()
+                    if s_lower not in text_corpus:
+                        continue
+                filtered.append(f)
+
+            summary = engine.get_summary_metrics(all_findings)
+            res = {
+                "client_name": config.name,
+                "summary": summary,
+                "findings": filtered
+            }
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+        elif path == "/api/data-trust/finding-detail":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            finding_id = query_params.get("id", [None])[0]
+            config = load_client_config()
+            client = BCMCPClient(config)
+            engine = DataTrustEngine(client)
+            all_findings = engine.load_stored_findings()
+            target = next((f for f in all_findings if f.get("id") == finding_id), None)
+            if target:
+                self._set_headers("application/json")
+                self.wfile.write(json.dumps(target).encode("utf-8"))
+            else:
+                self._set_headers("application/json", 404)
+                self.wfile.write(json.dumps({"error": f"Finding '{finding_id}' not found"}).encode("utf-8"))
+
+        elif path == "/api/data-trust/config":
+            config = load_client_config()
+            cfg_mgr = DataTrustConfigManager(config.client_key)
+            dt_config = cfg_mgr.load_config()
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(dt_config).encode("utf-8"))
+
+        elif path == "/api/data-trust/config-history":
+            config = load_client_config()
+            cfg_mgr = DataTrustConfigManager(config.client_key)
+            history = cfg_mgr.load_audit_trail()
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(history).encode("utf-8"))
+
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
@@ -309,6 +385,70 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
+
+        elif path == "/api/data-trust/update-status":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            try:
+                data = json.loads(body)
+                finding_id = data.get("finding_id")
+                new_status = data.get("status")
+            except Exception:
+                post_data = urllib.parse.parse_qs(body)
+                finding_id = post_data.get("finding_id", [""])[0]
+                new_status = post_data.get("status", [""])[0]
+
+            config = load_client_config()
+            client = BCMCPClient(config)
+            engine = DataTrustEngine(client)
+            success = engine.update_finding_status(finding_id, new_status)
+            if success:
+                res = {"status": "success", "finding_id": finding_id, "new_status": new_status}
+                self._set_headers("application/json", 200)
+            else:
+                res = {"status": "error", "message": f"Could not update status for finding '{finding_id}'"}
+                self._set_headers("application/json", 400)
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+        elif path == "/api/data-trust/config":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            config = load_client_config()
+            cfg_mgr = DataTrustConfigManager(config.client_key)
+            try:
+                new_config = json.loads(body)
+            except Exception:
+                post_data = urllib.parse.parse_qs(body)
+                json_str = post_data.get("config_json", ["{}"])[0]
+                try:
+                    new_config = json.loads(json_str)
+                except Exception:
+                    new_config = cfg_mgr.load_config()
+
+            user_identity = self.headers.get("X-User-Email") or self.headers.get("X-User-Id") or "admin@opsmeld.com"
+            saved = cfg_mgr.save_config(new_config, user=user_identity)
+            if saved:
+                res = {"status": "success", "message": "Data Trust configuration saved successfully"}
+                self._set_headers("application/json", 200)
+            else:
+                res = {"status": "error", "message": "Failed to save Data Trust configuration"}
+                self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+        elif path == "/api/data-trust/run-recon":
+            config = load_client_config()
+            client = BCMCPClient(config)
+            engine = DataTrustEngine(client)
+            findings = engine.run_recon()
+            summary = engine.get_summary_metrics(findings)
+            res = {
+                "status": "success",
+                "message": f"Reconciliation run completed. {len(findings)} findings generated.",
+                "summary": summary,
+                "findings": findings
+            }
+            self._set_headers("application/json", 200)
+            self.wfile.write(json.dumps(res).encode("utf-8"))
 
         else:
             self._set_headers("text/plain", 400)

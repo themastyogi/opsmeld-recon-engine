@@ -1,0 +1,68 @@
+{
+  "posting_date_policy": {
+    "company_default": {
+      "scope_type": "Company",
+      "scope_value": "DEFAULT",
+      "allowed_posting_mode": "CURRENT_MONTH",
+      "backdating": {
+        "allowed": true,
+        "maximum_days": 7,
+        "approval_required_above_days": 3
+      },
+      "future_dating": {
+        "allowed": true,
+        "maximum_days": 2
+      },
+      "month_close": {
+        "close_date": "2026-08-31",
+        "adjustment_window_days": 5,
+        "approval_required": true
+      },
+      "year_close": {
+        "close_date": "2026-12-31",
+        "adjustment_window_days": 10,
+        "approval_required": true
+      }
+    }
+  },
+  "subledger_control_accounts": [
+    {
+      "account_no": "10200",
+      "account_name": "Accounts Payable Control",
+      "subledger_type": "VENDOR",
+      "expected_posting_sources": ["Purchase", "Payables", "Purchases", "VendorLedger"],
+      "direct_posting_allowed": false
+    },
+    {
+      "account_no": "10100",
+      "account_name": "Accounts Receivable Control",
+      "subledger_type": "CUSTOMER",
+      "expected_posting_sources": ["Sales", "Receivables", "CustLedger"],
+      "direct_posting_allowed": false
+    },
+    {
+      "account_no": "10500",
+      "account_name": "Inventory Control Account",
+      "subledger_type": "ITEM",
+      "expected_posting_sources": ["Inventory", "Purchase", "Sales", "ItemLedger"],
+      "direct_posting_allowed": false
+    },
+    {
+      "account_no": "20100",
+      "account_name": "Bank Account Control",
+      "subledger_type": "BANK",
+      "expected_posting_sources": ["Bank", "Cash Receipt", "Payment"],
+      "direct_posting_allowed": false
+    }
+  ],
+  "narration_context": {
+    "minimum_peer_transactions": 20,
+    "taxonomy_level_2": {
+      "Office Supplies": ["stationery", "printer", "paper", "toner", "furniture", "desk", "chair", "pen", "office"],
+      "Raw Materials": ["steel", "aluminium", "aluminum", "plastic", "metal", "sheet", "resin", "copper", "raw material"],
+      "Professional Fees": ["legal", "audit", "consulting", "advisory", "tax", "accounting", "attorney", "retainer"],
+      "IT Hardware & Software": ["laptop", "monitor", "keyboard", "server", "cable", "memory", "storage", "software", "license"],
+      "Travel & Entertainment": ["flight", "hotel", "taxi", "meal", "travel", "lodging", "uber", "airline"]
+    }
+  }
+}

@@ -314,6 +314,7 @@
                 <a class="top-nav-item">Payments</a>
                 <a class="top-nav-item">Cash App</a>
                 <a class="top-nav-item active">Collections</a>
+                <a class="top-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust</a>
                 <a class="top-nav-item">Credit</a>
                 <a class="top-nav-item">Disputes</a>
             </div>
@@ -332,10 +333,10 @@
             <div id="nav-item-control-tower" class="sub-nav-item active" onclick="switchMainView('control-tower')">Control Tower</div>
             <div id="nav-item-collections" class="sub-nav-item" onclick="switchMainView('collections')">Collections Workload</div>
             <div id="nav-item-segments" class="sub-nav-item" onclick="switchMainView('segments')">Segments / Procedures</div>
+            <div id="nav-item-data-trust" class="sub-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</div>
             <div class="sub-nav-item">Reports</div>
             <div class="sub-nav-item">Worksheet</div>
             <div class="sub-nav-item">Accounts</div>
-            <div class="sub-nav-item">Messages</div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
             <div class="search-box">
@@ -347,6 +348,13 @@
 
     <div class="app-body">
         <div class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">🛡️ Data Trust Engine</div>
+                <div id="sidebar-item-data-trust" class="sidebar-item" onclick="switchMainView('data-trust')">Findings Explorer</div>
+                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Posting-Date Rules</div>
+                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Subledger Controls</div>
+                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Narration Taxonomy</div>
+            </div>
             <div class="sidebar-section">
                 <div class="sidebar-title">⚙️ Overview</div>
                 <div class="sidebar-item active" onclick="switchMainView('control-tower')">Control Tower</div>
@@ -622,7 +630,6 @@
                                 <span class="mono" style="font-weight: 700;" id="ai-driver-nearing-amt">$6,762.38</span>
                             </div>
                         </div>
-                        </div>
 
                         <div style="background: #F3E8FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 14px;">
                             <div style="font-size: 0.85rem; font-weight: 800; color: #6B21A8;" id="ai-rec-title">⚡ Credit Exposure Needs Review</div>
@@ -765,6 +772,127 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            </div>
+
+            <!-- DATA TRUST EXPERT VIEW -->
+            <div id="view-data-trust" style="display: none;">
+                <!-- Data Trust Page Title & Audit Action Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: #111827;">🛡️ Data Trust Expert</h2>
+                        <div style="font-size: 0.88rem; color: #6B7280; margin-top: 4px;">Continuous Business Central transaction audit, posting-date compliance, subledger bypass detection & narration mismatch interpretation.</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button class="btn-btn" style="background: #0E6251; color: white;" onclick="runDataTrustRecon()">⚡ Run Data Trust Audit Engine</button>
+                        <a href="/settings" target="_blank" class="btn-btn" style="background: #4B5563; color: white; text-decoration: none;">⚙️ Rule Pack Settings</a>
+                    </div>
+                </div>
+
+                <!-- Summary Dashboard Cards -->
+                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;">
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #6B7280; margin-bottom: 6px;">Total Findings</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #111827;" id="dt-summary-total">0</div>
+                        <div style="font-size: 0.72rem; color: #6B7280; margin-top: 4px;">Active findings in engine</div>
+                    </div>
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #DC2626; margin-bottom: 6px;">Policy Violations</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #DC2626;" id="dt-summary-violations">0</div>
+                        <div style="font-size: 0.72rem; color: #DC2626; margin-top: 4px;">Rule Pack 1 & 2 breaches</div>
+                    </div>
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #D97706; margin-bottom: 6px;">Anomalies</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #D97706;" id="dt-summary-anomalies">0</div>
+                        <div style="font-size: 0.72rem; color: #D97706; margin-top: 4px;">Pattern breaks & variances</div>
+                    </div>
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #6366F1; margin-bottom: 6px;">Potential Data Errors</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #6366F1;" id="dt-summary-errors">0</div>
+                        <div style="font-size: 0.72rem; color: #6366F1; margin-top: 4px;">Context divergence</div>
+                    </div>
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #059669; margin-bottom: 6px;">Informational</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #059669;" id="dt-summary-info">0</div>
+                        <div style="font-size: 0.72rem; color: #059669; margin-top: 4px;">Noteworthy notifications</div>
+                    </div>
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #6B7280; margin-bottom: 6px;">Insufficient Evidence</div>
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #6B7280;" id="dt-summary-insufficient">0</div>
+                        <div style="font-size: 0.72rem; color: #6B7280; margin-top: 4px;">Hard-gated baselines</div>
+                    </div>
+                </div>
+
+                <!-- Filter Toolbar -->
+                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin-bottom: 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #374151;">Classification:</span>
+                        <select id="dt-filter-classification" onchange="loadDataTrustFindings()" style="padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem;">
+                            <option value="">All Classifications</option>
+                            <option value="Policy Violation">Policy Violation</option>
+                            <option value="Anomaly">Anomaly</option>
+                            <option value="Potential Data Error">Potential Data Error</option>
+                            <option value="Informational">Informational</option>
+                            <option value="Insufficient Evidence">Insufficient Evidence</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #374151;">Evidence Strength:</span>
+                        <select id="dt-filter-evidence-strength" onchange="loadDataTrustFindings()" style="padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem;">
+                            <option value="">All Strengths</option>
+                            <option value="HIGH">HIGH (3+ Signals + Baseline)</option>
+                            <option value="MEDIUM">MEDIUM (2 Signals + Baseline)</option>
+                            <option value="LOW">LOW (1 Signal)</option>
+                            <option value="INSUFFICIENT">INSUFFICIENT (Below Baseline)</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #374151;">Rule Pack:</span>
+                        <select id="dt-filter-rule-pack" onchange="loadDataTrustFindings()" style="padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem;">
+                            <option value="">All Rule Packs</option>
+                            <option value="Posting-Date Policy">Rule Pack 1: Posting-Date Policy</option>
+                            <option value="Subledger Bypass">Rule Pack 2: Subledger Bypass</option>
+                            <option value="Narration / Context Mismatch">Rule Pack 3: Narration Context</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #374151;">Status:</span>
+                        <select id="dt-filter-status" onchange="loadDataTrustFindings()" style="padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem;">
+                            <option value="">All Statuses</option>
+                            <option value="Open">Open</option>
+                            <option value="Under Review">Under Review</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="False Positive">False Positive</option>
+                            <option value="Ignored">Ignored</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+                        <input type="text" id="dt-search-input" placeholder="Search finding ID, narration..." onkeyup="if(event.key==='Enter') loadDataTrustFindings()" style="padding: 6px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem; width: 200px;">
+                        <button class="btn-btn" onclick="loadDataTrustFindings()">Search</button>
+                    </div>
+                </div>
+
+                <!-- Findings List View Table -->
+                <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px;">
+                    <h3 style="margin-top: 0; font-size: 1.1rem; font-weight: 700; color: #111827; margin-bottom: 16px;">Data Trust Findings List</h3>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Finding ID</th>
+                                <th>Rule Pack</th>
+                                <th>Classification</th>
+                                <th>Evidence Strength</th>
+                                <th>Severity</th>
+                                <th>Transaction / Account</th>
+                                <th>Status Workflow</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dt-findings-tbody">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -949,8 +1077,70 @@
                                     <td>AR Manager</td>
                                 </tr>
                             </tbody>
-                        </table>
-                    </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EVIDENCE CHAIN DETAIL DRAWER / MODAL -->
+    <div id="dt-evidence-modal" class="modal-overlay" style="display:none; z-index: 5000;">
+        <div class="modal-box" style="width: 720px; text-align: left; max-height: 85vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 12px; margin-bottom: 16px;">
+                <div>
+                    <span id="dt-modal-severity-badge" style="background: #DC2626; color: white; font-size: 0.7rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">HIGH</span>
+                    <h2 style="font-size: 1.3rem; font-weight: 800; margin: 6px 0 0 0; color: #111827;" id="dt-modal-title">Finding Detail</h2>
+                </div>
+                <button onclick="closeDataTrustModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #6B7280;">✕</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; background: #F9FAFB; padding: 12px; border-radius: 6px; border: 1px solid #E5E7EB;">
+                <div>
+                    <span style="font-size: 0.75rem; color: #6B7280; font-weight: 600; text-transform: uppercase;">Classification</span>
+                    <div style="font-weight: 700; font-size: 0.95rem;" id="dt-modal-classification">Policy Violation</div>
+                </div>
+                <div>
+                    <span style="font-size: 0.75rem; color: #6B7280; font-weight: 600; text-transform: uppercase;">Evidence Strength</span>
+                    <div style="font-weight: 700; font-size: 0.95rem;" id="dt-modal-evidence-strength">HIGH</div>
+                </div>
+                <div>
+                    <span style="font-size: 0.75rem; color: #6B7280; font-weight: 600; text-transform: uppercase;">Rule Pack</span>
+                    <div style="font-weight: 700; font-size: 0.9rem;" id="dt-modal-rule-pack">Subledger Bypass</div>
+                </div>
+                <div>
+                    <span style="font-size: 0.75rem; color: #6B7280; font-weight: 600; text-transform: uppercase;">Current Status</span>
+                    <div style="font-weight: 700; font-size: 0.9rem;" id="dt-modal-status">Open</div>
+                </div>
+            </div>
+
+            <!-- Full Evidence Chain Section -->
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; color: #111827; display: flex; align-items: center; gap: 6px;">🔗 Originating Evidence Chain</h3>
+                <div id="dt-modal-evidence-chain-box" style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 8px; padding: 14px; font-size: 0.85rem; line-height: 1.6;">
+                </div>
+            </div>
+
+            <!-- Business Impact Statement -->
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #111827;">💼 Business Impact Statement</h3>
+                <div id="dt-modal-impact-box" style="background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; padding: 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 500;">
+                </div>
+            </div>
+
+            <!-- Recommended Action -->
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #111827;">🤖 Recommended Action</h3>
+                <div id="dt-modal-action-box" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600;">
+                    Human review required (never auto-corrected)
+                </div>
+            </div>
+
+            <!-- Status Workflow Transition Buttons -->
+            <div style="border-top: 1px solid #E5E7EB; padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.85rem; font-weight: 600; color: #374151;">Update Finding Status Workflow:</span>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-btn" style="background: #2563EB; color: white;" onclick="updateFindingStatusModal('Under Review')">Mark Under Review</button>
+                    <button class="btn-btn" style="background: #059669; color: white;" onclick="updateFindingStatusModal('Confirmed')">Confirm Finding</button>
+                    <button class="btn-btn" style="background: #D97706; color: white;" onclick="updateFindingStatusModal('False Positive')">Mark False Positive</button>
+                    <button class="btn-btn" style="background: #6B7280; color: white;" onclick="updateFindingStatusModal('Ignored')">Ignore</button>
                 </div>
             </div>
         </div>
@@ -1041,24 +1231,202 @@
         loadControlTowerData();
     });
 
+    let currentInspectedFindingId = null;
+
     function switchMainView(viewName) {
         const ctNav = document.getElementById('nav-item-control-tower');
         const segNav = document.getElementById('nav-item-segments');
+        const dtNav = document.getElementById('nav-item-data-trust');
+        const sbDt = document.getElementById('sidebar-item-data-trust');
+
         const ctView = document.getElementById('view-control-tower');
         const segView = document.getElementById('view-segments');
+        const dtView = document.getElementById('view-data-trust');
 
         if (viewName === 'control-tower') {
             if (ctNav) ctNav.classList.add('active');
             if (segNav) segNav.classList.remove('active');
+            if (dtNav) dtNav.classList.remove('active');
+            if (sbDt) sbDt.classList.remove('active');
+
             if (ctView) ctView.style.display = 'block';
             if (segView) segView.style.display = 'none';
+            if (dtView) dtView.style.display = 'none';
             loadControlTowerData();
+        } else if (viewName === 'data-trust') {
+            if (dtNav) dtNav.classList.add('active');
+            if (ctNav) ctNav.classList.remove('active');
+            if (segNav) segNav.classList.remove('active');
+            if (sbDt) sbDt.classList.add('active');
+
+            if (dtView) dtView.style.display = 'block';
+            if (ctView) ctView.style.display = 'none';
+            if (segView) segView.style.display = 'none';
+            loadDataTrustFindings();
         } else {
             if (segNav) segNav.classList.add('active');
             if (ctNav) ctNav.classList.remove('active');
+            if (dtNav) dtNav.classList.remove('active');
+            if (sbDt) sbDt.classList.remove('active');
+
             if (segView) segView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
+            if (dtView) dtView.style.display = 'none';
         }
+    }
+
+    function loadDataTrustFindings() {
+        const clsEl = document.getElementById('dt-filter-classification');
+        const strEl = document.getElementById('dt-filter-evidence-strength');
+        const rpEl = document.getElementById('dt-filter-rule-pack');
+        const stEl = document.getElementById('dt-filter-status');
+        const qEl = document.getElementById('dt-search-input');
+
+        const cls = clsEl ? clsEl.value : '';
+        const str = strEl ? strEl.value : '';
+        const rp = rpEl ? rpEl.value : '';
+        const st = stEl ? stEl.value : '';
+        const q = qEl ? qEl.value : '';
+
+        let url = `/api/data-trust/findings?c=1`;
+        if (cls) url += `&classification=${encodeURIComponent(cls)}`;
+        if (str) url += `&evidence_strength=${encodeURIComponent(str)}`;
+        if (rp) url += `&rule_pack=${encodeURIComponent(rp)}`;
+        if (st) url += `&status=${encodeURIComponent(st)}`;
+        if (q) url += `&search=${encodeURIComponent(q)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.summary) {
+                    document.getElementById('dt-summary-total').innerText = data.summary.total_findings || 0;
+                    document.getElementById('dt-summary-violations').innerText = data.summary.policy_violations || 0;
+                    document.getElementById('dt-summary-anomalies').innerText = data.summary.anomalies || 0;
+                    document.getElementById('dt-summary-errors').innerText = data.summary.potential_data_errors || 0;
+                    document.getElementById('dt-summary-info').innerText = data.summary.informational || 0;
+                    document.getElementById('dt-summary-insufficient').innerText = data.summary.insufficient_evidence || 0;
+                }
+
+                const tbody = document.getElementById('dt-findings-tbody');
+                if (!tbody) return;
+
+                if (!data.findings || data.findings.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#6B7280;">No Data Trust findings matching selected filters.</td></tr>`;
+                    return;
+                }
+
+                let html = '';
+                data.findings.forEach(f => {
+                    let badgeBg = '#F3F4F6', badgeText = '#374151';
+                    if (f.classification === 'Policy Violation') { badgeBg = '#FEE2E2'; badgeText = '#DC2626'; }
+                    else if (f.classification === 'Anomaly') { badgeBg = '#FEF3C7'; badgeText = '#D97706'; }
+                    else if (f.classification === 'Potential Data Error') { badgeBg = '#E0E7FF'; badgeText = '#4F46E5'; }
+                    else if (f.classification === 'Informational') { badgeBg = '#ECFDF5'; badgeText = '#059669'; }
+
+                    let strBg = '#F3F4F6', strText = '#374151';
+                    if (f.evidence_strength === 'HIGH') { strBg = '#DC2626'; strText = '#FFFFFF'; }
+                    else if (f.evidence_strength === 'MEDIUM') { strBg = '#D97706'; strText = '#FFFFFF'; }
+                    else if (f.evidence_strength === 'LOW') { strBg = '#059669'; strText = '#FFFFFF'; }
+                    else if (f.evidence_strength === 'INSUFFICIENT') { strBg = '#9CA3AF'; strText = '#FFFFFF'; }
+
+                    let sevColor = '#111827';
+                    if (f.severity === 'CRITICAL' || f.severity === 'HIGH') sevColor = '#DC2626';
+                    else if (f.severity === 'MEDIUM') sevColor = '#D97706';
+
+                    const tx = f.transaction_details || {};
+                    const docNo = tx.document_no || tx.doc_no || 'N/A';
+                    const accName = tx.account_name || tx.account_no || 'N/A';
+
+                    html += `
+                    <tr>
+                        <td><strong class="mono" style="font-size:0.8rem;">${escapeHtml(f.id)}</strong></td>
+                        <td><span style="font-size:0.8rem; font-weight:600;">${escapeHtml(f.rule_pack)}</span></td>
+                        <td><span style="background:${badgeBg}; color:${badgeText}; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:700;">${escapeHtml(f.classification)}</span></td>
+                        <td><span style="background:${strBg}; color:${strText}; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:800;">${escapeHtml(f.evidence_strength)}</span></td>
+                        <td><strong style="color:${sevColor}; font-size:0.8rem;">${escapeHtml(f.severity)}</strong></td>
+                        <td>
+                            <div style="font-size:0.8rem; font-weight:700;">Doc: ${escapeHtml(docNo)}</div>
+                            <div style="font-size:0.72rem; color:#6B7280;">${escapeHtml(accName)}</div>
+                        </td>
+                        <td>
+                            <select onchange="updateFindingStatusTable('${escapeHtml(f.id)}', this.value)" style="padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:600;">
+                                <option value="Open" ${f.status === 'Open' ? 'selected' : ''}>Open</option>
+                                <option value="Under Review" ${f.status === 'Under Review' ? 'selected' : ''}>Under Review</option>
+                                <option value="Confirmed" ${f.status === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+                                <option value="False Positive" ${f.status === 'False Positive' ? 'selected' : ''}>False Positive</option>
+                                <option value="Ignored" ${f.status === 'Ignored' ? 'selected' : ''}>Ignored</option>
+                            </select>
+                        </td>
+                        <td>
+                            <button class="btn-btn" style="background:#0E6251; font-size:0.75rem;" onclick="openDataTrustModal('${escapeHtml(f.id)}')">🔗 Inspect Evidence</button>
+                        </td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(err => console.error("Error loading Data Trust findings:", err));
+    }
+
+    function openDataTrustModal(findingId) {
+        currentInspectedFindingId = findingId;
+        fetch(`/api/data-trust/finding-detail?id=${encodeURIComponent(findingId)}`)
+            .then(res => res.json())
+            .then(f => {
+                if (f.error) {
+                    alert(f.error);
+                    return;
+                }
+                document.getElementById('dt-modal-title').innerText = `Finding ${f.id}`;
+                document.getElementById('dt-modal-classification').innerText = f.classification;
+                document.getElementById('dt-modal-evidence-strength').innerText = f.evidence_strength;
+                document.getElementById('dt-modal-rule-pack').innerText = f.rule_pack;
+                document.getElementById('dt-modal-status').innerText = f.status;
+
+                document.getElementById('dt-modal-severity-badge').innerText = f.severity;
+                document.getElementById('dt-modal-severity-badge').style.background = (f.severity === 'CRITICAL' || f.severity === 'HIGH') ? '#DC2626' : (f.severity === 'MEDIUM' ? '#D97706' : '#059669');
+
+                let chainHtml = '<ol style="margin:0; padding-left:18px;">';
+                (f.evidence_chain || []).forEach(item => {
+                    chainHtml += `<li style="margin-bottom:8px; color:#111827; font-weight:500;">${escapeHtml(item)}</li>`;
+                });
+                chainHtml += '</ol>';
+                document.getElementById('dt-modal-evidence-chain-box').innerHTML = chainHtml;
+
+                document.getElementById('dt-modal-impact-box').innerText = f.business_impact || 'No impact statement recorded.';
+                document.getElementById('dt-modal-action-box').innerText = f.recommended_action || 'Human review required (never auto-corrected)';
+
+                document.getElementById('dt-evidence-modal').style.display = 'flex';
+            });
+    }
+
+    function closeDataTrustModal() {
+        document.getElementById('dt-evidence-modal').style.display = 'none';
+        currentInspectedFindingId = null;
+    }
+
+    function updateFindingStatusTable(findingId, newStatus) {
+        fetch('/api/data-trust/update-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ finding_id: findingId, status: newStatus })
+        }).then(res => res.json()).then(res => {
+            loadDataTrustFindings();
+        });
+    }
+
+    function updateFindingStatusModal(newStatus) {
+        if (!currentInspectedFindingId) return;
+        updateFindingStatusTable(currentInspectedFindingId, newStatus);
+        closeDataTrustModal();
+    }
+
+    function runDataTrustRecon() {
+        fetch('/api/data-trust/run-recon', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message || 'Data Trust audit engine completed successfully.');
+                loadDataTrustFindings();
+            });
     }
 
     function loadControlTowerData() {
