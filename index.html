@@ -1399,7 +1399,7 @@
                                 <button class="btn-btn" style="background: #059669;" onclick="alert('✉️ Preparing draft email for ${escapeHtml(data.selected_customer.name)}...')">Prepare Email</button>
                                 <button class="btn-btn" style="background: #4F46E5;" onclick="switchProcTab('overview')">View Invoices</button>
                                 <button class="btn-btn" style="background: #374151;" onclick="alert('📊 Querying Business Central payment history for Customer ${escapeHtml(data.selected_customer.number)}...')">View Payment History</button>
-                                <button class="btn-btn" style="background: #6B7280;" onclick="alert('🔗 Opening Customer ${escapeHtml(data.selected_customer.number)} directly in Business Central...')">Open in BC ↗</button>
+                                <button class="btn-btn" style="background: #6B7280;" onclick="window.open('https://businesscentral.dynamics.com/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production?company=CRONUS%20IN&page=22', '_blank')">Open in BC ↗</button>
                             </div>
                         </div>`;
                     }
@@ -2128,7 +2128,7 @@
                     <div style="font-size: 0.8rem;" id="inv-modal-evidence">
                         <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #F3F4F6;">
                             <span>Invoice #103001 ($32,644.30 USD • Due 2026-09-15)</span>
-                            <a href="#" style="color: #2563EB; font-weight: 600;" onclick="alert('🔗 Opening Invoice #103001 in Business Central...'); return false;">View BC Record ↗</a>
+                            <a href="#" style="color: #2563EB; font-weight: 600;" onclick="window.open('https://businesscentral.dynamics.com/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production?company=CRONUS%20IN&page=132', '_blank'); return false;">View BC Record ↗</a>
                         </div>
                     </div>
                 </div>
@@ -2136,7 +2136,7 @@
 
             <div style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button class="btn-btn" style="background: #374151;" onclick="closeOpsmeldInvestigationModal()">Close</button>
-                <button class="btn-btn" style="background: #2563EB; font-weight: 700;" onclick="alert('🔗 Opening Customer Card in Business Central...');">Open Customer in BC ↗</button>
+                <button class="btn-btn" style="background: #2563EB; font-weight: 700;" onclick="window.open('https://businesscentral.dynamics.com/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production?company=CRONUS%20IN&page=22', '_blank');">Open Customer in BC ↗</button>
             </div>
         </div>
     </div>
