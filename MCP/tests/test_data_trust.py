@@ -254,6 +254,10 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
                     pass
 
     def test_engine_recon_and_status_workflow(self):
+        snap_p = Path(__file__).resolve().parent.parent / "data" / "snapshots" / "data_trust_findings_test_workflow_tenant.json"
+        if snap_p.exists():
+            try: snap_p.unlink()
+            except Exception: pass
         engine = DataTrustEngine(client_key="test_workflow_tenant")
         findings = engine.run_recon()
         self.assertGreater(len(findings), 0)
