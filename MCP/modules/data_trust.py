@@ -517,9 +517,10 @@ class NarrationContextRulePack:
             mcp_client=mcp_client
         )
 
-        evidence_items.append(f"[LLM Interpretation] {llm_reasoning.get('explanation')}")
+        provider_name = llm_reasoning.get("provider", "Deterministic Rule Engine Fallback")
+        evidence_items.append(f"[LLM Interpretation — {provider_name}] {llm_reasoning.get('explanation')}")
 
-        classification = llm_reasoning.get("classification", "Potential Data Error")
+        classification = llm_reasoning.get("classification", "Anomaly")
         severity = "HIGH" if evidence_strength == "HIGH" else ("MEDIUM" if evidence_strength == "MEDIUM" else "INFORMATIONAL")
 
         impact = (
@@ -552,25 +553,112 @@ class NarrationContextRulePack:
         narration = str(tx.get("narration") or tx.get("description") or "N/A")
         amount = tx.get("amount") or 0.0
 
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
         openai_key = os.environ.get("OPENAI_API_KEY")
         gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
-        llm_response_text = ""
+        provider = "Deterministic Rule Engine Fallback"
+        classification = "Potential Data Error" if "N2" in str(signals_fired) else "Anomaly"
+        reasoning = ""
+        supporting_evidence = list(evidence_items)
+        contradictory_evidence = ["No historical override recorded."]
+        recommended_review_level = "Standard Review"
 
-        if openai_key:
+        system_prompt = (
+            "You are the Opsmeld Data Trust Expert's interpretation layer.\n\n"
+            "You will be given a candidate transaction and the deterministic evidence already gathered about it (which signals fired, and why).\n\n"
+            "Your task: determine whether the transaction's context (narration, account, vendor, document type) is consistent or inconsistent with its historical accounting context, using ONLY the evidence supplied below.\n\n"
+            "Rules:\n"
+            "- Do not invent facts not present in the supplied evidence.\n"
+            "- Do not determine whether the transaction is fraudulent — only whether the context is consistent or inconsistent.\n"
+            "- If the supplied evidence is ambiguous or insufficient to support a conclusion, classify as 'Insufficient Evidence' rather than guessing.\n\n"
+            "Call the record_candidate_interpretation tool with your answer."
+        )
+
+        user_content = (
+            f"Candidate Transaction:\n"
+            f"- Account: {account}\n"
+            f"- Narration: {narration}\n"
+            f"- Amount: ${float(amount):,.2f}\n"
+            f"- Fired Deterministic Signals: {signals_fired}\n"
+            f"- Evidence Chain:\n" + "\n".join(f"  * {item}" for item in evidence_items)
+        )
+
+        # 1. Primary Provider: Anthropic Claude API (Haiku / Sonnet) with Forced Tool Use
+        if anthropic_key:
+            try:
+                import urllib.request
+                url = "https://api.anthropic.com/v1/messages"
+                tool_def = {
+                    "name": "record_candidate_interpretation",
+                    "description": "Return a structured interpretation of a Data Trust candidate transaction.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "classification": {
+                                "type": "string",
+                                "enum": ["Anomaly", "Potential Data Error", "Insufficient Evidence"]
+                            },
+                            "reasoning": {
+                                "type": "string",
+                                "description": "2-3 sentence explanation grounded only in the supplied evidence."
+                            },
+                            "supporting_evidence": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "contradictory_evidence": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "recommended_review_level": {
+                                "type": "string",
+                                "enum": ["Standard Review", "Priority Review", "No Action Needed"]
+                            }
+                        },
+                        "required": ["classification", "reasoning", "supporting_evidence", "contradictory_evidence", "recommended_review_level"]
+                    }
+                }
+                payload = {
+                    "model": "claude-3-5-haiku-20241022",
+                    "max_tokens": 512,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_content}],
+                    "tools": [tool_def],
+                    "tool_choice": {"type": "tool", "name": "record_candidate_interpretation"}
+                }
+                headers = {
+                    "x-api-key": anthropic_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                }
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    res = json.loads(resp.read().decode("utf-8"))
+                    for content_block in res.get("content", []):
+                        if content_block.get("type") == "tool_use":
+                            tool_input = content_block.get("input", {})
+                            classification = tool_input.get("classification", classification)
+                            reasoning = tool_input.get("reasoning", "")
+                            supporting_evidence = tool_input.get("supporting_evidence", supporting_evidence)
+                            contradictory_evidence = tool_input.get("contradictory_evidence", contradictory_evidence)
+                            recommended_review_level = tool_input.get("recommended_review_level", recommended_review_level)
+                            provider = "Anthropic Claude (Haiku 3.5)"
+                            break
+            except Exception as e:
+                pass
+
+        # 2. Fallback Provider 1: OpenAI API
+        if not reasoning and openai_key:
             try:
                 import urllib.request
                 url = "https://api.openai.com/v1/chat/completions"
-                prompt = (
-                    f"You are the Opsmeld Data Trust Expert LLM candidate interpreter.\n"
-                    f"Candidate Transaction: Account '{account}', Narration '{narration}', Amount ${amount:,.2f}.\n"
-                    f"Deterministic Signals Fired: {signals_fired}.\n"
-                    f"Evidence Chain Items: {evidence_items}.\n"
-                    f"Task: Evaluate if this is an 'Anomaly' or 'Potential Data Error'. Provide a 2-sentence context interpretation."
-                )
                 payload = {
                     "model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
                     "temperature": 0.2
                 }
                 req = urllib.request.Request(
@@ -580,43 +668,41 @@ class NarrationContextRulePack:
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     r_data = json.loads(resp.read().decode("utf-8"))
-                    llm_response_text = r_data["choices"][0]["message"]["content"].strip()
+                    reasoning = r_data["choices"][0]["message"]["content"].strip()
+                    provider = "OpenAI (gpt-4o-mini)"
             except Exception:
                 pass
 
-        if not llm_response_text and gemini_key:
+        # 3. Fallback Provider 2: Google Gemini API
+        if not reasoning and gemini_key:
             try:
                 import urllib.request
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                prompt = (
-                    f"Opsmeld Data Trust Expert LLM interpretation:\n"
-                    f"Candidate Transaction: Account '{account}', Narration '{narration}', Amount ${amount:,.2f}.\n"
-                    f"Fired Signals: {signals_fired}.\n"
-                    f"Provide concise 2-sentence context reasoning."
-                )
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                payload = {"contents": [{"parts": [{"text": f"{system_prompt}\n\n{user_content}"}]}]}
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     r_data = json.loads(resp.read().decode("utf-8"))
-                    llm_response_text = r_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    reasoning = r_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    provider = "Google Gemini (1.5 Flash)"
             except Exception:
                 pass
 
-        if llm_response_text:
-            explanation = f"🤖 LLM Candidate Analysis: {llm_response_text}"
-        else:
-            explanation = (
+        # 4. Fallback Provider 3: Static Rule Engine Template
+        if not reasoning:
+            reasoning = (
                 f"Candidate contextual analysis: Narration '{narration}' for account '{account}' "
                 f"(Amount: ${float(amount):,.2f}) presents semantic divergence with historical accounting context. "
                 f"Deterministic signals [{', '.join(signals_fired)}] fired with supporting evidence."
             )
+            provider = "Deterministic Rule Engine Fallback"
 
         return {
-            "classification": "Potential Data Error" if "N2" in str(signals_fired) else "Anomaly",
-            "explanation": explanation,
-            "supporting_evidence": evidence_items,
-            "contradictory_evidence": ["No historical override recorded."],
-            "recommended_review_level": "Human Review Required"
+            "classification": classification,
+            "explanation": reasoning,
+            "supporting_evidence": supporting_evidence,
+            "contradictory_evidence": contradictory_evidence,
+            "recommended_review_level": recommended_review_level,
+            "provider": provider
         }
 
 
