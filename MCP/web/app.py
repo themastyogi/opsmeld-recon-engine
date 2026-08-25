@@ -55,9 +55,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         path = parsed_url.path
 
         if path in ["/", "/index.html", "/dashboard", "/collections"]:
-            index_path = Path(__file__).resolve().parent.parent / "index.html"
+            index_path = Path(__file__).resolve().parent / "index.html"
             if not index_path.exists():
-                index_path = Path(__file__).resolve().parent.parent.parent / "index.html"
+                index_path = Path(__file__).resolve().parent.parent / "index.html"
             
             if index_path.exists():
                 html = index_path.read_text(encoding="utf-8")

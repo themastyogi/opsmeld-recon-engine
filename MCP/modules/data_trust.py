@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger('opsmeld.data_trust')
 """
 Opsmeld Reconciliation Engine - Data Trust Engine Module (Multi-Tenant & Idempotent)
 Detects, validates, classifies, explains, and assesses business impact for Business Central data & transactions.
@@ -646,6 +648,7 @@ class NarrationContextRulePack:
                             provider = "Anthropic Claude (Haiku 3.5)"
                             break
             except Exception as e:
+                logger.error(f'Anthropic LLM call failed: {e}')
                 pass
 
         # 2. Fallback Provider 1: OpenAI API
@@ -670,7 +673,8 @@ class NarrationContextRulePack:
                     r_data = json.loads(resp.read().decode("utf-8"))
                     reasoning = r_data["choices"][0]["message"]["content"].strip()
                     provider = "OpenAI (gpt-4o-mini)"
-            except Exception:
+            except Exception as e:
+                logger.error(f'OpenAI LLM call failed: {e}')
                 pass
 
         # 3. Fallback Provider 2: Google Gemini API
@@ -684,7 +688,8 @@ class NarrationContextRulePack:
                     r_data = json.loads(resp.read().decode("utf-8"))
                     reasoning = r_data["candidates"][0]["content"]["parts"][0]["text"].strip()
                     provider = "Google Gemini (1.5 Flash)"
-            except Exception:
+            except Exception as e:
+                logger.error(f'Gemini LLM call failed: {e}')
                 pass
 
         # 4. Fallback Provider 3: Static Rule Engine Template

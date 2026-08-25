@@ -46,6 +46,7 @@ class ARManagerReport:
                 ts = data.get("_snapshot_timestamp", 0)
                 # 15 minutes fresh cache window
                 if time.time() - ts < 900:
+                    data["data_source"] = "SNAPSHOT_SEED"
                     return data
         except Exception:
             pass
@@ -194,6 +195,7 @@ class ARManagerReport:
 
         return {
             "error": None,
+            "data_source": "LIVE_BUSINESS_CENTRAL",
             "customers": customers,
             "autopilot": autopilot,
             "custom_segments": custom_segments

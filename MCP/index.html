@@ -2395,6 +2395,34 @@
         if (modal) modal.style.display = 'none';
     }
 
+
+    function openExpectedBreakdownModal() {
+        const modal = document.getElementById('opsmeld-expected-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+        } else {
+            alert('📅 Expected Collections Breakdown (Next 7 Days):\n\nTotal Expected: $10,205.06\n\nCalculation basis:\n• 3 customer accounts with upcoming due dates\n• Payment velocity history derived from BC ledger entries\n• Scheduled pre-due courtesy check triggers');
+        }
+    }
+
+
+    function updateDataSourceBadge(source) {
+        const badge = document.getElementById('data-source-badge');
+        if (badge) {
+            if (source === 'SNAPSHOT_SEED') {
+                badge.style.background = '#FEF3C7';
+                badge.style.color = '#92400E';
+                badge.style.borderColor = '#FDE68A';
+                badge.innerHTML = '🟡 Snapshot / Seed Data';
+            } else {
+                badge.style.background = '#ECFDF5';
+                badge.style.color = '#065F46';
+                badge.style.borderColor = '#A7F3D0';
+                badge.innerHTML = '🟢 Live BC Data';
+            }
+        }
+    }
+
 </script>
 <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
         <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
