@@ -38,3 +38,6 @@ config/admin_secret.json
 MCP/config/admin_secret.json
 data/
 MCP/data/
+
+.env
+MCP/.env
