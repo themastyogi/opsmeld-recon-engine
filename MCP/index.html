@@ -1407,7 +1407,10 @@
     function updateFindingStatusTable(findingId, newStatus) {
         fetch('/api/data-trust/update-status', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-Email': 'Vikas Kumar (admin@opsmeld.com)'
+            },
             body: JSON.stringify({ finding_id: findingId, status: newStatus })
         }).then(res => res.json()).then(res => {
             loadDataTrustFindings();
@@ -1421,7 +1424,12 @@
     }
 
     function runDataTrustRecon() {
-        fetch('/api/data-trust/run-recon', { method: 'POST' })
+        fetch('/api/data-trust/run-recon', {
+            method: 'POST',
+            headers: {
+                'X-User-Email': 'Vikas Kumar (admin@opsmeld.com)'
+            }
+        })
             .then(res => res.json())
             .then(data => {
                 alert(data.message || 'Data Trust audit engine completed successfully.');

@@ -355,12 +355,39 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         engine_a = DataTrustEngine(client_key="client_tenant_a")
         engine_b = DataTrustEngine(client_key="client_tenant_b")
 
-        findings_a = engine_a.run_recon()
-        findings_b = engine_b.run_recon()
+        finding_a = {
+            "id": "DT-TENANT-A-01",
+            "dedup_key": "Posting-Date Policy:60100:TX-TENANT-A",
+            "rule_pack": "Posting-Date Policy",
+            "classification": "Policy Violation",
+            "evidence_strength": "HIGH",
+            "severity": "HIGH",
+            "status": "Open"
+        }
+        finding_b = {
+            "id": "DT-TENANT-B-01",
+            "dedup_key": "Subledger Bypass:10200:TX-TENANT-B",
+            "rule_pack": "Subledger Bypass",
+            "classification": "Policy Violation",
+            "evidence_strength": "HIGH",
+            "severity": "HIGH",
+            "status": "Open"
+        }
+
+        engine_a.save_stored_findings([finding_a])
+        engine_b.save_stored_findings([finding_b])
+
+        loaded_a = engine_a.load_stored_findings()
+        loaded_b = engine_b.load_stored_findings()
 
         self.assertNotEqual(engine_a.get_findings_file_path(), engine_b.get_findings_file_path())
-        self.assertTrue(engine_a.get_findings_file_path().name.endswith("client_tenant_a.json"))
-        self.assertTrue(engine_b.get_findings_file_path().name.endswith("client_tenant_b.json"))
+
+        # Data content isolation verification
+        self.assertTrue(any(f.get("id") == "DT-TENANT-A-01" for f in loaded_a))
+        self.assertFalse(any(f.get("id") == "DT-TENANT-B-01" for f in loaded_a))
+
+        self.assertTrue(any(f.get("id") == "DT-TENANT-B-01" for f in loaded_b))
+        self.assertFalse(any(f.get("id") == "DT-TENANT-A-01" for f in loaded_b))
 
 
 class TestDataTrustWebAPIs(unittest.TestCase):

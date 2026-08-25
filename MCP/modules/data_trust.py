@@ -7,6 +7,7 @@ Enforces multi-tenant config scoping, dedup idempotency, audit trail logging, an
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, date, timedelta
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -551,11 +552,64 @@ class NarrationContextRulePack:
         narration = str(tx.get("narration") or tx.get("description") or "N/A")
         amount = tx.get("amount") or 0.0
 
-        explanation = (
-            f"LLM contextual analysis indicates that narration '{narration}' for account '{account}' "
-            f"(Amount: ${float(amount):,.2f}) presents semantic divergence with historical accounting context. "
-            f"Deterministic signals [{', '.join(signals_fired)}] fired with supporting evidence."
-        )
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
+        llm_response_text = ""
+
+        if openai_key:
+            try:
+                import urllib.request
+                url = "https://api.openai.com/v1/chat/completions"
+                prompt = (
+                    f"You are the Opsmeld Data Trust Expert LLM candidate interpreter.\n"
+                    f"Candidate Transaction: Account '{account}', Narration '{narration}', Amount ${amount:,.2f}.\n"
+                    f"Deterministic Signals Fired: {signals_fired}.\n"
+                    f"Evidence Chain Items: {evidence_items}.\n"
+                    f"Task: Evaluate if this is an 'Anomaly' or 'Potential Data Error'. Provide a 2-sentence context interpretation."
+                )
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2
+                }
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    r_data = json.loads(resp.read().decode("utf-8"))
+                    llm_response_text = r_data["choices"][0]["message"]["content"].strip()
+            except Exception:
+                pass
+
+        if not llm_response_text and gemini_key:
+            try:
+                import urllib.request
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                prompt = (
+                    f"Opsmeld Data Trust Expert LLM interpretation:\n"
+                    f"Candidate Transaction: Account '{account}', Narration '{narration}', Amount ${amount:,.2f}.\n"
+                    f"Fired Signals: {signals_fired}.\n"
+                    f"Provide concise 2-sentence context reasoning."
+                )
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    r_data = json.loads(resp.read().decode("utf-8"))
+                    llm_response_text = r_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception:
+                pass
+
+        if llm_response_text:
+            explanation = f"🤖 LLM Candidate Analysis: {llm_response_text}"
+        else:
+            explanation = (
+                f"Candidate contextual analysis: Narration '{narration}' for account '{account}' "
+                f"(Amount: ${float(amount):,.2f}) presents semantic divergence with historical accounting context. "
+                f"Deterministic signals [{', '.join(signals_fired)}] fired with supporting evidence."
+            )
 
         return {
             "classification": "Potential Data Error" if "N2" in str(signals_fired) else "Anomaly",
@@ -578,6 +632,65 @@ class DataTrustEngine:
         p = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
+
+    def fetch_live_bc_transactions(self) -> List[Dict[str, Any]]:
+        """Queries live Business Central OData/REST endpoints for G/L entries and Purchase Invoices."""
+        if not self.client:
+            return []
+
+        token = self.client.get_access_token()
+        if not token:
+            return []
+
+        try:
+            comp_resp = self.client._execute_bc_rest("companies")
+            if not isinstance(comp_resp, dict) or "value" not in comp_resp or not comp_resp["value"]:
+                return []
+
+            comp_id = comp_resp["value"][0].get("id")
+            if not comp_id:
+                return []
+
+            gl_resp = self.client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=100&$orderby=postingDate desc")
+            gl_entries = gl_resp.get("value", []) if isinstance(gl_resp, dict) else []
+
+            live_txs: List[Dict[str, Any]] = []
+
+            peer_history_by_account: Dict[str, List[Dict[str, Any]]] = {}
+            for gle in gl_entries:
+                acc_no = str(gle.get("accountNumber") or gle.get("glAccountNumber") or gle.get("accountNo") or "")
+                if acc_no:
+                    if acc_no not in peer_history_by_account:
+                        peer_history_by_account[acc_no] = []
+                    peer_history_by_account[acc_no].append({
+                        "account_no": acc_no,
+                        "vendor_name": str(gle.get("vendorName") or gle.get("description") or ""),
+                        "narration": str(gle.get("description") or gle.get("comment") or ""),
+                        "amount": abs(float(gle.get("amount") or 0.0))
+                    })
+
+            for gle in gl_entries:
+                acc_no = str(gle.get("accountNumber") or gle.get("glAccountNumber") or gle.get("accountNo") or "")
+                tx_obj = {
+                    "id": str(gle.get("id") or gle.get("entryNumber") or gle.get("documentNumber") or "GL-000"),
+                    "document_no": str(gle.get("documentNumber") or gle.get("documentNo") or "DOC-000"),
+                    "account_no": acc_no,
+                    "gl_account_no": acc_no,
+                    "account_name": str(gle.get("accountName") or gle.get("description") or f"G/L Account {acc_no}"),
+                    "vendor_name": str(gle.get("vendorName") or gle.get("description") or ""),
+                    "posting_date": str(gle.get("postingDate") or gle.get("documentDate") or date.today().isoformat()),
+                    "amount": abs(float(gle.get("amount") or 0.0)),
+                    "user": str(gle.get("userId") or gle.get("user") or "BC_USER"),
+                    "source_code": str(gle.get("sourceCode") or gle.get("source") or "GENJNL"),
+                    "document_type": str(gle.get("documentType") or gle.get("document_type") or "General Journal"),
+                    "narration": str(gle.get("description") or gle.get("comment") or "Live BC Entry"),
+                    "peer_history": peer_history_by_account.get(acc_no, [])
+                }
+                live_txs.append(tx_obj)
+
+            return live_txs
+        except Exception:
+            return []
 
     def _load_from_disk(self) -> List[Dict[str, Any]]:
         p = self.get_findings_file_path()
@@ -621,9 +734,14 @@ class DataTrustEngine:
         return updated
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-        """Idempotently executes reconciliation rules, preserving existing finding statuses on re-runs."""
+        """Idempotently executes reconciliation rules against live Business Central data or sample fixtures."""
         config = self.config_mgr.load_config()
-        txs = sample_transactions or self._get_sample_transactions()
+        
+        txs = sample_transactions
+        if txs is None:
+            txs = self.fetch_live_bc_transactions()
+            if not txs:
+                txs = self._get_sample_transactions()
 
         newly_eval_findings: List[DataTrustFinding] = []
 
