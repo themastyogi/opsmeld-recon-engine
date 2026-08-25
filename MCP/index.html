@@ -2224,7 +2224,16 @@
     function openInvestigatePage(custNo) {
         custNo = custNo || '30000';
         const modal = document.getElementById('opsmeld-investigation-modal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) {
+            modal.style.display = 'flex';
+            const titleEl = document.getElementById('inv-modal-title');
+            if (titleEl) {
+                if (custNo === '30000') titleEl.innerText = '🔍 Account Audit: School of Fine Art (#30000)';
+                else if (custNo === '50000') titleEl.innerText = '🔍 Account Audit: Relecloud (#50000)';
+                else if (custNo === '40000') titleEl.innerText = '🔍 Account Audit: Alpine Ski House (#40000)';
+                else titleEl.innerText = '🔍 Account Audit: Customer #' + custNo;
+            }
+        }
     }
 
     function closeOpsmeldInvestigationModal() {
@@ -2296,7 +2305,10 @@
     }
 
     function openInBC(custNo, type) {
-        const targetType = type || 'Customer'; const targetNo = custNo || '30000'; alert('🔗 Deep-linking to Microsoft Dynamics 365 Business Central (CRONUS IN)\nTarget: ' + targetType + ' #' + targetNo);
+        const tenantId = 'db961cfa-b4ab-42c5-9ab4-90b82e0da387';
+        const pageId = (type && type.toLowerCase() === 'invoice') ? '132' : '22';
+        const url = `https://businesscentral.dynamics.com/${tenantId}/Production?company=CRONUS%20IN&page=${pageId}`;
+        window.open(url, '_blank');
     }
 
     function handleActionClick(actionText, customerNo, tier) {
