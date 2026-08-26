@@ -1,7 +1,7 @@
 """
 Static Architecture Dependency Inversion & Single Implementation Guards for Data Trust.
 Proves data_trust_engine package contains zero imports from legacy modules.data_trust facade,
-and modules.data_trust remains a thin compatibility façade.
+and modules.data_trust remains a thin compatibility façade with zero duplicate active rule logic.
 """
 import ast
 import pathlib
@@ -53,6 +53,27 @@ class TestDataTrustArchitectureGuards(unittest.TestCase):
         self.assertTrue(hasattr(PostingDateRulePack, "evaluate_transaction"))
         self.assertTrue(hasattr(SubledgerBypassRulePack, "evaluate_transaction"))
         self.assertTrue(hasattr(NarrationContextRulePack, "evaluate_candidate"))
+
+        # AST inspection: Verify facade classes are thin delegation shims (<5 body statements each)
+        tree = ast.parse(self.facade_file.read_text(encoding="utf-8"), filename=str(self.facade_file))
+        rule_pack_classes = ["PostingDateRulePack", "SubledgerBypassRulePack", "NarrationContextRulePack"]
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name in rule_pack_classes:
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        statement_count = len(item.body)
+                        self.assertLessEqual(
+                            statement_count,
+                            5,
+                            f"Duplicate active rule logic found in legacy façade class {node.name}.{item.name} ({statement_count} statements)."
+                        )
+
+    def test_orchestrator_no_cronus_in_hardcoded_fallback(self):
+        """DataTrustEngineOrchestrator run_recon MUST NOT contain hardcoded 'CRONUS IN' fallback."""
+        orchestrator_file = self.modular_engine_dir / "engine.py"
+        content = orchestrator_file.read_text(encoding="utf-8")
+        self.assertNotIn('or "CRONUS IN"', content, "Orchestrator must not hardcode 'CRONUS IN' fallback")
 
 
 if __name__ == "__main__":

@@ -44,12 +44,13 @@ class DataTrustEngineOrchestrator:
         """
         start_time = time.time()
         run_id = f"DT-{datetime.date.today().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        self.acquirer.mode = mode
 
         # Step 1: Server-Side Company Authorization Gate
         is_auth, auth_state, auth_info = self.auth_mgr.validate_company_access(self.client, company_id, session_info, run_id=run_id, mode=mode)
 
-        target_comp_id = auth_info.get("company_id") or company_id or "CRONUS IN"
-        target_comp_name = auth_info.get("company_name") or "CRONUS IN"
+        target_comp_id = auth_info.get("company_id") or company_id
+        target_comp_name = auth_info.get("company_name") or auth_info.get("company_id") or company_id
 
         rule_status: Dict[str, str] = {
             "POSTING_DATE": RuleExecutionStatus.NOT_RUN,

@@ -110,10 +110,6 @@ class DataAcquirer:
                 logger.error(f"Live G/L acquisition exception: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
-        if self.mode == "AUTO":
-            from modules.data_trust_engine.fixtures import get_sample_transactions
-            return get_sample_transactions(), "SNAPSHOT_SEED"
-
         return [], "DATA_UNAVAILABLE"
 
     def acquire_payment_transactions(
