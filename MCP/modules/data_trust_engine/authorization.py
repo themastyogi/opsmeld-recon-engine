@@ -53,12 +53,17 @@ class CompanyAccessManager:
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Server-side company authorization gate:
-        1. Explicitly separates offline/test mode from live production authorization.
-        2. Production mode without a BC client MUST fail closed (AUTHENTICATION_UNAVAILABLE).
-        3. Uses /companies as discovery to resolve candidate company GUID.
-        4. Rejects empty company selection when ambiguous (does NOT silently choose first company).
-        5. Executes a real company-scoped BC data access test against the target company.
-        6. Rejects unauthorized or forged company requests with ACCESS_DENIED.
+        1. Explicitly separates isolated TEST/DEMO mode from live production.
+        2. Production mode without BC client MUST fail closed (AUTHENTICATION_UNAVAILABLE).
+        3. Uses GET /companies as discovery to resolve candidate company GUID.
+        4. Rejects empty company selection when ambiguous (returns CONFIGURATION_MISSING, never selects first company).
+        5. Executes a real company-scoped BC data access test against the target company: companies({guid})/generalLedgerEntries?$top=1.
+        6. HTTP Status Mapping:
+           - 200 -> Authorized
+           - 403 -> ACCESS_DENIED
+           - 401 -> AUTHENTICATION_UNAVAILABLE
+           - 404 on endpoint -> DATA_REQUEST_INVALID (distinguished from company-resolution 404 COMPANY_NOT_FOUND)
+           - 5xx -> DATA_UNAVAILABLE
         """
         # Rule 3: Explicitly isolated TEST/DEMO mode check
         if mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
@@ -99,7 +104,7 @@ class CompanyAccessManager:
             for c in raw_list if isinstance(c, dict) and c.get("id")
         ]
 
-        # Rule 3: Empty company selection handling (never silently select first company if ambiguous)
+        # Rule: Empty company selection handling (never silently select first company in multi-company environments)
         if not requested_company:
             if len(discovered) == 1:
                 target_comp_guid = discovered[0]["id"]
@@ -127,7 +132,7 @@ class CompanyAccessManager:
                 msg = build_user_message(DataTrustState.COMPANY_NOT_FOUND, run_id=run_id)
                 return False, DataTrustState.COMPANY_NOT_FOUND, {"message": "Ambiguous company match.", "http_status": 404}
             else:
-                # Requested company not found in user's authorized company list (Forged/Unauthorized request)
+                # Requested company not found in user's authorized candidate list (Forged/Unauthorized request)
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
 
@@ -135,9 +140,18 @@ class CompanyAccessManager:
         scope_test_resp = client._execute_bc_rest(f"companies({target_comp_guid})/generalLedgerEntries?$top=1")
         if isinstance(scope_test_resp, dict) and (scope_test_resp.get("is_error") or "error" in scope_test_resp):
             status_code = scope_test_resp.get("http_status", 500)
-            if status_code in (401, 403):
+            if status_code == 403:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
-                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": status_code}
+                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
+            elif status_code == 401:
+                msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id)
+                return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
+            elif status_code == 404:
+                err_mapped = map_http_error(404, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id)
+                return False, DataTrustState.DATA_REQUEST_INVALID, {"message": err_mapped["message"], "http_status": 404}
+            else:
+                err_mapped = map_http_error(status_code, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id)
+                return False, err_mapped["status"], {"message": err_mapped["message"], "http_status": status_code}
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,
