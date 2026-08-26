@@ -172,42 +172,77 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
 
 
     def test_authorized_companies_requires_http_auth(self):
-        """Unauthenticated request to /api/data-trust/authorized-companies returns 401 and triggers 0 BC calls."""
+        """Route-level: Unauthenticated GET /api/data-trust/authorized-companies -> 401 + 0 discovery/BC calls."""
         from web.app import OpsmeldWebHandler
         from unittest.mock import patch, MagicMock
-
         import io
+
         handler = MagicMock(spec=OpsmeldWebHandler)
         handler.headers = {}
         handler.wfile = io.BytesIO()
         handler.path = "/api/data-trust/authorized-companies"
         handler._get_session_token.return_value = None
+        handler._get_client_key.return_value = "default_client"
+
+        handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
+        handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
 
         with patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies") as mock_disc, \
              patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest") as mock_bc_rest:
-            session_info = OpsmeldWebHandler._require_auth(handler)
-            self.assertIsNone(session_info)
+            handler.do_GET()
+            handler.send_response.assert_called_with(401)
             self.assertEqual(mock_disc.call_count, 0, "Expected 0 discovery calls after HTTP 401")
             self.assertEqual(mock_bc_rest.call_count, 0, "Expected 0 BC REST calls after HTTP 401")
 
     def test_run_recon_requires_http_auth(self):
-        """Unauthenticated request to /api/data-trust/run-recon returns 401 and triggers 0 orchestrator/BC calls."""
+        """Route-level: Unauthenticated GET /api/data-trust/run-recon -> 401 + 0 orchestrator/BC calls."""
         from web.app import OpsmeldWebHandler
         from unittest.mock import patch, MagicMock
-
         import io
+
         handler = MagicMock(spec=OpsmeldWebHandler)
         handler.headers = {}
         handler.wfile = io.BytesIO()
         handler.path = "/api/data-trust/run-recon"
         handler._get_session_token.return_value = None
+        handler._get_client_key.return_value = "default_client"
+
+        handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
+        handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
 
         with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon, \
              patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest") as mock_bc_rest:
-            session_info = OpsmeldWebHandler._require_auth(handler)
-            self.assertIsNone(session_info)
+            handler.do_GET()
+            handler.send_response.assert_called_with(401)
             self.assertEqual(mock_recon.call_count, 0, "Expected 0 orchestrator calls after HTTP 401")
             self.assertEqual(mock_bc_rest.call_count, 0, "Expected 0 BC REST calls after HTTP 401")
+
+    def test_authorized_companies_returns_exact_discovery_no_fallback(self):
+        """Route-level: GET /api/data-trust/authorized-companies returns exact discovery result without synthetic fallback."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+        import io
+
+        handler = MagicMock(spec=OpsmeldWebHandler)
+        handler.headers = {"Authorization": "Bearer VALID_SESSION_TOKEN"}
+        handler.wfile = io.BytesIO()
+        handler.path = "/api/data-trust/authorized-companies"
+        handler._get_session_token.return_value = "VALID_SESSION_TOKEN"
+        handler._get_client_key.return_value = "default_client"
+
+        handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
+        handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+
+        with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
+             patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies", return_value=[]):
+            handler.do_GET()
+            response_bytes = handler.wfile.getvalue()
+            self.assertIn(b'"companies": []', response_bytes)
+            self.assertNotIn(b"CRONUS IN", response_bytes)
 
 
 if __name__ == "__main__":
