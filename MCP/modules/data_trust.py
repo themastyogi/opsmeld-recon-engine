@@ -1075,3 +1075,33 @@ class DataTrustEngine:
                 "peer_history": adequate_peer_history
             }
         ]
+
+class PaymentTimingRulePack:
+    """
+    Rule Pack 4 — Payment Timing & Due-Date Compliance (Legacy Façade Helper).
+    Delegates to modular PaymentTimingRule implementation.
+    """
+    @staticmethod
+    def evaluate_transaction(tx: Dict[str, Any], config: Dict[str, Any]) -> Optional[DataTrustFinding]:
+        from modules.data_trust_engine.rules.payment_timing import PaymentTimingRule
+        rule = PaymentTimingRule()
+        cand = rule.evaluate(tx, config)
+        if cand and cand.eligibility == "ELIGIBLE":
+            finding_id = cand.candidate_id.replace("CAND-", "")
+            return DataTrustFinding(
+                id=finding_id,
+                dedup_key=f"DEDUP-{finding_id}",
+                rule_pack=rule.rule_pack,
+                classification="Anomaly" if any(s.get("signal_code") == "P7" and s.get("fired") for s in cand.signals) else "Informational",
+                evidence_strength="MEDIUM" if len(cand.signals) >= 2 else "LOW",
+                severity="MEDIUM",
+                signals_fired_count=len([s for s in cand.signals if s.get("fired")]),
+                evidence_chain=[e.get("evidence", "") for e in cand.evidence if isinstance(e, dict)],
+                transaction_details=tx,
+                business_impact="Payment timing analysis statement.",
+                recommended_action="Human review required",
+                structured_evidence=cand.evidence,
+                signals=cand.signals,
+                rule_version=rule.rule_version
+            )
+        return None

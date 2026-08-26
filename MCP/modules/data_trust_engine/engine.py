@@ -12,6 +12,7 @@ from modules.data_trust_engine.llm_interpreter import LLMInterpreter
 from modules.data_trust_engine.rules.posting_date import PostingDatePolicyRule
 from modules.data_trust_engine.rules.subledger_bypass import SubledgerBypassRule
 from modules.data_trust_engine.rules.narration_context import NarrationContextRule
+from modules.data_trust_engine.rules.payment_timing import PaymentTimingRule
 
 
 class DataTrustEngineOrchestrator:
@@ -24,7 +25,8 @@ class DataTrustEngineOrchestrator:
         self.rules = [
             PostingDatePolicyRule(),
             SubledgerBypassRule(),
-            NarrationContextRule()
+            NarrationContextRule(),
+            PaymentTimingRule()
         ]
 
     def run_recon(self) -> Dict[str, Any]:
@@ -60,7 +62,7 @@ class DataTrustEngineOrchestrator:
                 if not rule.enabled:
                     continue
                 cand = rule.evaluate(tx, config)
-                if cand:
+                if cand and cand.eligibility == "ELIGIBLE":
                     candidates.append((rule, cand))
 
         findings: List[DataTrustFinding] = []
@@ -77,17 +79,34 @@ class DataTrustEngineOrchestrator:
                     llm_calls_count += 1
 
             finding_id = cand.candidate_id.replace("CAND-", "")
+            
+            # Determine classification and severity based on signals & rule
+            classification = "Informational"
+            severity = "MEDIUM"
+            if any(s.get("signal_code") == "P6" and s.get("fired") for s in cand.signals):
+                classification = "Potential Data Error"
+                severity = "HIGH"
+            elif any(s.get("signal_code") == "P7" and s.get("fired") for s in cand.signals):
+                classification = "Anomaly"
+                severity = "MEDIUM"
+            elif cand.rule_id == "subledger_bypass":
+                classification = "Policy Violation"
+                severity = "HIGH"
+            elif cand.requires_llm:
+                classification = "Anomaly"
+                severity = "MEDIUM"
+
             finding = DataTrustFinding(
                 id=finding_id,
                 dedup_key=f"DEDUP-{finding_id}",
                 rule_pack=rule.rule_pack,
-                classification="Anomaly" if cand.requires_llm else "Policy Violation",
-                evidence_strength="MEDIUM" if len(cand.signals) >= 2 else "LOW",
-                severity="HIGH" if cand.rule_id == "subledger_bypass" else "MEDIUM",
-                signals_fired_count=len(cand.signals),
+                classification=classification,
+                evidence_strength="HIGH" if len(cand.signals) >= 3 else ("MEDIUM" if len(cand.signals) >= 2 else "LOW"),
+                severity=severity,
+                signals_fired_count=len([s for s in cand.signals if s.get("fired")]),
                 evidence_chain=[e.get("evidence", "") for e in cand.evidence if isinstance(e, dict)],
                 transaction_details=cand.source_record,
-                business_impact="Requires review to verify posting compliance and control alignment.",
+                business_impact="Requires review to verify payment timing, discount eligibility, and cash control alignment.",
                 recommended_action="Human review required",
                 data_source=provenance,
                 structured_evidence=cand.evidence,
