@@ -623,7 +623,7 @@ class NarrationContextRulePack:
                     }
                 }
                 payload = {
-                    "model": "claude-3-5-haiku-20241022",
+                    "model": "claude-haiku-4-5-20251001",
                     "max_tokens": 512,
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": user_content}],
@@ -830,10 +830,16 @@ class DataTrustEngine:
         config = self.config_mgr.load_config()
         
         txs = sample_transactions
+        is_live_data = True
         if txs is None:
             txs = self.fetch_live_bc_transactions()
             if not txs:
                 txs = self._get_sample_transactions()
+                is_live_data = False
+        else:
+            is_live_data = False
+
+        data_source_label = "LIVE_BUSINESS_CENTRAL" if is_live_data else "SNAPSHOT_SEED" 
 
         newly_eval_findings: List[DataTrustFinding] = []
 
@@ -845,10 +851,12 @@ class DataTrustEngine:
         for tx in txs:
             pd_finding = PostingDateRulePack.evaluate_transaction(tx, config)
             if pd_finding:
+                pd_finding.data_source = data_source_label
                 newly_eval_findings.append(pd_finding)
 
             sb_finding = SubledgerBypassRulePack.evaluate_transaction(tx, config)
             if sb_finding:
+                sb_finding.data_source = data_source_label
                 newly_eval_findings.append(sb_finding)
 
             tx_peer = tx.get("peer_history")
@@ -857,6 +865,7 @@ class DataTrustEngine:
 
             narr_finding = NarrationContextRulePack.evaluate_candidate(tx, tx_peer, config, self.client)
             if narr_finding:
+                narr_finding.data_source = data_source_label
                 newly_eval_findings.append(narr_finding)
 
         # Idempotent deduplication against existing stored findings with Evidence Strength escalation checks

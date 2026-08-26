@@ -44,6 +44,33 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             return auth_header[7:].strip()
         return None
 
+    def _get_client_key(self, parsed_url) -> str:
+        """Resolves client_key from query param (?client_key=...), X-Client-Key header, session info, or fallback."""
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        q_key = query_params.get("client_key", [None])[0]
+        if q_key:
+            return q_key
+        hdr_key = self.headers.get("X-Client-Key")
+        if hdr_key:
+            return hdr_key
+        token = self._get_session_token()
+        if token:
+            session_info = get_auth_manager().get_session_info(token)
+            if session_info and session_info.get("client_key"):
+                return session_info["client_key"]
+        return load_client_config().client_key
+
+    def _require_auth(self) -> Optional[Dict[str, Any]]:
+        """Enforces session authentication for protected API endpoints."""
+        token = self._get_session_token()
+        auth_mgr = get_auth_manager()
+        session_info = auth_mgr.get_session_info(token)
+        if not session_info:
+            self._set_headers("application/json", 401)
+            self.wfile.write(json.dumps({"error": "Unauthorized: Active session token required"}).encode("utf-8"))
+            return None
+        return session_info
+
     def _is_authenticated(self) -> bool:
         """Returns True if request has a valid session token or is local preview mode."""
         token = self._get_session_token()
@@ -62,14 +89,16 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if index_path.exists():
                 html = index_path.read_text(encoding="utf-8")
             else:
-                config = load_client_config()
+                client_key = self._get_client_key(parsed_url)
+                config = load_client_config(client_key)
                 html = render_dashboard_html(config.name, {})
             
             self._set_headers()
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/settings":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client_dict = {
                 "name": config.name,
@@ -83,7 +112,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/reports/ar-manager":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -96,7 +126,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/api/ar-manager/data":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -127,7 +158,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             tier = query_params.get("tier", ["high"])[0]
             customer_no_list = query_params.get("customer_no", [None])
             customer_no = customer_no_list[0] if customer_no_list else None
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -136,7 +168,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(detail).encode("utf-8"))
 
         elif path == "/api/ar-manager/control-tower":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -155,7 +188,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             except ValueError:
                 page_size = 20
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -170,7 +204,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "Forbidden: Debug endpoint disabled on client preview instance."}).encode("utf-8"))
                 return
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
             token = client.get_access_token()
             companies = client._execute_bc_rest("companies")
@@ -189,7 +224,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(debug_info).encode("utf-8"))
 
         elif path == "/api/auth/login":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
             flow = client.start_device_flow()
             CURRENT_DEVICE_FLOW = flow
@@ -201,7 +237,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self._set_headers("application/json")
                 self.wfile.write(json.dumps({"status": "error", "message": "No active device flow"}).encode("utf-8"))
             else:
-                config = load_client_config()
+                client_key = self._get_client_key(parsed_url)
+                config = load_client_config(client_key)
                 client = BCMCPClient(config)
                 result = client.complete_device_flow(CURRENT_DEVICE_FLOW)
                 if result and result.get("status") == "success":
@@ -224,9 +261,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             search = query_params.get("search", [None])[0]
             include_insufficient = query_params.get("include_insufficient", ["false"])[0].lower() == "true"
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
-            engine = DataTrustEngine(client)
+            engine = DataTrustEngine(client, client_key=client_key)
             all_findings = engine.load_stored_findings()
 
             filtered = []
@@ -263,9 +301,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/finding-detail":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             finding_id = query_params.get("id", [None])[0]
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
-            engine = DataTrustEngine(client)
+            engine = DataTrustEngine(client, client_key=client_key)
             all_findings = engine.load_stored_findings()
             target = next((f for f in all_findings if f.get("id") == finding_id), None)
             if target:
@@ -276,14 +315,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": f"Finding '{finding_id}' not found"}).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
-            config = load_client_config()
+            session_info = self._require_auth()
+            if not session_info:
+                return
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             cfg_mgr = DataTrustConfigManager(config.client_key)
             dt_config = cfg_mgr.load_config()
             self._set_headers("application/json")
             self.wfile.write(json.dumps(dt_config).encode("utf-8"))
 
         elif path == "/api/data-trust/config-history":
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             cfg_mgr = DataTrustConfigManager(config.client_key)
             history = cfg_mgr.load_audit_trail()
             self._set_headers("application/json")
@@ -350,7 +394,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             with open(clients_file, "w", encoding="utf-8") as f:
                 json.dump(clients_data, f, indent=2)
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client_dict = {
                 "name": config.name,
@@ -369,7 +414,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             post_data = urllib.parse.parse_qs(body)
             customer_no = post_data.get("customer_no", [""])[0]
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             rules = load_engine_rules()
             client = BCMCPClient(config)
             report = ARManagerReport(client, rules)
@@ -387,6 +433,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/api/data-trust/update-status":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
             try:
@@ -398,9 +447,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
 
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
-            engine = DataTrustEngine(client)
+            engine = DataTrustEngine(client, client_key=client_key)
             success = engine.update_finding_status(finding_id, new_status)
             if success:
                 res = {"status": "success", "finding_id": finding_id, "new_status": new_status}
@@ -411,9 +461,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
-            config = load_client_config()
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             cfg_mgr = DataTrustConfigManager(config.client_key)
             try:
                 new_config = json.loads(body)
@@ -425,7 +479,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 except Exception:
                     new_config = cfg_mgr.load_config()
 
-            user_identity = self.headers.get("X-User-Email") or self.headers.get("X-User-Id") or "admin@opsmeld.com"
+            user_identity = session_info.get("username") or "admin@opsmeld.com"
             saved = cfg_mgr.save_config(new_config, user=user_identity)
             if saved:
                 res = {"status": "success", "message": "Data Trust configuration saved successfully"}
@@ -436,9 +490,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
-            config = load_client_config()
+            session_info = self._require_auth()
+            if not session_info:
+                return
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
             client = BCMCPClient(config)
-            engine = DataTrustEngine(client)
+            engine = DataTrustEngine(client, client_key=client_key)
             findings = engine.run_recon()
             summary = engine.get_summary_metrics(findings)
             res = {

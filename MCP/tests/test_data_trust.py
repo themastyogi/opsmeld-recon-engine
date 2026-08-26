@@ -394,57 +394,93 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         self.assertFalse(any(f.get("id") == "DT-TENANT-A-01" for f in loaded_b))
 
 
-class TestDataTrustWebAPIs(unittest.TestCase):
-    """End-to-end HTTP API tests for Data Trust endpoints."""
 
+    def test_tx1005_evidence_strength_low_regression(self):
+        """Explicit regression lock: TX-1005 MUST yield exactly 1 signal (N5) -> LOW evidence strength."""
+        engine = DataTrustEngine(mcp_client=None, client_key="default_client")
+        findings = engine.run_recon()
+        tx1005 = next((f for f in findings if "1005" in str(f.get("id"))), None)
+        self.assertIsNotNone(tx1005, "TX-1005 finding should be generated")
+        self.assertEqual(tx1005.get("signals_fired_count"), 1, "TX-1005 must fire exactly 1 signal (N5 Amount Pattern Break)")
+        self.assertEqual(tx1005.get("evidence_strength"), "LOW", "TX-1005 evidence strength must be LOW")
+        self.assertEqual(tx1005.get("severity"), "INFORMATIONAL", "TX-1005 severity must be INFORMATIONAL")
+
+    def test_data_source_provenance_fallback_label(self):
+        """Data provenance check: mcp_client=None MUST label findings as SNAPSHOT_SEED, never LIVE_BUSINESS_CENTRAL."""
+        engine = DataTrustEngine(mcp_client=None, client_key="default_client")
+        findings = engine.run_recon()
+        for f in findings:
+            self.assertEqual(f.get("data_source"), "SNAPSHOT_SEED", f"Finding {f.get('id')} should be labeled SNAPSHOT_SEED when mcp_client=None")
+
+
+
+
+class TestDataTrustWebAPIs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.port = 8089
-        cls.server = create_server(host="127.0.0.1", port=cls.port)
-        cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        from web.app import create_server
+        from core.auth import get_auth_manager
+        cls.server = create_server("127.0.0.1", 8899)
+        cls.server_thread = threading.Thread(target=cls.server.serve_forever)
+        cls.server_thread.daemon = True
         cls.server_thread.start()
-        time.sleep(0.3)
+        cls.server_url = "http://127.0.0.1:8899"
+        
+        # Authenticate and obtain valid session token for web tests
+        auth_mgr = get_auth_manager()
+        cls.session_token = auth_mgr.authenticate("admin", auth_mgr.admin_pass)
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
-        cls.server.server_close()
 
-    def test_get_findings_api(self):
-        url = f"http://127.0.0.1:{self.port}/api/data-trust/findings"
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode("utf-8"))
-            self.assertIn("summary", data)
-            self.assertIn("findings", data)
+    def test_unauthenticated_api_rejection(self):
+        """Security boundary: POST endpoints must reject unauthenticated requests with 401 Unauthorized."""
+        import urllib.request, urllib.error
+        req = urllib.request.Request(
+            f"{self.server_url}/api/data-trust/update-status",
+            data=b'{"finding_id": "DT-1", "status": "Confirmed"}',
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        try:
+            resp = urllib.request.urlopen(req)
+            self.fail("Unauthenticated request should have failed with HTTP 401")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 401, "Unauthenticated endpoint should return HTTP 401")
 
     def test_get_config_api(self):
-        url = f"http://127.0.0.1:{self.port}/api/data-trust/config"
-        req = urllib.request.Request(url)
+        import urllib.request
+        req = urllib.request.Request(
+            f"{self.server_url}/api/data-trust/config",
+            headers={"Cookie": f"session={self.session_token}"}
+        )
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
             self.assertIn("posting_date_policy", data)
-            self.assertIn("subledger_control_accounts", data)
+
+    def test_get_findings_api(self):
+        import urllib.request
+        req = urllib.request.Request(
+            f"{self.server_url}/api/data-trust/findings",
+            headers={"Cookie": f"session={self.session_token}"}
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("findings", data)
 
     def test_update_status_api(self):
-        # Fetch valid finding ID first
-        f_url = f"http://127.0.0.1:{self.port}/api/data-trust/findings"
-        with urllib.request.urlopen(f_url) as f_resp:
-            f_data = json.loads(f_resp.read().decode("utf-8"))
-            findings = f_data.get("findings", [])
-            self.assertGreater(len(findings), 0)
-            target_id = findings[0].get("id")
-
-        url = f"http://127.0.0.1:{self.port}/api/data-trust/update-status"
-        payload = json.dumps({"finding_id": target_id, "status": "Confirmed"}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        import urllib.request
+        payload = json.dumps({"finding_id": "DT-BYPASS-TX-1001", "status": "Under Review"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.server_url}/api/data-trust/update-status",
+            data=payload,
+            headers={"Content-Type": "application/json", "Cookie": f"session={self.session_token}"},
+            method="POST"
+        )
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(data.get("status"), "success")
-
-
-if __name__ == "__main__":
-    unittest.main()

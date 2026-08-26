@@ -58,6 +58,19 @@ class AuthManager:
             return session_token
         return None
 
+    def get_session_info(self, session_token: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Returns session metadata (username, client_key, etc.) if token is valid."""
+        if not session_token:
+            return None
+        token = session_token.replace("Bearer ", "").replace("session=", "").strip()
+        session = _ACTIVE_SESSIONS.get(token)
+        if not session:
+            return None
+        if time.time() > session["expires_at"]:
+            del _ACTIVE_SESSIONS[token]
+            return None
+        return session
+
     def validate_session(self, session_token: Optional[str]) -> bool:
         """Validates if a session token is active and not expired."""
         if not session_token:
