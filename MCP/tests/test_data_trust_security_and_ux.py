@@ -183,11 +183,12 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         handler.path = "/api/data-trust/authorized-companies"
         handler._get_session_token.return_value = None
 
-        with patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies") as mock_disc:
-            # Execute handler require_auth logic
+        with patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies") as mock_disc, \
+             patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest") as mock_bc_rest:
             session_info = OpsmeldWebHandler._require_auth(handler)
             self.assertIsNone(session_info)
-            mock_disc.assert_not_called()
+            self.assertEqual(mock_disc.call_count, 0, "Expected 0 discovery calls after HTTP 401")
+            self.assertEqual(mock_bc_rest.call_count, 0, "Expected 0 BC REST calls after HTTP 401")
 
     def test_run_recon_requires_http_auth(self):
         """Unauthenticated request to /api/data-trust/run-recon returns 401 and triggers 0 orchestrator/BC calls."""
@@ -201,10 +202,12 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         handler.path = "/api/data-trust/run-recon"
         handler._get_session_token.return_value = None
 
-        with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon:
+        with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon, \
+             patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest") as mock_bc_rest:
             session_info = OpsmeldWebHandler._require_auth(handler)
             self.assertIsNone(session_info)
-            mock_recon.assert_not_called()
+            self.assertEqual(mock_recon.call_count, 0, "Expected 0 orchestrator calls after HTTP 401")
+            self.assertEqual(mock_bc_rest.call_count, 0, "Expected 0 BC REST calls after HTTP 401")
 
 
 if __name__ == "__main__":
