@@ -1,16 +1,86 @@
 """
 DataAcquirer layer handling live BC data fetching, pagination, lookback, and provenance.
 Enforces fail-closed live data boundaries (returns DATA_UNAVAILABLE with zero findings on live failures).
-Resolves Business Central application relationships and detailed ledger entries for Payment Timing analysis.
+Includes tenant-scoped CompanyResolver for exact Business Central company GUID resolution.
 """
+import re
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from core.bc_mcp_client import BCMCPClient
+
+logger = logging.getLogger("OpsmeldReconEngine.Acquisition")
+
+GUID_REGEX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+class CompanyResolver:
+    """
+    Tenant/Environment-scoped Business Central Company GUID Resolver with caching.
+    Enforces exact matching rules:
+    - 1 exact match -> return GUID
+    - 0 matches -> return None (DATA_UNAVAILABLE)
+    - >1 ambiguous matches -> return None (DATA_UNAVAILABLE)
+    Never defaults to first company returned.
+    """
+    def __init__(self):
+        self._cache: Dict[str, str] = {}  # key: {tenant_id}:{environment}:{company_name} -> GUID
+
+    def resolve_company_guid(self, client: BCMCPClient, company_name_or_id: Optional[str] = None) -> Optional[str]:
+        if company_name_or_id and GUID_REGEX.match(company_name_or_id):
+            return company_name_or_id
+
+        tenant_id = getattr(client.config, "tenant_id", "default_tenant")
+        environment = getattr(client.config, "environment", "Production")
+        requested_name = company_name_or_id or getattr(client.config, "company_name", None)
+
+        cache_key = f"{tenant_id}:{environment}:{requested_name or 'DEFAULT'}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        comp_resp = client._execute_bc_rest("companies")
+        if not isinstance(comp_resp, dict) or comp_resp.get("is_error") or "error" in comp_resp:
+            logger.warning(f"Company resolution failed for endpoint 'companies': {comp_resp.get('error')}")
+            return None
+
+        comp_list = comp_resp.get("value", []) if isinstance(comp_resp.get("value"), list) else []
+        if not comp_list:
+            logger.warning(f"Zero companies returned for tenant '{tenant_id}' environment '{environment}'")
+            return None
+
+        if not requested_name:
+            # If no company name requested, require exactly 1 company in environment
+            if len(comp_list) == 1 and comp_list[0].get("id"):
+                guid = comp_list[0]["id"]
+                self._cache[cache_key] = guid
+                return guid
+            else:
+                logger.warning(f"Ambiguous company resolution: {len(comp_list)} companies exist, but no explicit company name requested.")
+                return None
+
+        matches = [
+            c for c in comp_list
+            if str(c.get("name")).lower() == requested_name.lower()
+            or str(c.get("displayName")).lower() == requested_name.lower()
+            or str(c.get("id")).lower() == requested_name.lower()
+        ]
+
+        if len(matches) == 1 and matches[0].get("id"):
+            guid = matches[0]["id"]
+            self._cache[cache_key] = guid
+            return guid
+        elif len(matches) > 1:
+            logger.warning(f"Ambiguous company resolution: {len(matches)} matching companies found for name '{requested_name}'.")
+            return None
+        else:
+            logger.warning(f"Zero companies matched requested name '{requested_name}' in tenant '{tenant_id}' environment '{environment}'.")
+            return None
 
 
 class DataAcquirer:
     def __init__(self, mcp_client: Optional[BCMCPClient] = None, mode: str = "AUTO"):
         self.client = mcp_client
         self.mode = mode  # LIVE_BUSINESS_CENTRAL | TEST_FIXTURE | DEMO_FIXTURE | AUTO
+        self.company_resolver = CompanyResolver()
 
     def acquire_transactions(self) -> Tuple[List[Dict[str, Any]], str]:
         """
@@ -23,22 +93,23 @@ class DataAcquirer:
             return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
 
         if self.client:
-            # Explicit live production run
             token = self.client.get_access_token()
             if not token:
                 return [], "DATA_UNAVAILABLE"
-            try:
-                comp_resp = self.client._execute_bc_rest("companies")
-                if isinstance(comp_resp, dict) and "value" in comp_resp and comp_resp["value"]:
-                    comp_id = comp_resp["value"][0]["id"]
-                    gl_resp = self.client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries")
-                    if isinstance(gl_resp, dict) and "value" in gl_resp and gl_resp["value"]:
-                        return gl_resp["value"], "LIVE_BUSINESS_CENTRAL"
-            except Exception:
-                return [], "DATA_UNAVAILABLE"
-            return [], "DATA_UNAVAILABLE"
 
-        # Local offline preview mode (mcp_client is None)
+            comp_guid = self.company_resolver.resolve_company_guid(self.client)
+            if not comp_guid:
+                return [], "DATA_UNAVAILABLE"
+
+            try:
+                gl_resp = self.client._execute_bc_rest(f"companies({comp_guid})/generalLedgerEntries")
+                if isinstance(gl_resp, dict) and not gl_resp.get("is_error") and "error" not in gl_resp and "value" in gl_resp:
+                    return gl_resp["value"], "LIVE_BUSINESS_CENTRAL"
+                return [], "DATA_UNAVAILABLE"
+            except Exception as e:
+                logger.error(f"Live G/L acquisition exception: {str(e)}")
+                return [], "DATA_UNAVAILABLE"
+
         if self.mode == "AUTO":
             from modules.data_trust import DataTrustEngine
             return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
@@ -53,7 +124,7 @@ class DataAcquirer:
         """
         Acquires payment and invoice ledger transactions for Payment Timing & Due-Date Compliance analysis.
         Strictly scopes by company_id and ledger_type. Resolves application posting date settlement timing.
-        Fail-closed boundary: on live BC query failure, returns ([], "DATA_UNAVAILABLE").
+        Fail-closed boundary: on live BC query failure or resolution failure, returns ([], "DATA_UNAVAILABLE").
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
             return self._get_fixture_payment_transactions(company_id), "SNAPSHOT_SEED"
@@ -62,49 +133,45 @@ class DataAcquirer:
             token = self.client.get_access_token()
             if not token:
                 return [], "DATA_UNAVAILABLE"
+
+            comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id)
+            if not comp_guid:
+                return [], "DATA_UNAVAILABLE"
+
             try:
-                comp_resp = self.client._execute_bc_rest("companies")
-                if not (isinstance(comp_resp, dict) and "value" in comp_resp and comp_resp["value"]):
-                    return [], "DATA_UNAVAILABLE"
-
-                # Resolve company_id string/name to exact Business Central GUID
-                target_comp_guid = None
-                comp_list = comp_resp.get("value", []) if isinstance(comp_resp, dict) else []
-                if company_id:
-                    for c in comp_list:
-                        if c.get("id") == company_id or c.get("name") == company_id or c.get("displayName") == company_id:
-                            target_comp_guid = c.get("id")
-                            break
-                if not target_comp_guid and comp_list:
-                    target_comp_guid = comp_list[0].get("id")
-
-                if not target_comp_guid:
-                    return [], "DATA_UNAVAILABLE"
-
                 acquired: List[Dict[str, Any]] = []
 
                 if ledger_type in ("VENDOR", "BOTH"):
-                    vle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/vendorLedgerEntries")
-                    dvle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/detailedVendorLedgerEntries")
+                    vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/vendorLedgerEntries")
+                    dvle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedVendorLedgerEntries")
 
-                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) and "error" not in vle_resp else []
+                    if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
+                        logger.error(f"vendorLedgerEntries request failed: {vle_resp.get('error')}")
+                        return [], "DATA_UNAVAILABLE"
+
+                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
                     dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) and "error" not in dvle_resp else []
 
-                    resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", target_comp_guid)
+                    resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", comp_guid)
                     acquired.extend(resolved_vendor)
 
                 if ledger_type in ("CUSTOMER", "BOTH"):
-                    cle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/customerLedgerEntries")
-                    dcle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/detailedCustLedgerEntries")
+                    cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/customerLedgerEntries")
+                    dcle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedCustLedgerEntries")
 
-                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) and "error" not in cle_resp else []
+                    if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
+                        logger.error(f"customerLedgerEntries request failed: {cle_resp.get('error')}")
+                        return [], "DATA_UNAVAILABLE"
+
+                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
                     dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) and "error" not in dcle_resp else []
 
-                    resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", target_comp_guid)
+                    resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", comp_guid)
                     acquired.extend(resolved_cust)
 
                 return acquired, "LIVE_BUSINESS_CENTRAL"
-            except Exception:
+            except Exception as e:
+                logger.error(f"Payment acquisition exception: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
         if self.mode == "AUTO":
@@ -128,14 +195,11 @@ class DataAcquirer:
         """
         invoices: List[Dict[str, Any]] = []
 
-        # Step 1: Filter to Invoice ledger entries
         for le in ledger_entries:
             doc_type = str(le.get("documentType") or le.get("dvleDocumentType") or le.get("dcleDocumentType") or "")
             if doc_type in ("Invoice", "Purchase Invoice", "Sales Invoice"):
                 invoices.append(le)
 
-        # Step 2: Build detailed entry lookup maps
-        # Map detailed entries by entryNo or documentNo or applicationNo
         detailed_by_entry: Dict[str, List[Dict[str, Any]]] = {}
         for de in detailed_entries:
             key = str(de.get("appliedVendLedgerEntryNo") or de.get("appliedCustLedgerEntryNo") or de.get("vendorLedgerEntryNo") or de.get("custLedgerEntryNo") or de.get("documentNo") or "")
@@ -144,7 +208,6 @@ class DataAcquirer:
                     detailed_by_entry[key] = []
                 detailed_by_entry[key].append(de)
 
-        # Step 3: Group prior qualifying settled invoices by vendor/customer for company-scoped baseline
         history_by_account: Dict[str, List[Dict[str, Any]]] = {}
 
         for inv in invoices:
@@ -152,7 +215,6 @@ class DataAcquirer:
             acc_no = str(inv.get("vendorNumber") or inv.get("customerNumber") or inv.get("vendorNo") or inv.get("customerNo") or inv.get("accountNo") or "UNKNOWN")
             due_date = inv.get("dueDate") or inv.get("vleDueDate") or inv.get("cleDueDate")
 
-            # Resolve payment date from detailed application entries
             app_details = detailed_by_entry.get(entry_id, [])
             applying_pmts = [d for d in app_details if str(d.get("documentType") or d.get("initialDocumentType") or "").lower() == "payment"]
 
@@ -169,7 +231,6 @@ class DataAcquirer:
                     "amount": float(inv.get("amount") or inv.get("amountLCY") or 0.0)
                 })
 
-        # Step 4: Resolve each invoice transaction and attach company-scoped prior history
         resolved_records: List[Dict[str, Any]] = []
 
         for inv in invoices:

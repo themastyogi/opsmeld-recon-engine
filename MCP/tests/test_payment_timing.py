@@ -198,9 +198,12 @@ class TestPaymentTimingRulePack(unittest.TestCase):
     def test_end_to_end_bc_payload_application_resolution_path(self):
         """Integration-style test: Mocked BC payload -> Application Resolution -> Settlement Date -> Rule -> Finding."""
         mock_client = MagicMock()
+        mock_client.config.tenant_id = "TENANT_101"
+        mock_client.config.environment = "Production"
+        mock_client.config.company_name = "COMP_101"
         mock_client.get_access_token.return_value = "VALID_TOKEN"
         mock_client._execute_bc_rest.side_effect = lambda path: {
-            "companies": {"value": [{"id": "COMP_101"}]},
+            "companies": {"value": [{"id": "COMP_101", "name": "COMP_101", "displayName": "COMP_101"}]},
             "companies(COMP_101)/generalLedgerEntries": {"value": [{"id": "GL-1"}]},
             "companies(COMP_101)/vendorLedgerEntries": {
                 "value": [

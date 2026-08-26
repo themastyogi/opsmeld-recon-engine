@@ -178,17 +178,27 @@ class BCMCPClient:
                     return {"error": f"JSON-RPC Error: {res_data['error'].get('message', res_data['error'])}"}
                 return res_data.get("result", {})
         except urllib.error.HTTPError as e:
-            err_msg = e.read().decode('utf-8') if e.fp else str(e)
-            if e.code == 403 and "user is expected to be authenticated" in err_msg.lower():
-                return {
-                    "error": (
-                        "HTTP 403 Forbidden: Business Central requires User Context or Entra App Permission. "
-                        f"In Business Central, search for 'Microsoft Entra Applications', add Client ID '{self.config.app_client_id}', "
-                        "and assign User Permissions (e.g. D365 FULL ACCESS), or click '🔑 Sign In with Microsoft'."
-                    ),
-                    "value": []
-                }
-            return {"error": f"HTTP {e.code}: {err_msg}", "value": []}
+            err_body = e.read().decode('utf-8') if e.fp else str(e)
+            err_code = "HTTPError"
+            try:
+                parsed_err = json.loads(err_body)
+                if isinstance(parsed_err, dict) and "error" in parsed_err and "code" in parsed_err["error"]:
+                    err_code = parsed_err["error"]["code"]
+            except Exception:
+                pass
+
+            diag = {
+                "is_error": True,
+                "http_status": e.code,
+                "error_code": err_code,
+                "error_message": err_body,
+                "endpoint": path,
+                "tenant_id": self.config.tenant_id,
+                "environment": self.config.environment,
+                "error": f"HTTP {e.code}: {err_body}",
+                "value": []
+            }
+            return diag
         except Exception as e:
             return {"error": f"Connection Error: {str(e)}"}
 
