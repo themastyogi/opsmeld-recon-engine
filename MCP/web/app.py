@@ -253,7 +253,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
 
-        
+        # Route-level security boundary: _require_auth() enforced before company discovery or orchestrator creation
         elif path == "/api/data-trust/authorized-companies":
             session_info = self._require_auth()
             if not session_info:
