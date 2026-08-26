@@ -2,6 +2,7 @@
 Comprehensive Unit Tests for Data Trust Phase 2 — Payment Timing & Due-Date Compliance.
 Verifies settlement date priority, population filtering, single-application MVP boundaries,
 deterministic P1-P7 signals, company baseline isolation, zero LLM calls, zero BC writes, and live fail-closed propagation.
+Includes integration-style mocked Business Central payload resolution tests.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -34,7 +35,6 @@ class TestPaymentTimingRulePack(unittest.TestCase):
 
     def test_basic_timing_math_p1_early_p2_late(self):
         """Verify early payment (P1) and late payment (P2) signal math."""
-        # 1. Early payment (5 days early)
         early_context = {
             "id": "PT-TEST-1",
             "document_type": "Invoice",
@@ -51,7 +51,6 @@ class TestPaymentTimingRulePack(unittest.TestCase):
         self.assertEqual(p1["days_early"], 5)
         self.assertFalse(p2["fired"])
 
-        # 2. Late payment (8 days late)
         late_context = {
             "id": "PT-TEST-2",
             "document_type": "Invoice",
@@ -89,7 +88,7 @@ class TestPaymentTimingRulePack(unittest.TestCase):
             "document_type": "Invoice",
             "document_date": "2026-08-15",
             "due_date": "2026-08-30",
-            "payment_date": "2026-08-10",  # Payment date precedes document date
+            "payment_date": "2026-08-10",
             "application_resolved": True,
             "application_count": 1
         }
@@ -123,7 +122,6 @@ class TestPaymentTimingRulePack(unittest.TestCase):
 
     def test_historical_baseline_gating_and_exclusion(self):
         """Verify current transaction is excluded from baseline math and minimum_history=20 gate."""
-        # 1. Below 20 history -> INSUFFICIENT_EVIDENCE for historical signals
         small_context = {
             "id": "PT-TEST-7",
             "document_type": "Invoice",
@@ -138,12 +136,11 @@ class TestPaymentTimingRulePack(unittest.TestCase):
         self.assertFalse(p7_small["fired"])
         self.assertIsNone(p7_small["baseline_avg"])
 
-        # 2. Adequate history (25 prior entries) -> P4 and P7 fire cleanly
         adequate_context = {
             "id": "PT-TEST-8",
             "document_type": "Invoice",
             "due_date": "2026-08-20",
-            "payment_date": "2026-08-01",  # 19 days early (deviates from 2 days early baseline)
+            "payment_date": "2026-08-01",
             "application_resolved": True,
             "application_count": 1,
             "peer_history": [{"due_date": "2026-07-20", "payment_date": "2026-07-18"} for _ in range(25)]
@@ -174,7 +171,7 @@ class TestPaymentTimingRulePack(unittest.TestCase):
             "payment_date": "2026-08-10",
             "application_resolved": True,
             "application_count": 1,
-            "peer_history": []  # Zero history in Company B
+            "peer_history": []
         }
 
         cand_a = self.rule.evaluate(comp_a_tx, self.config)
@@ -182,10 +179,7 @@ class TestPaymentTimingRulePack(unittest.TestCase):
 
         self.assertEqual(cand_a.company, "COMPANY_A")
         self.assertEqual(cand_b.company, "COMPANY_B")
-
-        # Company A has adequate history -> baseline_avg is populated
         self.assertIsNotNone(cand_a.baseline_reference["historical_average_days"])
-        # Company B has no history -> baseline_avg is None (strictly isolated)
         self.assertIsNone(cand_b.baseline_reference["historical_average_days"])
 
     def test_zero_llm_and_read_only_safety(self):
@@ -195,11 +189,61 @@ class TestPaymentTimingRulePack(unittest.TestCase):
     def test_fail_closed_acquisition_propagation(self):
         """Verify live BC failure returns DATA_UNAVAILABLE and orchestrator propagates zero production findings."""
         mock_client = MagicMock()
-        mock_client.get_access_token.return_value = None  # Auth failure
+        mock_client.get_access_token.return_value = None
         orchestrator = DataTrustEngineOrchestrator(mcp_client=mock_client)
         res = orchestrator.run_recon()
         self.assertEqual(res["status"], "DATA_UNAVAILABLE")
         self.assertEqual(len(res["findings"]), 0)
+
+    def test_end_to_end_bc_payload_application_resolution_path(self):
+        """Integration-style test: Mocked BC payload -> Application Resolution -> Settlement Date -> Rule -> Finding."""
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+        mock_client._execute_bc_rest.side_effect = lambda path: {
+            "companies": {"value": [{"id": "COMP_101"}]},
+            "companies(COMP_101)/generalLedgerEntries": {"value": [{"id": "GL-1"}]},
+            "companies(COMP_101)/vendorLedgerEntries": {
+                "value": [
+                    {
+                        "id": "VLE-101",
+                        "vendorNumber": "V00099",
+                        "documentNumber": "PINV-99",
+                        "documentType": "Invoice",
+                        "dueDate": "2026-08-20",
+                        "amount": 50000.0
+                    }
+                ]
+            },
+            "companies(COMP_101)/detailedVendorLedgerEntries": {
+                "value": [
+                    {
+                        "appliedVendLedgerEntryNo": "VLE-101",
+                        "documentType": "Payment",
+                        "postingDate": "2026-08-11"  # 9 days early -> P1
+                    }
+                ]
+            },
+            "companies(COMP_101)/customerLedgerEntries": {"value": []},
+            "companies(COMP_101)/detailedCustLedgerEntries": {"value": []}
+        }.get(path, {"value": []})
+
+        orchestrator = DataTrustEngineOrchestrator(mcp_client=mock_client)
+        res = orchestrator.run_recon(company_id="COMP_101")
+
+        self.assertEqual(res["status"], "success")
+        self.assertGreaterEqual(len(res["findings"]), 1)
+        pt_finding = next(f for f in res["findings"] if f["rule_pack"] == "Payment Timing")
+        self.assertEqual(pt_finding["transaction_details"]["payment_date"], "2026-08-11")
+        self.assertEqual(pt_finding["transaction_details"]["due_date"], "2026-08-20")
+
+    def test_two_company_acquisition_baseline_isolation(self):
+        """Integration-style test: Proves Company A acquired records cannot enter Company B baseline."""
+        acquirer = DataAcquirer(mode="AUTO")
+        txs_a, prov_a = acquirer.acquire_payment_transactions(company_id="COMPANY_ALPHA", ledger_type="VENDOR")
+        txs_b, prov_b = acquirer.acquire_payment_transactions(company_id="COMPANY_BETA", ledger_type="VENDOR")
+
+        self.assertTrue(all(t["company_id"] == "COMPANY_ALPHA" for t in txs_a))
+        self.assertTrue(all(t["company_id"] == "COMPANY_BETA" for t in txs_b))
 
 
 if __name__ == "__main__":

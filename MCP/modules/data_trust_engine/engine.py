@@ -29,7 +29,7 @@ class DataTrustEngineOrchestrator:
             PaymentTimingRule()
         ]
 
-    def run_recon(self) -> Dict[str, Any]:
+    def run_recon(self, company_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes end-to-end reconciliation:
         DataAcquirer -> Rule Candidate -> Optional LLM -> Canonical Finding with Additive Metadata.
@@ -37,9 +37,10 @@ class DataTrustEngineOrchestrator:
         """
         start_time = time.time()
         txs, provenance = self.acquirer.acquire_transactions()
+        pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=company_id)
 
         # Fail-closed boundary check: live failure returns DATA_UNAVAILABLE with zero findings
-        if provenance == "DATA_UNAVAILABLE":
+        if provenance == "DATA_UNAVAILABLE" or pt_provenance == "DATA_UNAVAILABLE":
             return {
                 "status": "DATA_UNAVAILABLE",
                 "findings": [],
@@ -57,13 +58,22 @@ class DataTrustEngineOrchestrator:
         config["tenant_id"] = self.client_key
         candidates = []
 
+        # Standard GL rules evaluation
         for tx in txs:
             for rule in self.rules:
-                if not rule.enabled:
+                if rule.rule_id == "PAYMENT_TIMING" or not rule.enabled:
                     continue
                 cand = rule.evaluate(tx, config)
                 if cand and cand.eligibility == "ELIGIBLE":
                     candidates.append((rule, cand))
+
+        # Payment Timing rule pack evaluation
+        pt_rule = next(r for r in self.rules if r.rule_id == "PAYMENT_TIMING")
+        if pt_rule.enabled:
+            for ptx in pt_txs:
+                cand = pt_rule.evaluate(ptx, config)
+                if cand and cand.eligibility == "ELIGIBLE":
+                    candidates.append((pt_rule, cand))
 
         findings: List[DataTrustFinding] = []
         llm_calls_count = 0
@@ -117,11 +127,12 @@ class DataTrustEngineOrchestrator:
             )
             findings.append(finding)
 
+        total_scanned = len(txs) + len(pt_txs)
         return {
             "status": "success",
             "findings": [f.to_dict() for f in findings],
             "run_summary": {
-                "records_scanned": len(txs),
+                "records_scanned": total_scanned,
                 "candidates_generated": len(candidates),
                 "llm_calls": llm_calls_count,
                 "findings_generated": len(findings),
