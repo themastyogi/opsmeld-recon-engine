@@ -170,9 +170,6 @@ class DataAcquirer:
                 logger.error(f"Payment acquisition exception: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
-        if self.mode == "AUTO":
-            return self._get_fixture_payment_transactions(company_id), "SNAPSHOT_SEED"
-
         return [], "DATA_UNAVAILABLE"
 
     def _resolve_bc_payment_entries(

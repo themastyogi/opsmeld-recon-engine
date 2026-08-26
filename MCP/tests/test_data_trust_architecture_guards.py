@@ -77,12 +77,16 @@ class TestDataTrustArchitectureGuards(unittest.TestCase):
         self.assertNotIn('or "CRONUS IN"', content, "Orchestrator must not hardcode 'CRONUS IN' fallback")
 
     def test_auto_mode_no_client_returns_data_unavailable(self):
-        """Production AUTO mode without a BC client MUST return DATA_UNAVAILABLE (no silent SNAPSHOT_SEED fallback)."""
+        """Production AUTO mode without a BC client MUST return DATA_UNAVAILABLE for both G/L and Payment Timing."""
         from modules.data_trust_engine.acquisition import DataAcquirer
         acquirer = DataAcquirer(mcp_client=None, mode="AUTO")
         txs, provenance = acquirer.acquire_transactions()
         self.assertEqual(provenance, "DATA_UNAVAILABLE")
         self.assertEqual(len(txs), 0)
+
+        pt_txs, pt_provenance = acquirer.acquire_payment_transactions(company_id="SOME_COMP")
+        self.assertEqual(pt_provenance, "DATA_UNAVAILABLE")
+        self.assertEqual(len(pt_txs), 0)
 
     def test_payment_timing_uses_dynamic_environment_id(self):
         """Payment Timing transaction normalization MUST use client.config.environment instead of 'production_env'."""
