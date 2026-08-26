@@ -524,6 +524,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
+            if not company_id:
+                content_length = int(self.headers.get("Content-Length", 0))
+                if content_length > 0:
+                    body = self.rfile.read(content_length).decode("utf-8")
+                    try:
+                        data = json.loads(body)
+                        company_id = data.get("company_id")
+                    except Exception:
+                        post_data = urllib.parse.parse_qs(body)
+                        company_id = post_data.get("company_id", [None])[0]
+
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)

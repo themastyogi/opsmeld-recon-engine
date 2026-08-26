@@ -245,5 +245,61 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             self.assertNotIn(b"CRONUS IN", response_bytes)
 
 
+    def test_post_run_recon_route_level_security_and_orchestrator_delegation(self):
+        """Route-level: POST /api/data-trust/run-recon unauthenticated -> 401 + 0 orchestrator/BC calls; authenticated -> calls modular orchestrator."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+        import io, json
+
+        # Case 1: Unauthenticated POST -> 401 + 0 orchestrator calls + 0 BC calls
+        handler_unauth = MagicMock(spec=OpsmeldWebHandler)
+        handler_unauth.headers = {"Content-Length": "25"}
+        handler_unauth.rfile = io.BytesIO(b'{"company_id": "CRONUS"}')
+        handler_unauth.wfile = io.BytesIO()
+        handler_unauth.path = "/api/data-trust/run-recon"
+        handler_unauth._get_session_token.return_value = None
+        handler_unauth._get_client_key.return_value = "default_client"
+
+        handler_unauth.do_POST = OpsmeldWebHandler.do_POST.__get__(handler_unauth, OpsmeldWebHandler)
+        handler_unauth._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_unauth, OpsmeldWebHandler)
+        handler_unauth._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_unauth, OpsmeldWebHandler)
+
+        with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon, \
+             patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest") as mock_bc_rest:
+            handler_unauth.do_POST()
+            handler_unauth.send_response.assert_called_with(401)
+            self.assertEqual(mock_recon.call_count, 0, "Expected 0 orchestrator calls after POST HTTP 401")
+            self.assertEqual(mock_bc_rest.call_count, 0, "Expected 0 BC REST calls after POST HTTP 401")
+
+        # Case 2: Authenticated POST -> Modular DataTrustEngineOrchestrator called
+        handler_auth = MagicMock(spec=OpsmeldWebHandler)
+        handler_auth.headers = {"Authorization": "Bearer VALID_SESSION_TOKEN", "Content-Length": "25"}
+        handler_auth.rfile = io.BytesIO(b'{"company_id": "CRONUS"}')
+        handler_auth.wfile = io.BytesIO()
+        handler_auth.path = "/api/data-trust/run-recon"
+        handler_auth._get_session_token.return_value = "VALID_SESSION_TOKEN"
+        handler_auth._get_client_key.return_value = "default_client"
+
+        handler_auth.do_POST = OpsmeldWebHandler.do_POST.__get__(handler_auth, OpsmeldWebHandler)
+        handler_auth._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_auth, OpsmeldWebHandler)
+        handler_auth._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_auth, OpsmeldWebHandler)
+
+        expected_payload = {
+            "run_id": "DT-20260826-POST",
+            "status": "SUCCESS",
+            "findings": [],
+            "rule_status": {},
+            "message": "Complete",
+            "diagnostics": None
+        }
+
+        with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
+             patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon", return_value=expected_payload) as mock_recon_auth:
+            handler_auth.do_POST()
+            self.assertEqual(mock_recon_auth.call_count, 1)
+            response_bytes = handler_auth.wfile.getvalue()
+            self.assertIn(b'"run_id": "DT-20260826-POST"', response_bytes)
+
+
 if __name__ == "__main__":
     unittest.main()
