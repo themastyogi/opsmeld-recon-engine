@@ -6,6 +6,7 @@ and modules.data_trust remains a thin compatibility façade with zero duplicate 
 import ast
 import pathlib
 import unittest
+from unittest.mock import MagicMock
 
 
 class TestDataTrustArchitectureGuards(unittest.TestCase):
@@ -74,6 +75,38 @@ class TestDataTrustArchitectureGuards(unittest.TestCase):
         orchestrator_file = self.modular_engine_dir / "engine.py"
         content = orchestrator_file.read_text(encoding="utf-8")
         self.assertNotIn('or "CRONUS IN"', content, "Orchestrator must not hardcode 'CRONUS IN' fallback")
+
+    def test_auto_mode_no_client_returns_data_unavailable(self):
+        """Production AUTO mode without a BC client MUST return DATA_UNAVAILABLE (no silent SNAPSHOT_SEED fallback)."""
+        from modules.data_trust_engine.acquisition import DataAcquirer
+        acquirer = DataAcquirer(mcp_client=None, mode="AUTO")
+        txs, provenance = acquirer.acquire_transactions()
+        self.assertEqual(provenance, "DATA_UNAVAILABLE")
+        self.assertEqual(len(txs), 0)
+
+    def test_payment_timing_uses_dynamic_environment_id(self):
+        """Payment Timing transaction normalization MUST use client.config.environment instead of 'production_env'."""
+        from modules.data_trust_engine.acquisition import DataAcquirer
+        mock_client = MagicMock()
+        mock_client.config.environment = "Sandbox_EU"
+        acquirer = DataAcquirer(mcp_client=mock_client)
+        
+        resolved = acquirer._resolve_bc_payment_entries(
+            ledger_entries=[{"id": "INV-1", "accountNo": "V1", "dueDate": "2026-08-01", "documentType": "Invoice"}],
+            detailed_entries=[{"appliedVendLedgerEntryNo": "INV-1", "documentType": "Payment", "postingDate": "2026-07-25"}],
+            ledger_type="VENDOR",
+            company_id="COMP_GUID"
+        )
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0]["environment_id"], "Sandbox_EU")
+
+    def test_facade_fetch_live_bc_transactions_delegates_to_acquirer(self):
+        """DataTrustEngine.fetch_live_bc_transactions MUST delegate to DataAcquirer."""
+        from modules.data_trust import DataTrustEngine
+        engine = DataTrustEngine(mcp_client=None)
+        txs = engine.fetch_live_bc_transactions()
+        self.assertIsInstance(txs, list)
+        self.assertEqual(len(txs), 0)
 
 
 if __name__ == "__main__":

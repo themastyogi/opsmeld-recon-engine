@@ -278,11 +278,11 @@ class DataAcquirer:
 
     def _get_fixture_payment_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns isolated fixture payment transactions for offline testing and demo mode."""
-        comp = company_id or "CRONUS IN"
+        comp = company_id or "FIXTURE_COMPANY"
         return [
             {
                 "id": "PT-VEND-101",
-                "environment_id": "production_env",
+                "environment_id": "test_fixture_env",
                 "company_id": comp,
                 "ledger_type": "VENDOR",
                 "account_no": "V00010",

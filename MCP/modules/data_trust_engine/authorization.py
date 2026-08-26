@@ -67,7 +67,7 @@ class CompanyAccessManager:
         """
         # Rule 3: Explicitly isolated TEST/DEMO mode check
         if mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
-            target_comp = requested_company or "CRONUS IN"
+            target_comp = requested_company or "FIXTURE_COMPANY"
             return True, DataTrustState.SUCCESS, {
                 "company_id": target_comp,
                 "company_name": target_comp,

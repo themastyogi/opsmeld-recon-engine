@@ -62,7 +62,7 @@ class PaymentTimingRule(DataTrustRule):
             return None
 
         tenant = str(context.get("environment_id") or config.get("tenant_id") or "default_tenant")
-        company = str(context.get("company_id") or config.get("company_name") or "CRONUS IN")
+        company = str(context.get("company_id") or config.get("company_name") or "default_company")
         ledger_type = str(context.get("ledger_type") or "VENDOR").upper()
         account_no = str(context.get("account_no") or context.get("vendor_no") or context.get("customer_no") or "UNKNOWN")
 

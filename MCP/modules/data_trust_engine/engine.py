@@ -52,6 +52,11 @@ class DataTrustEngineOrchestrator:
         target_comp_id = auth_info.get("company_id") or company_id
         target_comp_name = auth_info.get("company_name") or auth_info.get("company_id") or company_id
 
+        if is_auth and mode not in ("TEST_FIXTURE", "DEMO_FIXTURE") and (not target_comp_id or not target_comp_name):
+            is_auth = False
+            auth_state = DataTrustState.CONFIGURATION_MISSING
+            auth_info["message"] = build_user_message(DataTrustState.CONFIGURATION_MISSING, run_id=run_id)
+
         rule_status: Dict[str, str] = {
             "POSTING_DATE": RuleExecutionStatus.NOT_RUN,
             "SUBLEDGER_BYPASS": RuleExecutionStatus.NOT_RUN,

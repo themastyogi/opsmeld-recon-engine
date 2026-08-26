@@ -25,7 +25,7 @@ class StructuredEvidence:
 @dataclass
 class SourceMetadata:
     tenant_id: str = "default_tenant"
-    company_name: str = "CRONUS IN"
+    company_name: str = "default_company"
     source_endpoint: str = ""
     retrieved_at: str = ""
     provenance_state: str = "SNAPSHOT_SEED"  # LIVE_BUSINESS_CENTRAL | SNAPSHOT_SEED | DATA_UNAVAILABLE

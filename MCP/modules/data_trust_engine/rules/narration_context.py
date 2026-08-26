@@ -194,7 +194,7 @@ class NarrationContextRule(DataTrustRule):
                 rule_id=self.rule_id,
                 rule_version=self.rule_version,
                 tenant=config.get("tenant_id", "default_tenant"),
-                company=config.get("company_name", "CRONUS IN"),
+                company=config.get("company_name") or context.get("company_id") or "default_company",
                 source_record=context,
                 eligibility="ELIGIBLE",
                 evidence_strength=finding.evidence_strength,
