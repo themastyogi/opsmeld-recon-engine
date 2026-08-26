@@ -1,6 +1,7 @@
 """
 DataTrustEngine orchestrator inside modular package data_trust_engine.
 Executes complete pipeline: rule -> candidate -> optional LLM -> canonical finding.
+Supports population routing via rule.required_data_source (GENERAL_LEDGER vs PAYMENT_TRANSACTIONS).
 """
 import time
 from typing import Optional, Dict, Any, List
@@ -32,48 +33,69 @@ class DataTrustEngineOrchestrator:
     def run_recon(self, company_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes end-to-end reconciliation:
-        DataAcquirer -> Rule Candidate -> Optional LLM -> Canonical Finding with Additive Metadata.
+        DataAcquirer -> Population Routing by rule.required_data_source -> Rule Candidate -> Optional LLM -> Canonical Finding.
         Returns execution summary dict with status and findings list.
         """
         start_time = time.time()
-        txs, provenance = self.acquirer.acquire_transactions()
-        pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=company_id)
 
-        # Fail-closed boundary check: live failure returns DATA_UNAVAILABLE with zero findings
-        if provenance == "DATA_UNAVAILABLE" or pt_provenance == "DATA_UNAVAILABLE":
-            return {
-                "status": "DATA_UNAVAILABLE",
-                "findings": [],
-                "run_summary": {
-                    "records_scanned": 0,
-                    "candidates_generated": 0,
-                    "llm_calls": 0,
-                    "findings_generated": 0,
-                    "duration_seconds": round(time.time() - start_time, 2),
-                    "data_source": "DATA_UNAVAILABLE"
+        # Categorize rules by required_data_source
+        gl_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "GENERAL_LEDGER" and r.enabled]
+        pt_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "PAYMENT_TRANSACTIONS" and r.enabled]
+
+        gl_txs: List[Dict[str, Any]] = []
+        gl_provenance = "AUTO"
+        pt_txs: List[Dict[str, Any]] = []
+        pt_provenance = "AUTO"
+
+        if gl_rules:
+            gl_txs, gl_provenance = self.acquirer.acquire_transactions()
+            if gl_provenance == "DATA_UNAVAILABLE":
+                return {
+                    "status": "DATA_UNAVAILABLE",
+                    "findings": [],
+                    "run_summary": {
+                        "records_scanned": 0,
+                        "candidates_generated": 0,
+                        "llm_calls": 0,
+                        "findings_generated": 0,
+                        "duration_seconds": round(time.time() - start_time, 2),
+                        "data_source": "DATA_UNAVAILABLE"
+                    }
                 }
-            }
+
+        if pt_rules:
+            pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=company_id)
+            if pt_provenance == "DATA_UNAVAILABLE":
+                return {
+                    "status": "DATA_UNAVAILABLE",
+                    "findings": [],
+                    "run_summary": {
+                        "records_scanned": 0,
+                        "candidates_generated": 0,
+                        "llm_calls": 0,
+                        "findings_generated": 0,
+                        "duration_seconds": round(time.time() - start_time, 2),
+                        "data_source": "DATA_UNAVAILABLE"
+                    }
+                }
 
         config = self.config_mgr.load_config()
         config["tenant_id"] = self.client_key
         candidates = []
 
-        # Standard GL rules evaluation
-        for tx in txs:
-            for rule in self.rules:
-                if rule.rule_id == "PAYMENT_TIMING" or not rule.enabled:
-                    continue
+        # Population Routing: GENERAL_LEDGER population to gl_rules
+        for tx in gl_txs:
+            for rule in gl_rules:
                 cand = rule.evaluate(tx, config)
                 if cand and cand.eligibility == "ELIGIBLE":
                     candidates.append((rule, cand))
 
-        # Payment Timing rule pack evaluation
-        pt_rule = next(r for r in self.rules if r.rule_id == "PAYMENT_TIMING")
-        if pt_rule.enabled:
-            for ptx in pt_txs:
-                cand = pt_rule.evaluate(ptx, config)
+        # Population Routing: PAYMENT_TRANSACTIONS population to pt_rules
+        for ptx in pt_txs:
+            for rule in pt_rules:
+                cand = rule.evaluate(ptx, config)
                 if cand and cand.eligibility == "ELIGIBLE":
-                    candidates.append((pt_rule, cand))
+                    candidates.append((rule, cand))
 
         findings: List[DataTrustFinding] = []
         llm_calls_count = 0
@@ -90,7 +112,6 @@ class DataTrustEngineOrchestrator:
 
             finding_id = cand.candidate_id.replace("CAND-", "")
             
-            # Determine classification and severity based on signals & rule
             classification = "Informational"
             severity = "MEDIUM"
             if any(s.get("signal_code") == "P6" and s.get("fired") for s in cand.signals):
@@ -106,6 +127,7 @@ class DataTrustEngineOrchestrator:
                 classification = "Anomaly"
                 severity = "MEDIUM"
 
+            prov = pt_provenance if rule.required_data_source == "PAYMENT_TRANSACTIONS" else gl_provenance
             finding = DataTrustFinding(
                 id=finding_id,
                 dedup_key=f"DEDUP-{finding_id}",
@@ -118,16 +140,17 @@ class DataTrustEngineOrchestrator:
                 transaction_details=cand.source_record,
                 business_impact="Requires review to verify payment timing, discount eligibility, and cash control alignment.",
                 recommended_action="Human review required",
-                data_source=provenance,
+                data_source=prov,
                 structured_evidence=cand.evidence,
                 signals=cand.signals,
-                source_metadata={"tenant_id": cand.tenant, "company": cand.company, "provenance_state": provenance},
+                source_metadata={"tenant_id": cand.tenant, "company": cand.company, "provenance_state": prov},
                 llm_metadata=llm_info,
                 rule_version=rule.rule_version
             )
             findings.append(finding)
 
-        total_scanned = len(txs) + len(pt_txs)
+        total_scanned = len(gl_txs) + len(pt_txs)
+        main_provenance = pt_provenance if pt_rules else gl_provenance
         return {
             "status": "success",
             "findings": [f.to_dict() for f in findings],
@@ -137,6 +160,6 @@ class DataTrustEngineOrchestrator:
                 "llm_calls": llm_calls_count,
                 "findings_generated": len(findings),
                 "duration_seconds": round(time.time() - start_time, 2),
-                "data_source": provenance
+                "data_source": main_provenance
             }
         }

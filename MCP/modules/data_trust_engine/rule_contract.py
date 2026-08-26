@@ -1,6 +1,7 @@
 """
 DataTrustRule abstract base class contract.
 Rules produce candidate objects, not final findings.
+Supports population routing via required_data_source.
 """
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
@@ -12,6 +13,7 @@ class DataTrustRule(ABC):
     rule_version: str = "1.0"
     rule_pack: str
     enabled: bool = True
+    required_data_source: str = "GENERAL_LEDGER"  # GENERAL_LEDGER | PAYMENT_TRANSACTIONS
 
     @abstractmethod
     def assess_eligibility(self, context: Dict[str, Any]) -> str:

@@ -14,6 +14,7 @@ class PaymentTimingRule(DataTrustRule):
     rule_version = "1.0"
     rule_pack = "Payment Timing"
     enabled = True
+    required_data_source = "PAYMENT_TRANSACTIONS"
 
     def _parse_date(self, val: Any) -> Optional[date]:
         if not val:
