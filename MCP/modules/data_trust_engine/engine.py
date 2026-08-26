@@ -35,7 +35,7 @@ class DataTrustEngineOrchestrator:
             PaymentTimingRule()
         ]
 
-    def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None, sample_transactions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None, sample_transactions: Optional[List[Dict[str, Any]]] = None, mode: str = 'AUTO') -> Dict[str, Any]:
         """
         Executes end-to-end reconciliation:
         Server Gate -> Population Routing -> Candidate Evaluation -> Canonical Finding.
@@ -45,7 +45,7 @@ class DataTrustEngineOrchestrator:
         run_id = f"DT-{datetime.date.today().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         # Step 1: Server-Side Company Authorization Gate
-        is_auth, auth_state, auth_info = self.auth_mgr.validate_company_access(self.client, company_id, session_info, run_id=run_id)
+        is_auth, auth_state, auth_info = self.auth_mgr.validate_company_access(self.client, company_id, session_info, run_id=run_id, mode=mode)
 
         target_comp_id = auth_info.get("company_id") or company_id or "CRONUS IN"
         target_comp_name = auth_info.get("company_name") or "CRONUS IN"

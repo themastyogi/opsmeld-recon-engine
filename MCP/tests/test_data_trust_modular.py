@@ -90,7 +90,7 @@ class TestDataTrustModularFramework(unittest.TestCase):
         self.assertIsInstance(legacy_res, list)
 
         orchestrator = DataTrustEngineOrchestrator(mcp_client=None)
-        orch_res = orchestrator.run_recon()
+        orch_res = orchestrator.run_recon(mode="TEST_FIXTURE")
         self.assertIsInstance(orch_res, dict)
         self.assertEqual(orch_res["status"].lower(), "success")
         self.assertIn("findings", orch_res)
@@ -153,7 +153,7 @@ class TestDataTrustModularFramework(unittest.TestCase):
     def test_orchestrator_pipeline_execution_end_to_end(self):
         """Verify end-to-end pipeline: rule -> candidate -> optional LLM -> finding."""
         orchestrator = DataTrustEngineOrchestrator(mcp_client=None)
-        res = orchestrator.run_recon()
+        res = orchestrator.run_recon(mode="TEST_FIXTURE")
         self.assertEqual(res["status"].lower(), "success")
         self.assertIn("findings", res)
         self.assertTrue(len(res["findings"]) > 0)

@@ -53,14 +53,15 @@ class CompanyAccessManager:
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Server-side company authorization gate:
-        1. Explicitly separates offline/test mode from live production.
-        2. Uses /companies as discovery to resolve company GUID.
-        3. Executes a real company-scoped BC data access test against the target company.
-        4. Rejects empty company selection (does NOT silently choose first company in multi-company environments).
-        5. Rejects unauthorized or forged company requests with ACCESS_DENIED.
+        1. Explicitly separates offline/test mode from live production authorization.
+        2. Production mode without a BC client MUST fail closed (AUTHENTICATION_UNAVAILABLE).
+        3. Uses /companies as discovery to resolve candidate company GUID.
+        4. Rejects empty company selection when ambiguous (does NOT silently choose first company).
+        5. Executes a real company-scoped BC data access test against the target company.
+        6. Rejects unauthorized or forged company requests with ACCESS_DENIED.
         """
-        # Rule 7: Explicitly separate offline/test mode from live production authorization
-        if mode in ("TEST_FIXTURE", "DEMO_FIXTURE") or not client:
+        # Rule 3: Explicitly isolated TEST/DEMO mode check
+        if mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
             target_comp = requested_company or "CRONUS IN"
             return True, DataTrustState.SUCCESS, {
                 "company_id": target_comp,
@@ -68,13 +69,20 @@ class CompanyAccessManager:
                 "is_offline_preview": True
             }
 
-        # Live Production Authorization Path
+        # Rule 3: Production mode without BC client MUST fail closed
+        if not client:
+            msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id)
+            return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {
+                "message": msg,
+                "http_status": 401
+            }
+
         token = client.get_access_token()
         if not token:
             msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id)
             return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
 
-        # Step A: Candidate Discovery
+        # Step A: Candidate Discovery via GET /companies
         comp_resp = client._execute_bc_rest("companies")
         if isinstance(comp_resp, dict) and (comp_resp.get("is_error") or "error" in comp_resp):
             status_code = comp_resp.get("http_status", 500)
@@ -91,13 +99,12 @@ class CompanyAccessManager:
             for c in raw_list if isinstance(c, dict) and c.get("id")
         ]
 
-        # Rule 6: Empty company does not silently select first company if ambiguous
+        # Rule 3: Empty company selection handling (never silently select first company if ambiguous)
         if not requested_company:
             if len(discovered) == 1:
                 target_comp_guid = discovered[0]["id"]
                 target_comp_name = discovered[0]["name"]
             elif len(discovered) > 1:
-                # Require explicit company selection in multi-company environments
                 msg = build_user_message(DataTrustState.CONFIGURATION_MISSING, run_id=run_id)
                 return False, DataTrustState.CONFIGURATION_MISSING, {
                     "message": "Multiple companies detected. Please select an explicit company for analysis.",
@@ -107,7 +114,7 @@ class CompanyAccessManager:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
         else:
-            # Match requested company against discovered companies
+            # Match requested company against candidate discovered list
             matched = [
                 c for c in discovered
                 if c["id"] == requested_company or c["name"].lower() == requested_company.lower() or c["displayName"].lower() == requested_company.lower()
@@ -125,13 +132,12 @@ class CompanyAccessManager:
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
 
         # Step B: Final Real Company-Scoped Business Central Access Verification Gate
-        # Verify access by executing a lightweight company-scoped data request
         scope_test_resp = client._execute_bc_rest(f"companies({target_comp_guid})/generalLedgerEntries?$top=1")
         if isinstance(scope_test_resp, dict) and (scope_test_resp.get("is_error") or "error" in scope_test_resp):
             status_code = scope_test_resp.get("http_status", 500)
             if status_code in (401, 403):
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
-                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
+                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": status_code}
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,

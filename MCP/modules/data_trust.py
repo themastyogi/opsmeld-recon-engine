@@ -834,7 +834,8 @@ class DataTrustEngine:
         """Legacy façade method delegating to DataTrustEngineOrchestrator inside data_trust_engine."""
         from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
         orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
-        res = orchestrator.run_recon(company_id=company_id, sample_transactions=sample_transactions)
+        mode = "TEST_FIXTURE" if self.client is None else "AUTO"
+        res = orchestrator.run_recon(company_id=company_id, sample_transactions=sample_transactions, mode=mode)
 
         if res.get("status") in ("DATA_UNAVAILABLE", "ACCESS_DENIED", "AUTHENTICATION_UNAVAILABLE", "COMPANY_NOT_FOUND"):
             return []
