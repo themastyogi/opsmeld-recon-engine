@@ -1359,7 +1359,7 @@
                             </select>
                         </td>
                         <td>
-                            <button class="btn-btn" style="background:#0E6251; font-size:0.75rem;" onclick="openDataTrustModal('${escapeHtml(f.id)}')">🔗 Inspect Evidence</button>
+                            <button class="btn-btn btn-inspect-evidence" style="background:#0E6251; font-size:0.75rem;" data-finding-id="${escapeHtml(f.id)}" onclick="openDataTrustModal('${escapeHtml(f.id)}')">🔗 Inspect Evidence</button>
                         </td>
                     </tr>`;
                 });
@@ -1438,6 +1438,21 @@
         document.getElementById('dt-evidence-modal').style.display = 'none';
         currentInspectedFindingId = null;
     }
+
+    // Ensure openDataTrustModal is attached to window and add global click handler fallback
+    window.openDataTrustModal = openDataTrustModal;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-inspect-evidence');
+        if (btn) {
+            const fid = btn.getAttribute('data-finding-id');
+            if (fid) {
+                console.log("Delegated click caught for finding:", fid);
+                openDataTrustModal(fid);
+            }
+        }
+    });
+
 
     function updateFindingStatusTable(findingId, newStatus) {
         fetch('/api/data-trust/update-status', {
