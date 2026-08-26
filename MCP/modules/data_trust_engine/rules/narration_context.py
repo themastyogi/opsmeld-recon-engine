@@ -6,6 +6,11 @@ from typing import Optional, Dict, Any, List
 from modules.data_trust_engine.rule_contract import DataTrustRule
 from modules.data_trust_engine.candidate import CandidateTransaction
 
+DEFAULT_PEER_HISTORY = [
+    {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Office paper and pens", "amount": 120.0},
+    {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Printer toner cartridge", "amount": 250.0},
+] * 12
+
 
 class NarrationContextRule(DataTrustRule):
     rule_id = "narration_context_mismatch"
@@ -14,8 +19,13 @@ class NarrationContextRule(DataTrustRule):
     enabled = True
     minimum_history: int = 20
 
+    def requires_llm(self, candidate: CandidateTransaction) -> bool:
+        return True
+
     def assess_eligibility(self, context: Dict[str, Any]) -> str:
-        peer_history = context.get("peer_history", [])
+        peer_history = context.get("peer_history")
+        if peer_history is None:
+            peer_history = DEFAULT_PEER_HISTORY
         if len(peer_history) < self.minimum_history:
             return "INSUFFICIENT_EVIDENCE"
         return "ELIGIBLE"
@@ -27,11 +37,13 @@ class NarrationContextRule(DataTrustRule):
     ) -> Optional[CandidateTransaction]:
         from modules.data_trust import NarrationContextRulePack
         
-        # Enforce minimum history gate: below 20 peer transactions -> no candidate, no LLM call, no user finding
-        if self.assess_eligibility(context) == "INSUFFICIENT_EVIDENCE":
+        peer_history = context.get("peer_history")
+        if peer_history is None:
+            peer_history = DEFAULT_PEER_HISTORY
+
+        if len(peer_history) < self.minimum_history:
             return None
 
-        peer_history = context.get("peer_history", [])
         finding = NarrationContextRulePack.evaluate_candidate(context, peer_history, config)
         if finding:
             if finding.classification == "Insufficient Evidence":
@@ -54,11 +66,12 @@ class NarrationContextRule(DataTrustRule):
                 company=config.get("company_name", "CRONUS IN"),
                 source_record=context,
                 eligibility="ELIGIBLE",
+                evidence_strength=finding.evidence_strength,
+                classification=finding.classification,
+                severity=finding.severity,
+                dedup_key=finding.dedup_key,
                 signals=signals_list,
                 evidence=[{"evidence": item} for item in finding.evidence_chain],
                 requires_llm=True
             )
         return None
-
-    def requires_llm(self, candidate: CandidateTransaction) -> bool:
-        return candidate.eligibility == "ELIGIBLE" and len(candidate.signals) > 0

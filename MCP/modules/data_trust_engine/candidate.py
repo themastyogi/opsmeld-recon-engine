@@ -15,6 +15,10 @@ class CandidateTransaction:
     source_record: Dict[str, Any]
     eligibility: str = "ELIGIBLE"  # ELIGIBLE | INSUFFICIENT_EVIDENCE | INELIGIBLE
     baseline_reference: Optional[Dict[str, Any]] = None
+    evidence_strength: Optional[str] = None
+    classification: Optional[str] = None
+    severity: Optional[str] = None
+    dedup_key: Optional[str] = None
     signals: List[Dict[str, Any]] = field(default_factory=list)
     evidence: List[Dict[str, Any]] = field(default_factory=list)
     requires_llm: bool = False

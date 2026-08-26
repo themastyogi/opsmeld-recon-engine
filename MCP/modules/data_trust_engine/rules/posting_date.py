@@ -27,6 +27,10 @@ class PostingDatePolicyRule(DataTrustRule):
                 company=config.get("company_name", "CRONUS IN"),
                 source_record=context,
                 eligibility="ELIGIBLE",
+                evidence_strength=finding.evidence_strength,
+                classification=finding.classification,
+                severity=finding.severity,
+                dedup_key=finding.dedup_key,
                 signals=[{"signal": "posting_date_policy", "fired": True}],
                 evidence=[{"evidence": item} for item in finding.evidence_chain],
                 requires_llm=False

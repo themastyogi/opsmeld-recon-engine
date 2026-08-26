@@ -830,54 +830,20 @@ class DataTrustEngine:
             self.save_stored_findings(findings)
         return updated
 
-    def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-        """Idempotently executes reconciliation rules against live Business Central data or sample fixtures."""
-        config = self.config_mgr.load_config()
-        
-        txs = sample_transactions
-        is_live_data = True
-        if txs is None:
-            if self.client:
-                txs = self.fetch_live_bc_transactions()
-                if not txs:
-                    return []
-                is_live_data = True
-            else:
-                txs = self._get_sample_transactions()
-                is_live_data = False
-        else:
-            is_live_data = False
+    def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Legacy façade method delegating to DataTrustEngineOrchestrator inside data_trust_engine."""
+        from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
+        orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
+        res = orchestrator.run_recon(company_id=company_id, sample_transactions=sample_transactions)
 
-        data_source_label = "LIVE_BUSINESS_CENTRAL" if is_live_data else "SNAPSHOT_SEED" 
+        if res.get("status") in ("DATA_UNAVAILABLE", "ACCESS_DENIED", "AUTHENTICATION_UNAVAILABLE", "COMPANY_NOT_FOUND"):
+            return []
 
-        newly_eval_findings: List[DataTrustFinding] = []
+        newly_eval_findings = res.get("findings", [])
+        if sample_transactions is not None and not newly_eval_findings:
+            return []
 
-        default_peer_history = [
-            {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Office paper and pens", "amount": 120.0},
-            {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Printer toner cartridge", "amount": 250.0},
-        ] * 12
-
-        for tx in txs:
-            pd_finding = PostingDateRulePack.evaluate_transaction(tx, config)
-            if pd_finding:
-                pd_finding.data_source = data_source_label
-                newly_eval_findings.append(pd_finding)
-
-            sb_finding = SubledgerBypassRulePack.evaluate_transaction(tx, config)
-            if sb_finding:
-                sb_finding.data_source = data_source_label
-                newly_eval_findings.append(sb_finding)
-
-            tx_peer = tx.get("peer_history")
-            if tx_peer is None:
-                tx_peer = default_peer_history
-
-            narr_finding = NarrationContextRulePack.evaluate_candidate(tx, tx_peer, config, self.client)
-            if narr_finding:
-                narr_finding.data_source = data_source_label
-                newly_eval_findings.append(narr_finding)
-
-        # Idempotent deduplication against existing stored findings with Evidence Strength escalation checks
+        # Idempotent deduplication & status merging against existing stored findings
         existing_findings_raw = self._load_from_disk()
         existing_map = {f.get("dedup_key"): f for f in existing_findings_raw if f.get("dedup_key")}
 
@@ -886,37 +852,40 @@ class DataTrustEngine:
         STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "INSUFFICIENT": 0}
 
         for new_f in newly_eval_findings:
-            d_key = new_f.dedup_key
+            d_key = new_f.get("dedup_key")
             if d_key in existing_map:
                 existing = existing_map[d_key]
                 old_strength = existing.get("evidence_strength", "INSUFFICIENT")
                 old_signals_cnt = existing.get("signals_fired_count", 0)
                 old_status = existing.get("status", "Open")
 
-                new_rank = STRENGTH_RANK.get(new_f.evidence_strength, 0)
+                new_rank = STRENGTH_RANK.get(new_f.get("evidence_strength"), 0)
                 old_rank = STRENGTH_RANK.get(old_strength, 0)
 
-                is_escalated = (new_rank > old_rank) or (new_f.signals_fired_count > old_signals_cnt)
+                is_escalated = (new_rank > old_rank) or (new_f.get("signals_fired_count", 0) > old_signals_cnt)
 
                 existing["last_evaluated_at"] = now_iso
-                existing["evidence_strength"] = new_f.evidence_strength
-                existing["severity"] = new_f.severity
-                existing["signals_fired_count"] = new_f.signals_fired_count
-                existing["transaction_details"] = new_f.transaction_details
-                existing["data_source"] = new_f.data_source
+                existing["evidence_strength"] = new_f.get("evidence_strength")
+                existing["severity"] = new_f.get("severity")
+                existing["signals_fired_count"] = new_f.get("signals_fired_count")
+                existing["transaction_details"] = new_f.get("transaction_details")
+                existing["data_source"] = new_f.get("data_source")
 
                 if is_escalated:
-                    escalation_note = f"⚡ Re-opened for Review: Evidence Strength escalated from {old_strength} ({old_signals_cnt} signals) to {new_f.evidence_strength} ({new_f.signals_fired_count} signals) on re-evaluation."
-                    existing["evidence_chain"] = [escalation_note] + new_f.evidence_chain
+                    escalation_note = f"⚡ Re-opened for Review: Evidence Strength escalated from {old_strength} ({old_signals_cnt} signals) to {new_f.get('evidence_strength')} ({new_f.get('signals_fired_count')} signals) on re-evaluation."
+                    existing["evidence_chain"] = [escalation_note] + new_f.get("evidence_chain", [])
                     if old_status in ["False Positive", "Ignored", "Confirmed"]:
                         existing["status"] = "Open"
                 else:
-                    existing["evidence_chain"] = new_f.evidence_chain
+                    existing["evidence_chain"] = new_f.get("evidence_chain", [])
 
                 merged_findings.append(existing)
             else:
-                f_dict = new_f.to_dict()
-                merged_findings.append(f_dict)
+                merged_findings.append(new_f)
+
+        for d_key, existing in existing_map.items():
+            if not any(f.get("dedup_key") == d_key for f in merged_findings):
+                merged_findings.append(existing)
 
         self.save_stored_findings(merged_findings)
         return merged_findings

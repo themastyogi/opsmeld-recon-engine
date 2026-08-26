@@ -35,7 +35,7 @@ class DataTrustEngineOrchestrator:
             PaymentTimingRule()
         ]
 
-    def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None, sample_transactions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Executes end-to-end reconciliation:
         Server Gate -> Population Routing -> Candidate Evaluation -> Canonical Finding.
@@ -97,7 +97,14 @@ class DataTrustEngineOrchestrator:
         pt_txs: List[Dict[str, Any]] = []
         pt_provenance = "AUTO"
 
-        if gl_rules:
+        if sample_transactions is not None:
+            gl_txs = sample_transactions
+            gl_provenance = "SNAPSHOT_SEED"
+            for r in gl_rules:
+                if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.SUCCESS
+                elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.SUCCESS
+                elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.SUCCESS
+        elif gl_rules:
             gl_txs, gl_provenance = self.acquirer.acquire_transactions()
             if gl_provenance == "DATA_UNAVAILABLE":
                 for r in gl_rules:
@@ -148,28 +155,29 @@ class DataTrustEngineOrchestrator:
 
             finding_id = cand.candidate_id.replace("CAND-", "")
             
-            classification = "Informational"
-            severity = "MEDIUM"
-            if any(s.get("signal_code") == "P6" and s.get("fired") for s in cand.signals):
-                classification = "Potential Data Error"
-                severity = "HIGH"
-            elif any(s.get("signal_code") == "P7" and s.get("fired") for s in cand.signals):
-                classification = "Anomaly"
-                severity = "MEDIUM"
-            elif cand.rule_id == "subledger_bypass":
-                classification = "Policy Violation"
-                severity = "HIGH"
-            elif cand.requires_llm:
-                classification = "Anomaly"
-                severity = "MEDIUM"
+            classification = cand.classification or "Informational"
+            severity = cand.severity or ("HIGH" if classification == "Policy Violation" else ("INFORMATIONAL" if classification == "Informational" else "MEDIUM"))
+            if not cand.classification and not cand.severity:
+                if any(s.get("signal_code") == "P6" and s.get("fired") for s in cand.signals):
+                    classification = "Potential Data Error"
+                    severity = "HIGH"
+                elif any(s.get("signal_code") == "P7" and s.get("fired") for s in cand.signals):
+                    classification = "Anomaly"
+                    severity = "MEDIUM"
+                elif cand.rule_id == "subledger_bypass":
+                    classification = "Policy Violation"
+                    severity = "HIGH"
+                elif cand.requires_llm:
+                    classification = "Anomaly"
+                    severity = "MEDIUM"
 
             prov = pt_provenance if rule.required_data_source == "PAYMENT_TRANSACTIONS" else gl_provenance
             finding = DataTrustFinding(
                 id=finding_id,
-                dedup_key=f"DEDUP-{finding_id}",
+                dedup_key=cand.dedup_key or f"DEDUP-{finding_id}",
                 rule_pack=rule.rule_pack,
                 classification=classification,
-                evidence_strength="HIGH" if len(cand.signals) >= 3 else ("MEDIUM" if len(cand.signals) >= 2 else "LOW"),
+                evidence_strength=cand.evidence_strength or ("HIGH" if len(cand.signals) >= 3 else ("MEDIUM" if len(cand.signals) >= 2 else "LOW")),
                 severity=severity,
                 signals_fired_count=len([s for s in cand.signals if s.get("fired")]),
                 evidence_chain=[e.get("evidence", "") for e in cand.evidence if isinstance(e, dict)],

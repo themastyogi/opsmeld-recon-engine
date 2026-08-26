@@ -1,5 +1,5 @@
 """
-Rule Pack 2 - Generic Subledger Bypass Rule implementation.
+Rule Pack 2 - Subledger Bypass Control Rule implementation.
 """
 from typing import Optional, Dict, Any
 from modules.data_trust_engine.rule_contract import DataTrustRule
@@ -27,6 +27,10 @@ class SubledgerBypassRule(DataTrustRule):
                 company=config.get("company_name", "CRONUS IN"),
                 source_record=context,
                 eligibility="ELIGIBLE",
+                evidence_strength=finding.evidence_strength,
+                classification=finding.classification,
+                severity=finding.severity,
+                dedup_key=finding.dedup_key,
                 signals=[{"signal": "subledger_bypass", "fired": True}],
                 evidence=[{"evidence": item} for item in finding.evidence_chain],
                 requires_llm=False
