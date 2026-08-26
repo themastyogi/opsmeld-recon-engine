@@ -1368,9 +1368,9 @@
             .catch(err => alert("❌ Data Trust Connection Error: " + err.message));
     }
 
-    function openDataTrustModal(findingId) {
+        function openDataTrustModal(findingId) {
         currentInspectedFindingId = findingId;
-        console.log("Loading evidence for finding:", findingId);
+        console.log("Opening Data Trust Evidence Modal for finding:", findingId);
         
         const modal = document.getElementById('dt-evidence-modal');
         if (!modal) {
@@ -1378,14 +1378,28 @@
             return;
         }
 
+        // Show modal INSTANTLY with loading state
+        const titleEl = document.getElementById('dt-modal-title');
+        if (titleEl) titleEl.innerHTML = `Finding ${escapeHtml(findingId)} <span style="font-size:0.75rem; color:#6B7280; font-weight:400;">(Loading...)</span>`;
+        
+        document.getElementById('dt-modal-classification').innerText = 'Loading...';
+        document.getElementById('dt-modal-evidence-strength').innerText = '...';
+        document.getElementById('dt-modal-rule-pack').innerText = '...';
+        document.getElementById('dt-modal-status').innerText = '...';
+        document.getElementById('dt-modal-severity-badge').innerText = '...';
+        document.getElementById('dt-modal-evidence-chain-box').innerHTML = '<div style="padding:12px; color:#6B7280; text-align:center;">⌛ Fetching originating evidence signals from engine...</div>';
+        document.getElementById('dt-modal-impact-box').innerText = 'Loading business impact statement...';
+
+        modal.style.display = 'flex';
+
         fetch(`/api/data-trust/finding-detail?id=${encodeURIComponent(findingId)}`)
             .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to retrieve finding details`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: Server returned error ${res.statusText}`);
                 return res.json();
             })
             .then(f => {
                 if (f.error) {
-                    alert("❌ Data Trust Error: " + f.error);
+                    document.getElementById('dt-modal-evidence-chain-box').innerHTML = `<div style="padding:12px; color:#DC2626; font-weight:700;">❌ ${escapeHtml(f.error)}</div>`;
                     return;
                 }
                 
@@ -1394,15 +1408,14 @@
                     '<span style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">🟢 Live BC Data</span>' : 
                     '<span style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">🟡 Snapshot / Seed Data</span>';
                 
-                const titleContainer = document.getElementById('dt-modal-title');
-                if (titleContainer) titleContainer.innerHTML = `Finding ${escapeHtml(f.id)} ${dsBadgeHtml}`;
+                if (titleEl) titleEl.innerHTML = `Finding ${escapeHtml(f.id)} ${dsBadgeHtml}`;
 
-                document.getElementById('dt-modal-classification').innerText = f.classification;
-                document.getElementById('dt-modal-evidence-strength').innerText = f.evidence_strength;
-                document.getElementById('dt-modal-rule-pack').innerText = f.rule_pack;
-                document.getElementById('dt-modal-status').innerText = f.status;
+                document.getElementById('dt-modal-classification').innerText = f.classification || 'Policy Violation';
+                document.getElementById('dt-modal-evidence-strength').innerText = f.evidence_strength || 'HIGH';
+                document.getElementById('dt-modal-rule-pack').innerText = f.rule_pack || 'General';
+                document.getElementById('dt-modal-status').innerText = f.status || 'Open';
 
-                document.getElementById('dt-modal-severity-badge').innerText = f.severity;
+                document.getElementById('dt-modal-severity-badge').innerText = f.severity || 'HIGH';
                 document.getElementById('dt-modal-severity-badge').style.background = (f.severity === 'CRITICAL' || f.severity === 'HIGH') ? '#DC2626' : (f.severity === 'MEDIUM' ? '#D97706' : '#059669');
 
                 let chainHtml = '<ol style="margin:0; padding-left:18px;">';
@@ -1414,8 +1427,10 @@
 
                 document.getElementById('dt-modal-impact-box').innerText = f.business_impact || 'No impact statement recorded.';
                 document.getElementById('dt-modal-action-box').innerText = f.recommended_action || 'Human review required (never auto-corrected)';
-
-                document.getElementById('dt-evidence-modal').style.display = 'flex';
+            })
+            .catch(err => {
+                console.error("Data Trust finding detail error:", err);
+                document.getElementById('dt-modal-evidence-chain-box').innerHTML = `<div style="padding:12px; color:#DC2626; font-weight:700;">❌ Data Trust Connection Error: ${escapeHtml(err.message)}</div>`;
             });
     }
 
