@@ -433,7 +433,7 @@
                         <div style="font-size: 1.3rem; font-weight: 800; color: #111827;" id="kpi-high-risk">$32,644.30</div>
                         <div style="font-size: 0.71rem; color: #D97706; font-weight: 600; margin-top: 4px;">Total balance on high-risk accounts 🔍</div>
                     </div>
-                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openProcedureModal('high', '30000')" title="Click for expected collections calculation basis">
+                    <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; cursor: pointer;" onclick="openExpectedBreakdownModal()" title="Click for expected collections calculation basis">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.78rem; font-weight: 600; color: #6B7280;">Expected (7 Days) ℹ️</span>
                             <span style="background: #EFF6FF; color: #2563EB; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">📅</span>
@@ -2340,64 +2340,7 @@
 
 
 
-        const modal = document.getElementById('opsmeld-datatrust-modal');
-        if (modal) {
-            if (payload.id) document.getElementById('dt-modal-id').innerText = `🚨 Data Trust Anomaly: ${payload.rule_pack || 'Policy Violation'} (${payload.id})`;
-            if (payload.transaction_details) {
-                document.getElementById('dt-doc-no').innerText = payload.transaction_details.document_no || 'N/A';
-                document.getElementById('dt-user').innerText = payload.transaction_details.user || 'N/A';
-                document.getElementById('dt-amount').innerText = `$${(Number(payload.transaction_details.amount) || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} USD`;
-                document.getElementById('dt-account').innerText = `${payload.transaction_details.account_no || ''} (${payload.transaction_details.account_name || ''})`;
-            }
-            if (payload.business_impact) document.getElementById('dt-impact').innerText = payload.business_impact;
-            if (payload.recommended_action) document.getElementById('dt-rec-action').innerText = payload.recommended_action;
-            if (payload.dedup_key) document.getElementById('dt-dedup-key').innerText = payload.dedup_key;
-
-            if (payload.evidence_chain && Array.isArray(payload.evidence_chain)) {
-                const chainEl = document.getElementById('dt-evidence-chain');
-                if (chainEl) {
-                    chainEl.innerHTML = payload.evidence_chain.map(item => `<li>${escapeHtml(item)}</li>`).join('');
-                }
-            }
-
-            modal.style.display = 'flex';
-        }
-    }
-
-    function closeDataTrustModal() {
-        const modal = document.getElementById('opsmeld-datatrust-modal');
-        if (modal) modal.style.display = 'none';
-    }
-
-
-    function openExpectedBreakdownModal() {
-        const modal = document.getElementById('opsmeld-expected-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-        } else {
-            alert('📅 Expected Collections Breakdown (Next 7 Days):\n\nTotal Expected: $10,205.06\n\nCalculation basis:\n• 3 customer accounts with upcoming due dates\n• Payment velocity history derived from BC ledger entries\n• Scheduled pre-due courtesy check triggers');
-        }
-    }
-
-
-    function updateDataSourceBadge(source) {
-        const badge = document.getElementById('data-source-badge');
-        if (badge) {
-            if (source === 'SNAPSHOT_SEED') {
-                badge.style.background = '#FEF3C7';
-                badge.style.color = '#92400E';
-                badge.style.borderColor = '#FDE68A';
-                badge.innerHTML = '🟡 Snapshot / Seed Data';
-            } else {
-                badge.style.background = '#ECFDF5';
-                badge.style.color = '#065F46';
-                badge.style.borderColor = '#A7F3D0';
-                badge.innerHTML = '🟢 Live BC Data';
-            }
-        }
-    }
-
-</script>
+        </script>
 <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
         <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 14px; margin-bottom: 18px;">
