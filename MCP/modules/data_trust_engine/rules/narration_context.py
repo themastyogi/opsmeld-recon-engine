@@ -26,16 +26,17 @@ class NarrationContextRule(DataTrustRule):
         config: Dict[str, Any]
     ) -> Optional[CandidateTransaction]:
         from modules.data_trust import NarrationContextRulePack
-        peer_history = context.get("peer_history", [])
         
-        # N1 peer gating check: if peer history < 20, N1 is not eligible
+        # Enforce minimum history gate: below 20 peer transactions -> no candidate, no LLM call, no user finding
+        if self.assess_eligibility(context) == "INSUFFICIENT_EVIDENCE":
+            return None
+
+        peer_history = context.get("peer_history", [])
         finding = NarrationContextRulePack.evaluate_candidate(context, peer_history, config)
         if finding:
             if finding.classification == "Insufficient Evidence":
-                # Do NOT produce a noisy user-facing business finding for small peer population
                 return None
 
-            # Construct explicit N1-N5 signal dictionary list
             n_count = finding.signals_fired_count
             signals_list = [
                 {"signal_code": "N1", "name": "Rare Narration", "fired": n_count >= 3},

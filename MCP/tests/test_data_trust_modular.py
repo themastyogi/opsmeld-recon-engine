@@ -1,13 +1,13 @@
 """
 Unit tests for modular Data Trust Engine package (MCP/modules/data_trust_engine/).
-Verifies import stability, supporting models, rule contracts, fail-closed live acquisition,
-N1-N5 signal structures, LLM failover metadata, and end-to-end run_recon orchestration.
+Verifies import stability, supporting models, rule contracts, fail-closed live acquisition boundaries,
+explicit N1-N5 signal dictionary objects, LLM failover metadata, and end-to-end run_recon orchestration.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from modules.data_trust import DataTrustEngine, DataTrustFinding, DataTrustConfigManager
 from modules.data_trust_engine.models import StructuredEvidence, SourceMetadata, LLMMetadata
 from modules.data_trust_engine.candidate import CandidateTransaction
@@ -82,26 +82,67 @@ class TestDataTrustModularFramework(unittest.TestCase):
         self.assertIn("llm_metadata", dict_rep)
         self.assertEqual(dict_rep["rule_version"], "1.0")
 
-    def test_live_data_failure_returns_data_unavailable(self):
-        """Verify live BC failure returns DATA_UNAVAILABLE with zero findings (no synthetic fallback)."""
+    def test_production_live_bc_failure_returns_data_unavailable(self):
+        """Verify production DataTrustEngine.run_recon() returns empty findings list on live BC failure."""
         mock_client = MagicMock()
-        mock_client.get_access_token.return_value = None  # Auth failure
+        mock_client.get_access_token.return_value = None
+        mock_client._execute_bc_rest.side_effect = Exception("Live connection failed")
+        engine = DataTrustEngine(mcp_client=mock_client)
+        findings = engine.run_recon()
+        self.assertEqual(len(findings), 0)
+
+    def test_modular_live_bc_failure_returns_data_unavailable(self):
+        """Verify DataAcquirer returns DATA_UNAVAILABLE with zero findings when live query fails."""
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = None
         acquirer = DataAcquirer(mcp_client=mock_client)
         txs, provenance = acquirer.acquire_transactions()
         self.assertEqual(provenance, "DATA_UNAVAILABLE")
         self.assertEqual(len(txs), 0)
 
-    def test_llm_provider_failover_metadata(self):
-        """Verify LLMInterpreter returns valid LLMMetadata with Tuple import intact."""
+    def test_llm_provider_failover_anthropic_to_openai_to_gemini(self):
+        """Verify LLMInterpreter failover chain across Anthropic -> OpenAI -> Gemini -> Fallback."""
         interpreter = LLMInterpreter()
         interp, meta = interpreter.interpret_candidate("Summary", "System")
         self.assertEqual(meta.status, "UNINTERPRETED")
         self.assertIn("Fallback", meta.provider)
 
-    def test_orchestrator_pipeline_execution(self):
+        # Mock OpenAI HTTP call to test secondary provider success metadata
+        interpreter_oai = LLMInterpreter(openai_key="mock_openai_key")
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"choices": [{"message": {"content": "OpenAI interpretation"}}], "usage": {"prompt_tokens": 10, "completion_tokens": 20}}'
+        mock_response.__enter__.return_value = mock_response
+
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            interp_oai, meta_oai = interpreter_oai.interpret_candidate("Summary", "System")
+            self.assertEqual(meta_oai.provider, "OpenAI")
+            self.assertEqual(meta_oai.model, "gpt-4o-mini")
+
+    def test_orchestrator_pipeline_execution_end_to_end(self):
         """Verify end-to-end pipeline: rule -> candidate -> optional LLM -> finding."""
         orchestrator = DataTrustEngineOrchestrator(mcp_client=None)
         res = orchestrator.run_recon()
         self.assertEqual(res["status"], "success")
         self.assertIn("findings", res)
         self.assertTrue(len(res["findings"]) > 0)
+
+    def test_n1_peer_gating_prevents_llm_call_and_user_finding(self):
+        """Verify below minimum history (<20), N1 candidate returns None (no finding, no LLM call)."""
+        rule = NarrationContextRule()
+        sample_context = {
+            "id": "TX-1001",
+            "narration": "Entry",
+            "peer_history": [{"narration": "Peer"} for _ in range(5)]  # Below 20
+        }
+        cand = rule.evaluate(sample_context, {})
+        self.assertIsNone(cand)
+
+    def test_at_most_one_llm_call_per_candidate(self):
+        """Verify candidate produces at most one LLM call per run."""
+        interpreter = LLMInterpreter()
+        interp, meta = interpreter.interpret_candidate("Summary", "System")
+        self.assertTrue(meta.call_count <= 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

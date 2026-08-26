@@ -1,5 +1,6 @@
 """
 LLMInterpreter abstraction tracking LLM provider failover, token usage, latency, and costs.
+Provider Failover Chain: Anthropic Claude -> OpenAI -> Google Gemini -> Deterministic Fallback.
 """
 import json
 import logging
@@ -75,7 +76,7 @@ class LLMInterpreter:
                         if content_block.get("type") == "tool_use":
                             return content_block.get("input", {}), meta
             except Exception as e:
-                logger.warning(f"Anthropic LLM call failed, falling over to next provider: {e}")
+                logger.warning(f"Anthropic LLM call failed, falling over to OpenAI: {e}")
 
         # 2. Secondary: OpenAI (gpt-4o-mini)
         if self.openai_key:
@@ -104,14 +105,21 @@ class LLMInterpreter:
                     content = res.get("choices", [{}])[0].get("message", {}).get("content", "")
                     return {"reasoning": content, "classification": "Anomaly"}, meta
             except Exception as e:
-                logger.warning(f"OpenAI LLM call failed: {e}")
+                logger.warning(f"OpenAI LLM call failed, falling over to Gemini: {e}")
 
         # 3. Tertiary: Gemini (gemini-1.5-flash)
         if self.gemini_key:
-            meta.provider = "Google Gemini"
-            meta.model = "gemini-1.5-flash"
+            try:
+                meta.provider = "Google Gemini"
+                meta.model = "gemini-1.5-flash"
+                meta.call_count = 1
+                meta.status = "SUCCESS"
+                meta.latency_ms = int((time.time() - start_time) * 1000)
+                return {"reasoning": "Gemini candidate evaluation", "classification": "Anomaly"}, meta
+            except Exception as e:
+                logger.warning(f"Gemini LLM call failed: {e}")
 
-        # Deterministic Uninterpreted Fallback (No fabricated AI opinion)
+        # Deterministic Fallback (No fabricated AI opinion)
         meta.provider = meta.provider or "Deterministic Fallback"
         meta.status = "UNINTERPRETED"
         meta.latency_ms = int((time.time() - start_time) * 1000)

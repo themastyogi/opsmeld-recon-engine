@@ -837,8 +837,12 @@ class DataTrustEngine:
         txs = sample_transactions
         is_live_data = True
         if txs is None:
-            txs = self.fetch_live_bc_transactions()
-            if not txs:
+            if self.client:
+                txs = self.fetch_live_bc_transactions()
+                if not txs:
+                    return []
+                is_live_data = True
+            else:
                 txs = self._get_sample_transactions()
                 is_live_data = False
         else:
