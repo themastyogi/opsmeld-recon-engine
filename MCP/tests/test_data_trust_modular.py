@@ -135,18 +135,20 @@ class TestDataTrustModularFramework(unittest.TestCase):
 
     def test_llm_provider_failover_anthropic_fails_openai_fails_gemini_succeeds(self):
         """Verify end-to-end 3-provider failover chain: Anthropic fails -> OpenAI fails -> Gemini succeeds."""
+        import logging
         interpreter = LLMInterpreter(
             anthropic_key="bad_anthropic_key",
             openai_key="bad_openai_key",
             gemini_key="valid_gemini_key"
         )
         # Force HTTP calls for Anthropic and OpenAI to raise exceptions (failover trigger)
-        with patch("urllib.request.urlopen", side_effect=Exception("API Connection Timeout")):
-            interp, meta = interpreter.interpret_candidate("Summary text", "System prompt")
-            self.assertEqual(meta.provider, "Google Gemini")
-            self.assertEqual(meta.model, "gemini-1.5-flash")
-            self.assertEqual(meta.status, "SUCCESS")
-            self.assertEqual(interp.get("classification"), "Anomaly")
+        with patch("urllib.request.urlopen", side_effect=Exception("Mocked API Connection Timeout")):
+            with patch.object(logging.getLogger("modules.data_trust_engine.llm_interpreter"), "warning"):
+                interp, meta = interpreter.interpret_candidate("Summary text", "System prompt")
+                self.assertEqual(meta.provider, "Google Gemini")
+                self.assertEqual(meta.model, "gemini-1.5-flash")
+                self.assertEqual(meta.status, "SUCCESS")
+                self.assertEqual(interp.get("classification"), "Anomaly")
 
     def test_orchestrator_pipeline_execution_end_to_end(self):
         """Verify end-to-end pipeline: rule -> candidate -> optional LLM -> finding."""
