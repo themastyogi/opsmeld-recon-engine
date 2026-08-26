@@ -1,7 +1,8 @@
 """
 Unit tests for modular Data Trust Engine package (MCP/modules/data_trust_engine/).
 Verifies import stability, supporting models, rule contracts, fail-closed live acquisition boundaries,
-explicit N1-N5 signal dictionary objects, LLM failover metadata, and end-to-end run_recon orchestration.
+explicit N1-N5 signal dictionary objects, LLM failover metadata, contract distinction between legacy facade and orchestrator,
+and end-to-end Anthropic -> OpenAI -> Gemini -> Fallback provider failover execution.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -82,6 +83,20 @@ class TestDataTrustModularFramework(unittest.TestCase):
         self.assertIn("llm_metadata", dict_rep)
         self.assertEqual(dict_rep["rule_version"], "1.0")
 
+    def test_facade_and_orchestrator_return_type_contract_distinction(self):
+        """Verify legacy facade returns List[Dict] while modular orchestrator returns Dict execution summary."""
+        legacy_engine = DataTrustEngine(mcp_client=None)
+        legacy_res = legacy_engine.run_recon()
+        self.assertIsInstance(legacy_res, list)
+
+        orchestrator = DataTrustEngineOrchestrator(mcp_client=None)
+        orch_res = orchestrator.run_recon()
+        self.assertIsInstance(orch_res, dict)
+        self.assertEqual(orch_res["status"], "success")
+        self.assertIn("findings", orch_res)
+        self.assertIn("run_summary", orch_res)
+        self.assertIsInstance(orch_res["findings"], list)
+
     def test_production_live_bc_failure_returns_data_unavailable(self):
         """Verify production DataTrustEngine.run_recon() returns empty findings list on live BC failure."""
         mock_client = MagicMock()
@@ -117,6 +132,21 @@ class TestDataTrustModularFramework(unittest.TestCase):
             interp_oai, meta_oai = interpreter_oai.interpret_candidate("Summary", "System")
             self.assertEqual(meta_oai.provider, "OpenAI")
             self.assertEqual(meta_oai.model, "gpt-4o-mini")
+
+    def test_llm_provider_failover_anthropic_fails_openai_fails_gemini_succeeds(self):
+        """Verify end-to-end 3-provider failover chain: Anthropic fails -> OpenAI fails -> Gemini succeeds."""
+        interpreter = LLMInterpreter(
+            anthropic_key="bad_anthropic_key",
+            openai_key="bad_openai_key",
+            gemini_key="valid_gemini_key"
+        )
+        # Force HTTP calls for Anthropic and OpenAI to raise exceptions (failover trigger)
+        with patch("urllib.request.urlopen", side_effect=Exception("API Connection Timeout")):
+            interp, meta = interpreter.interpret_candidate("Summary text", "System prompt")
+            self.assertEqual(meta.provider, "Google Gemini")
+            self.assertEqual(meta.model, "gemini-1.5-flash")
+            self.assertEqual(meta.status, "SUCCESS")
+            self.assertEqual(interp.get("classification"), "Anomaly")
 
     def test_orchestrator_pipeline_execution_end_to_end(self):
         """Verify end-to-end pipeline: rule -> candidate -> optional LLM -> finding."""
