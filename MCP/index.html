@@ -778,7 +778,7 @@
             <!-- DATA TRUST EXPERT VIEW -->
             <div id="view-data-trust" style="display: none;">
                 <!-- Data Trust Page Title & Audit Action Header -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div>
                         <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: #111827;">🛡️ Data Trust Expert</h2>
                         <div style="font-size: 0.88rem; color: #6B7280; margin-top: 4px;">Continuous Business Central transaction audit, posting-date compliance, subledger bypass detection & narration mismatch interpretation.</div>
@@ -788,6 +788,24 @@
                         <a href="/settings" target="_blank" class="btn-btn" style="background: #4B5563; color: white; text-decoration: none;">⚙️ Rule Pack Settings</a>
                     </div>
                 </div>
+
+                <!-- Environment & Company Context Indicator Banner -->
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: #334155;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <span>🌐 Environment: <strong style="color: #4F46E5;">Production</strong></span>
+                        <span>🏢 Company: 
+                            <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 4px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; font-weight: 700; background: white; color: #0F172A;">
+                                <option value="CRONUS IN">CRONUS IN (CRONUS India)</option>
+                            </select>
+                        </span>
+                    </div>
+                    <div style="font-size: 0.78rem; color: #64748B;">
+                        🔒 Server-Scoped Company Authorization Active
+                    </div>
+                </div>
+
+                <!-- Platform State Model Banner Container -->
+                <div id="dt-state-banner-container" style="display: none; margin-bottom: 20px;"></div>
 
                 <!-- Summary Dashboard Cards -->
                 <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;">
@@ -2383,7 +2401,107 @@
 
 
 
-        </script>
+        
+    // Opsmeld Data Trust Platform UX JavaScript Functions
+    function loadAuthorizedCompanies() {
+        fetch('/api/data-trust/authorized-companies')
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById('dt-company-select');
+                if (select && data.companies && data.companies.length > 0) {
+                    select.innerHTML = '';
+                    data.companies.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c.id || c.name;
+                        opt.textContent = `${c.name} (${c.displayName || c.name})`;
+                        select.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.log('Company discovery fallback to active context'));
+    }
+
+    function onCompanySelectChange(selectedCompany) {
+        // Instant State Clearing: Clear visible Company A data immediately
+        clearDataTrustStateDisplay();
+        
+        // Show loading banner
+        renderPlatformStateBanner('LOADING', `Loading selected company data for ${selectedCompany}...`);
+
+        // Run recon for selected company
+        runDataTrustRecon(selectedCompany);
+    }
+
+    function clearDataTrustStateDisplay() {
+        const tbody = document.getElementById('dt-findings-tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 24px; color: #6B7280;">🔄 Loading selected company data...</td></tr>`;
+        }
+        document.getElementById('dt-summary-total').innerText = '0';
+        document.getElementById('dt-summary-violations').innerText = '0';
+        document.getElementById('dt-summary-anomalies').innerText = '0';
+        document.getElementById('dt-summary-errors').innerText = '0';
+        document.getElementById('dt-summary-info').innerText = '0';
+        document.getElementById('dt-summary-insufficient').innerText = '0';
+        
+        const banner = document.getElementById('dt-state-banner-container');
+        if (banner) banner.style.display = 'none';
+    }
+
+    function renderPlatformStateBanner(status, message, runId, diagnostics) {
+        const container = document.getElementById('dt-state-banner-container');
+        if (!container) return;
+
+        if (status === 'SUCCESS' || status === 'NO_FINDINGS') {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        let bg = '#EFF6FF', border = '#BFDBFE', color = '#1E40AF', title = 'ℹ️ Data Trust Status';
+
+        if (status === 'ACCESS_DENIED' || status === 'AUTHENTICATION_UNAVAILABLE') {
+            bg = '#FEF2F2'; border = '#FCA5A5'; color = '#991B1B'; title = '🔒 Access Restricted';
+        } else if (status === 'DATA_UNAVAILABLE' || status === 'DATA_REQUEST_INVALID') {
+            bg = '#FFFBEB'; border = '#FDE68A'; color = '#92400E'; title = '⚠️ Data Retrieval Unavailable';
+        } else if (status === 'PARTIAL') {
+            bg = '#F0FDF4'; border = '#BBF2D0'; color = '#166534'; title = '⚠️ Partial Analysis Completed';
+        } else if (status === 'INSUFFICIENT_EVIDENCE') {
+            bg = '#F8FAFC'; border = '#E2E8F0'; color = '#475569'; title = '⚪ Insufficient Evidence';
+        }
+
+        let refText = runId ? `<div style="font-size: 0.78rem; font-weight: 700; margin-top: 4px;">Reference ID: ${runId}</div>` : '';
+
+        let diagHtml = '';
+        if (diagnostics) {
+            diagHtml = `
+                <details style="margin-top: 8px; font-size: 0.78rem; color: #475569;">
+                    <summary style="cursor: pointer; font-weight: 700;">🔧 Admin Diagnostic Details</summary>
+                    <div style="background: white; padding: 8px 12px; border-radius: 6px; border: 1px solid #E2E8F0; margin-top: 4px;" class="mono">
+                        <div>HTTP Status: ${diagnostics.http_status || 'N/A'}</div>
+                        <div>Endpoint: ${diagnostics.endpoint || 'N/A'}</div>
+                        <div>Error Code: ${diagnostics.error_code || 'N/A'}</div>
+                    </div>
+                </details>
+            `;
+        }
+
+        container.innerHTML = `
+            <div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 14px 18px; color: ${color};">
+                <div style="font-weight: 800; font-size: 0.95rem;">${title}</div>
+                <div style="font-size: 0.85rem; margin-top: 4px; line-height: 1.4;">${message}</div>
+                ${refText}
+                ${diagHtml}
+            </div>
+        `;
+    }
+
+    // Call loadAuthorizedCompanies on window load
+    window.addEventListener('DOMContentLoaded', () => {
+        loadAuthorizedCompanies();
+    });
+
+    </script>
 <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">
         <div class="modal-box" style="width: 580px; text-align: left; padding: 28px;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E5E7EB; padding-bottom: 14px; margin-bottom: 18px;">

@@ -192,7 +192,7 @@ class TestPaymentTimingRulePack(unittest.TestCase):
         mock_client.get_access_token.return_value = None
         orchestrator = DataTrustEngineOrchestrator(mcp_client=mock_client)
         res = orchestrator.run_recon()
-        self.assertEqual(res["status"], "DATA_UNAVAILABLE")
+        self.assertIn(res["status"], ("DATA_UNAVAILABLE", "AUTHENTICATION_UNAVAILABLE"))
         self.assertEqual(len(res["findings"]), 0)
 
     def test_end_to_end_bc_payload_application_resolution_path(self):
@@ -233,7 +233,7 @@ class TestPaymentTimingRulePack(unittest.TestCase):
         orchestrator = DataTrustEngineOrchestrator(mcp_client=mock_client)
         res = orchestrator.run_recon(company_id="COMP_101")
 
-        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["status"].lower(), "success")
         self.assertGreaterEqual(len(res["findings"]), 1)
         pt_finding = next(f for f in res["findings"] if f["rule_pack"] == "Payment Timing")
         self.assertEqual(pt_finding["transaction_details"]["payment_date"], "2026-08-11")

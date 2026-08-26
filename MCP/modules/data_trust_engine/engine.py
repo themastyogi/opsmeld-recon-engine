@@ -1,14 +1,18 @@
 """
 DataTrustEngine orchestrator inside modular package data_trust_engine.
-Executes complete pipeline: rule -> candidate -> optional LLM -> canonical finding.
-Supports population routing via rule.required_data_source (GENERAL_LEDGER vs PAYMENT_TRANSACTIONS).
+Executes complete pipeline: authorization gate -> population routing -> rule candidates -> optional LLM -> canonical finding.
+Generates unique run_id correlation IDs, per-rule execution status tracking, and server-authorized diagnostic models.
 """
+import datetime
 import time
+import uuid
 from typing import Optional, Dict, Any, List
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config
 from modules.data_trust import DataTrustFinding, DataTrustConfigManager
 from modules.data_trust_engine.acquisition import DataAcquirer
+from modules.data_trust_engine.authorization import CompanyAccessManager
+from modules.data_trust_engine.company_context import DataTrustState, RuleExecutionStatus, build_user_message
 from modules.data_trust_engine.llm_interpreter import LLMInterpreter
 from modules.data_trust_engine.rules.posting_date import PostingDatePolicyRule
 from modules.data_trust_engine.rules.subledger_bypass import SubledgerBypassRule
@@ -21,6 +25,7 @@ class DataTrustEngineOrchestrator:
         self.client = mcp_client
         self.client_key = client_key or load_client_config().client_key
         self.acquirer = DataAcquirer(mcp_client=mcp_client)
+        self.auth_mgr = CompanyAccessManager()
         self.interpreter = LLMInterpreter()
         self.config_mgr = DataTrustConfigManager(self.client_key)
         self.rules = [
@@ -30,15 +35,60 @@ class DataTrustEngineOrchestrator:
             PaymentTimingRule()
         ]
 
-    def run_recon(self, company_id: Optional[str] = None) -> Dict[str, Any]:
+    def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Executes end-to-end reconciliation:
-        DataAcquirer -> Population Routing by rule.required_data_source -> Rule Candidate -> Optional LLM -> Canonical Finding.
-        Returns execution summary dict with status and findings list.
+        Server Gate -> Population Routing -> Candidate Evaluation -> Canonical Finding.
+        Returns rich structured execution response.
         """
         start_time = time.time()
+        run_id = f"DT-{datetime.date.today().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
-        # Categorize rules by required_data_source
+        # Step 1: Server-Side Company Authorization Gate
+        is_auth, auth_state, auth_info = self.auth_mgr.validate_company_access(self.client, company_id, session_info, run_id=run_id)
+
+        target_comp_id = auth_info.get("company_id") or company_id or "CRONUS IN"
+        target_comp_name = auth_info.get("company_name") or "CRONUS IN"
+
+        rule_status: Dict[str, str] = {
+            "POSTING_DATE": RuleExecutionStatus.NOT_RUN,
+            "SUBLEDGER_BYPASS": RuleExecutionStatus.NOT_RUN,
+            "NARRATION_CONTEXT": RuleExecutionStatus.NOT_RUN,
+            "PAYMENT_TIMING": RuleExecutionStatus.NOT_RUN
+        }
+
+        if not is_auth:
+            user_msg = auth_info.get("message") or build_user_message(auth_state, run_id=run_id)
+            diag = None
+            if auth_info.get("http_status"):
+                diag = {
+                    "http_status": auth_info.get("http_status"),
+                    "error_code": "AccessDenied",
+                    "error_message": user_msg,
+                    "endpoint": "companies",
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            return {
+                "run_id": run_id,
+                "status": auth_state,
+                "tenant_id": self.client_key,
+                "company_id": target_comp_id,
+                "company_name": target_comp_name,
+                "findings": [],
+                "rule_status": {k: RuleExecutionStatus.ACCESS_DENIED for k in rule_status},
+                "message": user_msg,
+                "diagnostics": diag,
+                "run_summary": {
+                    "records_scanned": 0,
+                    "candidates_generated": 0,
+                    "llm_calls": 0,
+                    "findings_generated": 0,
+                    "duration_seconds": round(time.time() - start_time, 2),
+                    "data_source": "DATA_UNAVAILABLE"
+                }
+            }
+
+        # Step 2: Population Routing by rule.required_data_source
         gl_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "GENERAL_LEDGER" and r.enabled]
         pt_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "PAYMENT_TRANSACTIONS" and r.enabled]
 
@@ -50,47 +100,33 @@ class DataTrustEngineOrchestrator:
         if gl_rules:
             gl_txs, gl_provenance = self.acquirer.acquire_transactions()
             if gl_provenance == "DATA_UNAVAILABLE":
-                return {
-                    "status": "DATA_UNAVAILABLE",
-                    "findings": [],
-                    "run_summary": {
-                        "records_scanned": 0,
-                        "candidates_generated": 0,
-                        "llm_calls": 0,
-                        "findings_generated": 0,
-                        "duration_seconds": round(time.time() - start_time, 2),
-                        "data_source": "DATA_UNAVAILABLE"
-                    }
-                }
+                for r in gl_rules:
+                    if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.DATA_UNAVAILABLE
+                    elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.DATA_UNAVAILABLE
+                    elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.DATA_UNAVAILABLE
+            else:
+                for r in gl_rules:
+                    if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.SUCCESS
+                    elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.SUCCESS
+                    elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.SUCCESS
 
         if pt_rules:
-            pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=company_id)
+            pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=target_comp_id)
             if pt_provenance == "DATA_UNAVAILABLE":
-                return {
-                    "status": "DATA_UNAVAILABLE",
-                    "findings": [],
-                    "run_summary": {
-                        "records_scanned": 0,
-                        "candidates_generated": 0,
-                        "llm_calls": 0,
-                        "findings_generated": 0,
-                        "duration_seconds": round(time.time() - start_time, 2),
-                        "data_source": "DATA_UNAVAILABLE"
-                    }
-                }
+                rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.DATA_UNAVAILABLE
+            else:
+                rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.SUCCESS
 
         config = self.config_mgr.load_config()
         config["tenant_id"] = self.client_key
         candidates = []
 
-        # Population Routing: GENERAL_LEDGER population to gl_rules
         for tx in gl_txs:
             for rule in gl_rules:
                 cand = rule.evaluate(tx, config)
                 if cand and cand.eligibility == "ELIGIBLE":
                     candidates.append((rule, cand))
 
-        # Population Routing: PAYMENT_TRANSACTIONS population to pt_rules
         for ptx in pt_txs:
             for rule in pt_rules:
                 cand = rule.evaluate(ptx, config)
@@ -149,11 +185,36 @@ class DataTrustEngineOrchestrator:
             )
             findings.append(finding)
 
+        # Step 3: Determine overall execution status
+        unavail_count = sum(1 for st in rule_status.values() if st == RuleExecutionStatus.DATA_UNAVAILABLE)
+        success_count = sum(1 for st in rule_status.values() if st == RuleExecutionStatus.SUCCESS)
+
+        if unavail_count == len(rule_status):
+            overall_status = DataTrustState.DATA_UNAVAILABLE
+            message = build_user_message(DataTrustState.DATA_UNAVAILABLE, run_id=run_id)
+        elif unavail_count > 0 and success_count > 0:
+            overall_status = DataTrustState.PARTIAL
+            message = build_user_message(DataTrustState.PARTIAL, run_id=run_id, detail=f" {unavail_count} rule pack(s) unavailable.")
+        elif len(findings) == 0:
+            overall_status = DataTrustState.NO_FINDINGS
+            message = build_user_message(DataTrustState.NO_FINDINGS, run_id=run_id)
+        else:
+            overall_status = DataTrustState.SUCCESS
+            message = build_user_message(DataTrustState.SUCCESS, run_id=run_id)
+
         total_scanned = len(gl_txs) + len(pt_txs)
         main_provenance = pt_provenance if pt_rules else gl_provenance
+
         return {
-            "status": "success",
+            "run_id": run_id,
+            "status": overall_status,
+            "tenant_id": self.client_key,
+            "company_id": target_comp_id,
+            "company_name": target_comp_name,
             "findings": [f.to_dict() for f in findings],
+            "rule_status": rule_status,
+            "message": message,
+            "diagnostics": None,  # Clean runs omit diagnostics
             "run_summary": {
                 "records_scanned": total_scanned,
                 "candidates_generated": len(candidates),

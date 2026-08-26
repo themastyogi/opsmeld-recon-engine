@@ -1,3 +1,5 @@
+from modules.data_trust_engine.authorization import CompanyAccessManager
+from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
 """
 Opsmeld Reconciliation Engine - Web Console App Handler
 Lightweight HTTP web app and routing server supporting report generation and fix staging APIs.
@@ -250,6 +252,31 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             is_auth = self._is_authenticated()
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
+
+        
+        elif path == "/api/data-trust/authorized-companies":
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            client = BCMCPClient(config)
+            mgr = CompanyAccessManager()
+            discovered = mgr.get_discovered_companies(client)
+            if not discovered:
+                # Provide fallback CRONUS IN candidate if offline preview
+                discovered = [{"id": "CRONUS IN", "name": "CRONUS IN", "displayName": "CRONUS India"}]
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps({"companies": discovered}).encode("utf-8"))
+
+        elif path == "/api/data-trust/run-recon":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            company_id = query_params.get("company_id", [None])[0]
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            client = BCMCPClient(config)
+            session_info = self._require_auth()
+            orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
+            res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
