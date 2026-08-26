@@ -903,6 +903,7 @@ class DataTrustEngine:
                 existing["severity"] = new_f.severity
                 existing["signals_fired_count"] = new_f.signals_fired_count
                 existing["transaction_details"] = new_f.transaction_details
+                existing["data_source"] = new_f.data_source
 
                 if is_escalated:
                     escalation_note = f"⚡ Re-opened for Review: Evidence Strength escalated from {old_strength} ({old_signals_cnt} signals) to {new_f.evidence_strength} ({new_f.signals_fired_count} signals) on re-evaluation."
