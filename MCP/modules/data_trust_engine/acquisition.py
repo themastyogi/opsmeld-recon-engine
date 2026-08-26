@@ -89,8 +89,8 @@ class DataAcquirer:
         Live production runs NEVER fall back to synthetic fixtures.
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
-            from modules.data_trust import DataTrustEngine
-            return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
+            from modules.data_trust_engine.fixtures import get_sample_transactions
+            return get_sample_transactions(), "SNAPSHOT_SEED"
 
         if self.client:
             token = self.client.get_access_token()
@@ -111,8 +111,8 @@ class DataAcquirer:
                 return [], "DATA_UNAVAILABLE"
 
         if self.mode == "AUTO":
-            from modules.data_trust import DataTrustEngine
-            return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
+            from modules.data_trust_engine.fixtures import get_sample_transactions
+            return get_sample_transactions(), "SNAPSHOT_SEED"
 
         return [], "DATA_UNAVAILABLE"
 

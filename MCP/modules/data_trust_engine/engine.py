@@ -9,7 +9,8 @@ import uuid
 from typing import Optional, Dict, Any, List
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config
-from modules.data_trust import DataTrustFinding, DataTrustConfigManager
+from modules.data_trust_engine.models import DataTrustFinding
+from modules.data_trust_engine.config import DataTrustConfigManager
 from modules.data_trust_engine.acquisition import DataAcquirer
 from modules.data_trust_engine.authorization import CompanyAccessManager
 from modules.data_trust_engine.company_context import DataTrustState, RuleExecutionStatus, build_user_message
