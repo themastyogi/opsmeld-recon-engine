@@ -1018,8 +1018,10 @@ class DataTrustEngine:
                 "user": "JSMITH",
                 "source_code": "PURCHASES",
                 "document_type": "Purchase Invoice",
-                "narration": "Executive travel flights and lodging",
-                "peer_history": adequate_peer_history
+                "narration": "Flight tickets and hotel accommodation",
+                "peer_history": [
+                    {"account_no": "60500", "vendor_name": "Global Travel Corp", "narration": "Flight tickets and hotel accommodation", "amount": 185.0}
+                ] * 20
             },
             # TX-1006: Hard-gated Baseline Candidate (Rule Pack 3 ONLY) -> INSUFFICIENT EVIDENCE (peer count 4 < 20)
             {
