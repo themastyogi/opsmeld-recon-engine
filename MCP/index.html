@@ -1136,7 +1136,8 @@
             <!-- Status Workflow Transition Buttons -->
             <div style="border-top: 1px solid #E5E7EB; padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 0.85rem; font-weight: 600; color: #374151;">Update Finding Status Workflow:</span>
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn-btn" style="background: #4F46E5; color: white; font-weight: 700;" onclick="openFindingInBC()">Open in Business Central ↗</button>
                     <button class="btn-btn" style="background: #2563EB; color: white;" onclick="updateFindingStatusModal('Under Review')">Mark Under Review</button>
                     <button class="btn-btn" style="background: #059669; color: white;" onclick="updateFindingStatusModal('Confirmed')">Confirm Finding</button>
                     <button class="btn-btn" style="background: #D97706; color: white;" onclick="updateFindingStatusModal('False Positive')">Mark False Positive</button>
@@ -1364,16 +1365,27 @@
                 });
                 tbody.innerHTML = html;
             })
-            .catch(err => console.error("Error loading Data Trust findings:", err));
+            .catch(err => alert("❌ Data Trust Connection Error: " + err.message));
     }
 
     function openDataTrustModal(findingId) {
         currentInspectedFindingId = findingId;
+        console.log("Loading evidence for finding:", findingId);
+        
+        const modal = document.getElementById('dt-evidence-modal');
+        if (!modal) {
+            alert("❌ Error: Modal container 'dt-evidence-modal' not found in page DOM.");
+            return;
+        }
+
         fetch(`/api/data-trust/finding-detail?id=${encodeURIComponent(findingId)}`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to retrieve finding details`);
+                return res.json();
+            })
             .then(f => {
                 if (f.error) {
-                    alert(f.error);
+                    alert("❌ Data Trust Error: " + f.error);
                     return;
                 }
                 
