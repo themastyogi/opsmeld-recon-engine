@@ -35,6 +35,11 @@ class DataTrustFinding:
     data_source: str = "LIVE_BUSINESS_CENTRAL"  # "LIVE_BUSINESS_CENTRAL" | "SNAPSHOT_SEED"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_evaluated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    structured_evidence: List[Dict[str, Any]] = field(default_factory=list)
+    signals: List[Dict[str, Any]] = field(default_factory=list)
+    source_metadata: Optional[Dict[str, Any]] = None
+    llm_metadata: Optional[Dict[str, Any]] = None
+    rule_version: str = "1.0" 
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

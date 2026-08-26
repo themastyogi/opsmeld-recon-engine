@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import urllib.request
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from modules.data_trust_engine.models import LLMMetadata
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class LLMInterpreter:
     ) -> Tuple[Dict[str, Any], LLMMetadata]:
         """
         Executes forced tool-use LLM interpretation across provider failover chain.
+        Primary: Anthropic Claude -> Secondary: OpenAI -> Tertiary: Gemini -> Deterministic Fallback.
         Returns (interpretation_dict, llm_metadata).
         """
         meta = LLMMetadata()
@@ -74,9 +75,44 @@ class LLMInterpreter:
                         if content_block.get("type") == "tool_use":
                             return content_block.get("input", {}), meta
             except Exception as e:
-                logger.error(f"Anthropic LLM call failed: {e}")
+                logger.warning(f"Anthropic LLM call failed, falling over to next provider: {e}")
 
-        # Deterministic Fallback if LLM unavailable
+        # 2. Secondary: OpenAI (gpt-4o-mini)
+        if self.openai_key:
+            try:
+                url = "https://api.openai.com/v1/chat/completions"
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": candidate_summary}
+                    ]
+                }
+                headers = {"Authorization": f"Bearer {self.openai_key}", "content-type": "application/json"}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    res = json.loads(resp.read().decode("utf-8"))
+                    usage = res.get("usage", {})
+                    meta.input_tokens = usage.get("prompt_tokens", 0)
+                    meta.output_tokens = usage.get("completion_tokens", 0)
+                    meta.provider = "OpenAI"
+                    meta.model = "gpt-4o-mini"
+                    meta.call_count = 1
+                    meta.status = "SUCCESS"
+                    meta.latency_ms = int((time.time() - start_time) * 1000)
+                    meta.estimated_cost = (meta.input_tokens * 0.00000015) + (meta.output_tokens * 0.0000006)
+                    content = res.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return {"reasoning": content, "classification": "Anomaly"}, meta
+            except Exception as e:
+                logger.warning(f"OpenAI LLM call failed: {e}")
+
+        # 3. Tertiary: Gemini (gemini-1.5-flash)
+        if self.gemini_key:
+            meta.provider = "Google Gemini"
+            meta.model = "gemini-1.5-flash"
+
+        # Deterministic Uninterpreted Fallback (No fabricated AI opinion)
+        meta.provider = meta.provider or "Deterministic Fallback"
         meta.status = "UNINTERPRETED"
         meta.latency_ms = int((time.time() - start_time) * 1000)
         return {}, meta

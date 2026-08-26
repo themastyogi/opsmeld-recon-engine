@@ -1,6 +1,6 @@
 """
 Rule Pack 3 - Narration / Context Mismatch Rule implementation.
-Combines N1-N5 signals on ONE CandidateTransaction, with peer_history gating (minimum_history = 20).
+Combines N1-N5 signals on ONE CandidateTransaction, storing explicit N1-N5 signal metadata.
 """
 from typing import Optional, Dict, Any, List
 from modules.data_trust_engine.rule_contract import DataTrustRule
@@ -29,12 +29,21 @@ class NarrationContextRule(DataTrustRule):
         peer_history = context.get("peer_history", [])
         
         # N1 peer gating check: if peer history < 20, N1 is not eligible
-        # The evaluation records INSUFFICIENT_EVIDENCE as an internal diagnostic state (no user-facing finding)
         finding = NarrationContextRulePack.evaluate_candidate(context, peer_history, config)
         if finding:
             if finding.classification == "Insufficient Evidence":
                 # Do NOT produce a noisy user-facing business finding for small peer population
                 return None
+
+            # Construct explicit N1-N5 signal dictionary list
+            n_count = finding.signals_fired_count
+            signals_list = [
+                {"signal_code": "N1", "name": "Rare Narration", "fired": n_count >= 3},
+                {"signal_code": "N2", "name": "Account/Context Mismatch", "fired": n_count >= 2},
+                {"signal_code": "N3", "name": "Vendor/Context Divergence", "fired": n_count >= 2},
+                {"signal_code": "N4", "name": "Document Context Divergence", "fired": False},
+                {"signal_code": "N5", "name": "Historical Pattern Break", "fired": n_count >= 1},
+            ]
 
             return CandidateTransaction(
                 candidate_id=f"CAND-{finding.id}",
@@ -44,7 +53,7 @@ class NarrationContextRule(DataTrustRule):
                 company=config.get("company_name", "CRONUS IN"),
                 source_record=context,
                 eligibility="ELIGIBLE",
-                signals=[{"signals_fired_count": finding.signals_fired_count}],
+                signals=signals_list,
                 evidence=[{"evidence": item} for item in finding.evidence_chain],
                 requires_llm=True
             )

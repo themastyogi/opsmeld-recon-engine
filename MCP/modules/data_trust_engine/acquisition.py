@@ -1,5 +1,6 @@
 """
 DataAcquirer layer handling live BC data fetching, pagination, lookback, and provenance.
+Enforces fail-closed live data boundaries (returns DATA_UNAVAILABLE with zero findings on live failures).
 """
 from typing import Optional, Dict, Any, List, Tuple
 from core.bc_mcp_client import BCMCPClient
@@ -13,12 +14,15 @@ class DataAcquirer:
     def acquire_transactions(self) -> Tuple[List[Dict[str, Any]], str]:
         """
         Acquires transaction data and returns (transactions, provenance_state).
-        On live runs (client present), if BC fails, returns ([], DATA_UNAVAILABLE).
+        On live production runs (mcp_client provided), if BC retrieval fails, returns ([], DATA_UNAVAILABLE).
+        Live production runs NEVER fall back to synthetic fixtures.
         """
-        if self.mode == "TEST_FIXTURE" or self.mode == "DEMO_FIXTURE":
-            return [], "SNAPSHOT_SEED"
+        if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
+            from modules.data_trust import DataTrustEngine
+            return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
 
         if self.client:
+            # Explicit live production run
             token = self.client.get_access_token()
             if not token:
                 return [], "DATA_UNAVAILABLE"
@@ -33,5 +37,9 @@ class DataAcquirer:
                 return [], "DATA_UNAVAILABLE"
             return [], "DATA_UNAVAILABLE"
 
-        # If mcp_client is None in AUTO mode, return SNAPSHOT_SEED for local preview
-        return [], "SNAPSHOT_SEED"
+        # Local offline preview mode (mcp_client is None)
+        if self.mode == "AUTO":
+            from modules.data_trust import DataTrustEngine
+            return DataTrustEngine(None)._get_sample_transactions(), "SNAPSHOT_SEED"
+
+        return [], "DATA_UNAVAILABLE"

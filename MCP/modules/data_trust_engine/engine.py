@@ -1,9 +1,12 @@
 """
 DataTrustEngine orchestrator inside modular package data_trust_engine.
+Executes complete pipeline: rule -> candidate -> optional LLM -> canonical finding.
 """
+import time
 from typing import Optional, Dict, Any, List
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config
+from modules.data_trust import DataTrustFinding, DataTrustConfigManager
 from modules.data_trust_engine.acquisition import DataAcquirer
 from modules.data_trust_engine.llm_interpreter import LLMInterpreter
 from modules.data_trust_engine.rules.posting_date import PostingDatePolicyRule
@@ -17,8 +20,93 @@ class DataTrustEngineOrchestrator:
         self.client_key = client_key or load_client_config().client_key
         self.acquirer = DataAcquirer(mcp_client=mcp_client)
         self.interpreter = LLMInterpreter()
+        self.config_mgr = DataTrustConfigManager(self.client_key)
         self.rules = [
             PostingDatePolicyRule(),
             SubledgerBypassRule(),
             NarrationContextRule()
         ]
+
+    def run_recon(self) -> Dict[str, Any]:
+        """
+        Executes end-to-end reconciliation:
+        DataAcquirer -> Rule Candidate -> Optional LLM -> Canonical Finding with Additive Metadata.
+        Returns execution summary dict with status and findings list.
+        """
+        start_time = time.time()
+        txs, provenance = self.acquirer.acquire_transactions()
+
+        # Fail-closed boundary check: live failure returns DATA_UNAVAILABLE with zero findings
+        if provenance == "DATA_UNAVAILABLE":
+            return {
+                "status": "DATA_UNAVAILABLE",
+                "findings": [],
+                "run_summary": {
+                    "records_scanned": 0,
+                    "candidates_generated": 0,
+                    "llm_calls": 0,
+                    "findings_generated": 0,
+                    "duration_seconds": round(time.time() - start_time, 2),
+                    "data_source": "DATA_UNAVAILABLE"
+                }
+            }
+
+        config = self.config_mgr.load_config()
+        config["tenant_id"] = self.client_key
+        candidates = []
+
+        for tx in txs:
+            for rule in self.rules:
+                if not rule.enabled:
+                    continue
+                cand = rule.evaluate(tx, config)
+                if cand:
+                    candidates.append((rule, cand))
+
+        findings: List[DataTrustFinding] = []
+        llm_calls_count = 0
+
+        for rule, cand in candidates:
+            llm_info = None
+            if cand.requires_llm and rule.requires_llm(cand):
+                summary = f"Transaction {cand.source_record.get('id')}: {cand.source_record.get('narration')}"
+                sys_prompt = "You are an expert Data Trust reconciliation engine."
+                interp, meta = self.interpreter.interpret_candidate(summary, sys_prompt)
+                llm_info = meta.__dict__
+                if meta.status == "SUCCESS":
+                    llm_calls_count += 1
+
+            finding_id = cand.candidate_id.replace("CAND-", "")
+            finding = DataTrustFinding(
+                id=finding_id,
+                dedup_key=f"DEDUP-{finding_id}",
+                rule_pack=rule.rule_pack,
+                classification="Anomaly" if cand.requires_llm else "Policy Violation",
+                evidence_strength="MEDIUM" if len(cand.signals) >= 2 else "LOW",
+                severity="HIGH" if cand.rule_id == "subledger_bypass" else "MEDIUM",
+                signals_fired_count=len(cand.signals),
+                evidence_chain=[e.get("evidence", "") for e in cand.evidence if isinstance(e, dict)],
+                transaction_details=cand.source_record,
+                business_impact="Requires review to verify posting compliance and control alignment.",
+                recommended_action="Human review required",
+                data_source=provenance,
+                structured_evidence=cand.evidence,
+                signals=cand.signals,
+                source_metadata={"tenant_id": cand.tenant, "company": cand.company, "provenance_state": provenance},
+                llm_metadata=llm_info,
+                rule_version=rule.rule_version
+            )
+            findings.append(finding)
+
+        return {
+            "status": "success",
+            "findings": [f.to_dict() for f in findings],
+            "run_summary": {
+                "records_scanned": len(txs),
+                "candidates_generated": len(candidates),
+                "llm_calls": llm_calls_count,
+                "findings_generated": len(findings),
+                "duration_seconds": round(time.time() - start_time, 2),
+                "data_source": provenance
+            }
+        }
