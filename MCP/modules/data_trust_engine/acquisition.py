@@ -67,27 +67,40 @@ class DataAcquirer:
                 if not (isinstance(comp_resp, dict) and "value" in comp_resp and comp_resp["value"]):
                     return [], "DATA_UNAVAILABLE"
 
-                target_comp_id = company_id or comp_resp["value"][0]["id"]
+                # Resolve company_id string/name to exact Business Central GUID
+                target_comp_guid = None
+                comp_list = comp_resp.get("value", []) if isinstance(comp_resp, dict) else []
+                if company_id:
+                    for c in comp_list:
+                        if c.get("id") == company_id or c.get("name") == company_id or c.get("displayName") == company_id:
+                            target_comp_guid = c.get("id")
+                            break
+                if not target_comp_guid and comp_list:
+                    target_comp_guid = comp_list[0].get("id")
+
+                if not target_comp_guid:
+                    return [], "DATA_UNAVAILABLE"
+
                 acquired: List[Dict[str, Any]] = []
 
                 if ledger_type in ("VENDOR", "BOTH"):
-                    vle_resp = self.client._execute_bc_rest(f"companies({target_comp_id})/vendorLedgerEntries")
-                    dvle_resp = self.client._execute_bc_rest(f"companies({target_comp_id})/detailedVendorLedgerEntries")
+                    vle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/vendorLedgerEntries")
+                    dvle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/detailedVendorLedgerEntries")
 
-                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
-                    dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) else []
+                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) and "error" not in vle_resp else []
+                    dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) and "error" not in dvle_resp else []
 
-                    resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", target_comp_id)
+                    resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", target_comp_guid)
                     acquired.extend(resolved_vendor)
 
                 if ledger_type in ("CUSTOMER", "BOTH"):
-                    cle_resp = self.client._execute_bc_rest(f"companies({target_comp_id})/customerLedgerEntries")
-                    dcle_resp = self.client._execute_bc_rest(f"companies({target_comp_id})/detailedCustLedgerEntries")
+                    cle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/customerLedgerEntries")
+                    dcle_resp = self.client._execute_bc_rest(f"companies({target_comp_guid})/detailedCustLedgerEntries")
 
-                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
-                    dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) else []
+                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) and "error" not in cle_resp else []
+                    dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) and "error" not in dcle_resp else []
 
-                    resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", target_comp_id)
+                    resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", target_comp_guid)
                     acquired.extend(resolved_cust)
 
                 return acquired, "LIVE_BUSINESS_CENTRAL"

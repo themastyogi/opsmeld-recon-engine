@@ -185,9 +185,10 @@ class BCMCPClient:
                         "HTTP 403 Forbidden: Business Central requires User Context or Entra App Permission. "
                         f"In Business Central, search for 'Microsoft Entra Applications', add Client ID '{self.config.app_client_id}', "
                         "and assign User Permissions (e.g. D365 FULL ACCESS), or click '🔑 Sign In with Microsoft'."
-                    )
+                    ),
+                    "value": []
                 }
-            return {"error": f"HTTP {e.code}: {err_msg}"}
+            return {"error": f"HTTP {e.code}: {err_msg}", "value": []}
         except Exception as e:
             return {"error": f"Connection Error: {str(e)}"}
 
