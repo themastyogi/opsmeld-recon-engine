@@ -42,6 +42,11 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertEqual(res["status"], DataTrustState.ACCESS_DENIED)
         self.assertEqual(len(res["findings"]), 0)
 
+        # Explicitly verify ZERO data acquisition REST calls occurred after authorization failure
+        all_called_endpoints = [call_args[0][0] for call_args in self.mock_client._execute_bc_rest.call_args_list if call_args[0]]
+        acquisition_calls = [ep for ep in all_called_endpoints if "generalLedgerEntries" in ep or "vendorLedgerEntries" in ep or "salesInvoices" in ep]
+        self.assertEqual(len(acquisition_calls), 0, f"Expected 0 acquisition calls after ACCESS_DENIED, but got: {acquisition_calls}")
+
     def test_company_discovery_vs_authorization_real_bc_check(self):
         """GET /companies lists Company B, but company-scoped data check fails 403 -> ACCESS_DENIED."""
         def mock_rest(endpoint, **kwargs):
