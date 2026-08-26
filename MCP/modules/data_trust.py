@@ -80,63 +80,11 @@ class DataTrustEngine:
         return p
 
     def fetch_live_bc_transactions(self) -> List[Dict[str, Any]]:
-        """Queries live Business Central OData/REST endpoints for G/L entries and Purchase Invoices."""
-        if not self.client:
-            return []
-
-        token = self.client.get_access_token()
-        if not token:
-            return []
-
-        try:
-            comp_resp = self.client._execute_bc_rest("companies")
-            if not isinstance(comp_resp, dict) or "value" not in comp_resp or not comp_resp["value"]:
-                return []
-
-            comp_id = comp_resp["value"][0].get("id")
-            if not comp_id:
-                return []
-
-            gl_resp = self.client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=100&$orderby=postingDate desc")
-            gl_entries = gl_resp.get("value", []) if isinstance(gl_resp, dict) else []
-
-            live_txs: List[Dict[str, Any]] = []
-
-            peer_history_by_account: Dict[str, List[Dict[str, Any]]] = {}
-            for gle in gl_entries:
-                acc_no = str(gle.get("accountNumber") or gle.get("glAccountNumber") or gle.get("accountNo") or "")
-                if acc_no:
-                    if acc_no not in peer_history_by_account:
-                        peer_history_by_account[acc_no] = []
-                    peer_history_by_account[acc_no].append({
-                        "account_no": acc_no,
-                        "vendor_name": str(gle.get("vendorName") or gle.get("description") or ""),
-                        "narration": str(gle.get("description") or gle.get("comment") or ""),
-                        "amount": abs(float(gle.get("amount") or 0.0))
-                    })
-
-            for gle in gl_entries:
-                acc_no = str(gle.get("accountNumber") or gle.get("glAccountNumber") or gle.get("accountNo") or "")
-                tx_obj = {
-                    "id": str(gle.get("id") or gle.get("entryNumber") or gle.get("documentNumber") or "GL-000"),
-                    "document_no": str(gle.get("documentNumber") or gle.get("documentNo") or "DOC-000"),
-                    "account_no": acc_no,
-                    "gl_account_no": acc_no,
-                    "account_name": str(gle.get("accountName") or gle.get("description") or f"G/L Account {acc_no}"),
-                    "vendor_name": str(gle.get("vendorName") or gle.get("description") or ""),
-                    "posting_date": str(gle.get("postingDate") or gle.get("documentDate") or date.today().isoformat()),
-                    "amount": abs(float(gle.get("amount") or 0.0)),
-                    "user": str(gle.get("userId") or gle.get("user") or "BC_USER"),
-                    "source_code": str(gle.get("sourceCode") or gle.get("source") or "GENJNL"),
-                    "document_type": str(gle.get("documentType") or gle.get("document_type") or "General Journal"),
-                    "narration": str(gle.get("description") or gle.get("comment") or "Live BC Entry"),
-                    "peer_history": peer_history_by_account.get(acc_no, [])
-                }
-                live_txs.append(tx_obj)
-
-            return live_txs
-        except Exception:
-            return []
+        """Legacy compatibility helper delegating live G/L transaction acquisition to DataAcquirer."""
+        from modules.data_trust_engine.acquisition import DataAcquirer
+        acquirer = DataAcquirer(mcp_client=self.client, mode="LIVE_BUSINESS_CENTRAL" if self.client else "AUTO")
+        txs, _ = acquirer.acquire_transactions()
+        return txs
 
     def _load_from_disk(self) -> List[Dict[str, Any]]:
         p = self.get_findings_file_path()

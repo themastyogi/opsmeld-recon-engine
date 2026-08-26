@@ -244,9 +244,10 @@ class DataAcquirer:
                 app_resolved = True
                 payment_date = applying_pmts[0].get("postingDate") or applying_pmts[0].get("dvlePostingDate") or applying_pmts[0].get("dclePostingDate")
 
+            env_id = self.client.config.environment if (self.client and hasattr(self.client, "config") and getattr(self.client.config, "environment", None)) else "Production"
             record = {
                 "id": entry_id,
-                "environment_id": "production_env",
+                "environment_id": env_id,
                 "company_id": company_id,
                 "ledger_type": ledger_type,
                 "account_no": acc_no,
