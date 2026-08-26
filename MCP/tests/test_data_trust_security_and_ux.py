@@ -48,7 +48,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertEqual(len(acquisition_calls), 0, f"Expected 0 acquisition calls after ACCESS_DENIED, but got: {acquisition_calls}")
 
     def test_company_discovery_vs_authorization_real_bc_check(self):
-        """GET /companies lists Company B, but company-scoped data check fails 403 -> ACCESS_DENIED."""
+        """GET /companies -> 200, company-scoped request -> 403 -> ACCESS_DENIED -> ZERO acquisition requests after the 403."""
         def mock_rest(endpoint, **kwargs):
             if endpoint == "companies":
                 return {"value": [{"id": "GUID-COMP-B", "name": "COMPANY_B", "displayName": "Company B"}]}
@@ -58,11 +58,16 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
 
         self.mock_client._execute_bc_rest.side_effect = mock_rest
 
-        is_auth, state, info = self.auth_mgr.validate_company_access(self.mock_client, requested_company="COMPANY_B")
+        orchestrator = DataTrustEngineOrchestrator(mcp_client=self.mock_client)
+        res = orchestrator.run_recon(company_id="COMPANY_B")
 
-        self.assertFalse(is_auth)
-        self.assertEqual(state, DataTrustState.ACCESS_DENIED)
-        self.assertEqual(info["http_status"], 403)
+        self.assertEqual(res["status"], DataTrustState.ACCESS_DENIED)
+        self.assertEqual(len(res["findings"]), 0)
+
+        # Assert zero data acquisition calls occurred after the 403 gate failure
+        all_calls = [call_args[0][0] for call_args in self.mock_client._execute_bc_rest.call_args_list if call_args[0]]
+        acq_calls = [ep for ep in all_calls if "vendorLedgerEntries" in ep or "salesInvoices" in ep or ("generalLedgerEntries" in ep and "$top=1" not in ep)]
+        self.assertEqual(len(acq_calls), 0, f"Expected 0 acquisition calls after 403, got: {acq_calls}")
 
     def test_blank_company_does_not_select_first_company_in_multi_company_env(self):
         """Blank company parameter in multi-company environment returns CONFIGURATION_MISSING (400)."""

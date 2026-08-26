@@ -260,9 +260,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config)
             mgr = CompanyAccessManager()
             discovered = mgr.get_discovered_companies(client)
-            if not discovered:
-                # Provide fallback CRONUS IN candidate if offline preview
-                discovered = [{"id": "CRONUS IN", "name": "CRONUS IN", "displayName": "CRONUS India"}]
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"companies": discovered}).encode("utf-8"))
 
