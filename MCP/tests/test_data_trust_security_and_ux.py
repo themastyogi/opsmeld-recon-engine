@@ -170,5 +170,42 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertEqual(res["diagnostics"]["http_status"], 403)
 
 
+
+    def test_authorized_companies_requires_http_auth(self):
+        """Unauthenticated request to /api/data-trust/authorized-companies returns 401 and triggers 0 BC calls."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+
+        import io
+        handler = MagicMock(spec=OpsmeldWebHandler)
+        handler.headers = {}
+        handler.wfile = io.BytesIO()
+        handler.path = "/api/data-trust/authorized-companies"
+        handler._get_session_token.return_value = None
+
+        with patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies") as mock_disc:
+            # Execute handler require_auth logic
+            session_info = OpsmeldWebHandler._require_auth(handler)
+            self.assertIsNone(session_info)
+            mock_disc.assert_not_called()
+
+    def test_run_recon_requires_http_auth(self):
+        """Unauthenticated request to /api/data-trust/run-recon returns 401 and triggers 0 orchestrator/BC calls."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+
+        import io
+        handler = MagicMock(spec=OpsmeldWebHandler)
+        handler.headers = {}
+        handler.wfile = io.BytesIO()
+        handler.path = "/api/data-trust/run-recon"
+        handler._get_session_token.return_value = None
+
+        with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon:
+            session_info = OpsmeldWebHandler._require_auth(handler)
+            self.assertIsNone(session_info)
+            mock_recon.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

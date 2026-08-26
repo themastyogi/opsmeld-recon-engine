@@ -255,6 +255,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
         
         elif path == "/api/data-trust/authorized-companies":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
@@ -264,12 +267,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"companies": discovered}).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
-            session_info = self._require_auth()
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
             self._set_headers("application/json")
