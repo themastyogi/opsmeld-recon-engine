@@ -32,8 +32,8 @@ jobs:
           docker push acropsmeldrecon.azurecr.io/opsmeld-recon-app:latest
 
       - name: Deploy to Azure Container App
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          imageToDeploy: acropsmeldrecon.azurecr.io/opsmeld-recon-app:${{ github.sha }}
-          containerAppName: opsmeld-recon-app
-          resourceGroup: rg-opsmeld-container
+        run: |
+          az containerapp update \
+            --name opsmeld-recon-app \
+            --resource-group rg-opsmeld-container \
+            --image acropsmeldrecon.azurecr.io/opsmeld-recon-app:${{ github.sha }}
