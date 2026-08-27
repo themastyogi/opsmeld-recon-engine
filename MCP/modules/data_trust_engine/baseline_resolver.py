@@ -147,6 +147,13 @@ class CostBaselineResolver:
                 "counts": {"vendor_item_count": 0, "item_location_count": 0, "item_variant_count": 0, "item_count": 0}
             }
 
+        cost_cfg = config.get("inventory_costing", {}) if config else {}
+        vendor_baseline_enabled = cost_cfg.get("vendor_baseline", {}).get("enabled", True)
+        peer_cfg = cost_cfg.get("peer_baseline", {})
+        peer_baseline_enabled = peer_cfg.get("enabled", True)
+        include_location = peer_cfg.get("include_location", cost_cfg.get("baseline_hierarchy", {}).get("include_location", True))
+        include_variant = peer_cfg.get("include_variant", cost_cfg.get("baseline_hierarchy", {}).get("include_variant", True))
+
         curr_item = str(current_tx.get("item_no") or "")
         curr_vendor = str(current_tx.get("vendor_no") or "")
         curr_loc = str(current_tx.get("location_code") or "")
@@ -157,8 +164,8 @@ class CostBaselineResolver:
             h for h in eligible_history
             if str(h.get("item_no") or "") == curr_item and
                str(h.get("vendor_no") or "") == curr_vendor and
-               str(h.get("location_code") or "") == curr_loc and
-               str(h.get("variant_code") or "") == curr_variant and
+               (not include_location or str(h.get("location_code") or "") == curr_loc) and
+               (not include_variant or str(h.get("variant_code") or "") == curr_variant) and
                curr_vendor != ""
         ]
 
@@ -166,7 +173,7 @@ class CostBaselineResolver:
             h for h in eligible_history
             if str(h.get("item_no") or "") == curr_item and
                str(h.get("location_code") or "") == curr_loc and
-               str(h.get("variant_code") or "") == curr_variant
+               (not include_variant or str(h.get("variant_code") or "") == curr_variant)
         ]
 
         item_variant_pool = [
@@ -184,13 +191,13 @@ class CostBaselineResolver:
         primary_level = "INSUFFICIENT_EVIDENCE"
         selected_pool: List[Dict[str, Any]] = []
 
-        if len(vendor_item_pool) >= self.minimum_history:
+        if vendor_baseline_enabled and len(vendor_item_pool) >= self.minimum_history:
             primary_level = "VENDOR_ITEM"
             selected_pool = vendor_item_pool
-        elif len(item_loc_pool) >= self.minimum_history:
+        elif include_location and len(item_loc_pool) >= self.minimum_history:
             primary_level = "ITEM_LOCATION"
             selected_pool = item_loc_pool
-        elif len(item_variant_pool) >= self.minimum_history:
+        elif include_variant and len(item_variant_pool) >= self.minimum_history:
             primary_level = "ITEM_VARIANT"
             selected_pool = item_variant_pool
         elif len(item_pool) >= self.minimum_history:
@@ -247,91 +254,108 @@ class CostBaselineResolver:
                 }
 
         # Compute supporting broader peer statistics & Date-Based Peer Time Window Attenuation
-        peer_pool = [h for h in item_pool if str(h.get("vendor_no") or "") != curr_vendor]
-        peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
-
-        # Determine reference date for date-based windowing
-        ref_date = parse_date(current_tx.get("posting_date") or current_tx.get("document_date") or current_tx.get("valuation_date"))
-        if not ref_date and peer_pool:
-            dates = [parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date")) for h in peer_pool]
-            valid_dates = [d for d in dates if d]
-            if valid_dates:
-                ref_date = max(valid_dates)
-
-        if not ref_date:
-            ref_date = date.today()
-
-        recent_months = int(config.get("peer_movement", {}).get("recent_lookback_months", 3)) if config else 3
-        recent_cutoff_date = ref_date - timedelta(days=int(recent_months * 30.4375))
-
-        hist_peer_pool = []
-        recent_peer_pool = []
-
-        for h in peer_pool:
-            d = parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date"))
-            if d and d >= recent_cutoff_date:
-                recent_peer_pool.append(h)
-            else:
-                hist_peer_pool.append(h)
-
-        hist_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in hist_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
-        recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in recent_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
-
-        min_peer_hist = self.minimum_history # 20
-        min_peer_recent = int(config.get("peer_movement", {}).get("minimum_peer_recent_history", 5)) if config else 5
-
-        # Dual Minimum History Gating for Peer Attenuation
-        if len(hist_peer_costs) < min_peer_hist or len(recent_peer_costs) < min_peer_recent:
+        if not peer_baseline_enabled:
             peer_stats = {
-                "peer_count": len(peer_costs),
-                "historical_peer_count": len(hist_peer_costs),
-                "recent_peer_count": len(recent_peer_costs),
-                "peer_median": calculate_median(peer_costs) if peer_costs else None,
-                "historical_peer_median": calculate_median(hist_peer_costs) if hist_peer_costs else None,
-                "recent_peer_median": calculate_median(recent_peer_costs) if recent_peer_costs else None,
+                "peer_count": 0,
+                "historical_peer_count": 0,
+                "recent_peer_count": 0,
+                "peer_median": None,
+                "historical_peer_median": None,
+                "recent_peer_median": None,
                 "peer_shift_percent": None,
-                "peer_average": (sum(peer_costs) / len(peer_costs)) if peer_costs else None,
-                "peer_mad": calculate_mad(peer_costs) if peer_costs else None,
-                "peer_min": min(peer_costs) if peer_costs else None,
-                "peer_max": max(peer_costs) if peer_costs else None,
-                "peer_dispersion": "INSUFFICIENT" if not peer_costs else ("LOW" if calculate_mad(peer_costs) / max(calculate_median(peer_costs), 1.0) < 0.1 else "MEDIUM"),
-                "peer_attenuation_status": "INSUFFICIENT_EVIDENCE"
+                "peer_average": None,
+                "peer_mad": None,
+                "peer_min": None,
+                "peer_max": None,
+                "peer_dispersion": "DISABLED",
+                "peer_attenuation_status": "DISABLED"
             }
         else:
-            p_med = calculate_median(peer_costs)
-            p_avg = sum(peer_costs) / len(peer_costs)
-            p_mad = calculate_mad(peer_costs, p_med)
+            peer_pool = [h for h in item_pool if str(h.get("vendor_no") or "") != curr_vendor]
+            peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
 
-            hist_p_med = calculate_median(hist_peer_costs)
-            recent_p_med = calculate_median(recent_peer_costs)
+            # Determine reference date for date-based windowing
+            ref_date = parse_date(current_tx.get("posting_date") or current_tx.get("document_date") or current_tx.get("valuation_date"))
+            if not ref_date and peer_pool:
+                dates = [parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date")) for h in peer_pool]
+                valid_dates = [d for d in dates if d]
+                if valid_dates:
+                    ref_date = max(valid_dates)
 
-            peer_shift_pct = abs(recent_p_med - hist_p_med) / max(hist_p_med, 1.0) * 100.0
+            if not ref_date:
+                ref_date = date.today()
 
-            base_med = primary_stats.get("median")
-            peer_attenuation_status = "UNATTENUATED"
-            if base_med and base_med > 0:
-                curr_cost = float(current_tx.get("cost_per_unit") or 0.0)
-                vendor_dev_pct = abs(curr_cost - base_med) / base_med * 100.0
-                mat_thresh = float(config.get("peer_movement", {}).get("material_movement_percent", 20.0)) if config else 20.0
+            recent_months = int(config.get("peer_movement", {}).get("recent_lookback_months", 3)) if config else 3
+            recent_cutoff_date = ref_date - timedelta(days=int(recent_months * 30.4375))
 
-                if vendor_dev_pct >= mat_thresh and peer_shift_pct >= mat_thresh:
-                    peer_attenuation_status = "ATTENUATED"
+            hist_peer_pool = []
+            recent_peer_pool = []
 
-            peer_stats = {
-                "peer_count": len(peer_costs),
-                "historical_peer_count": len(hist_peer_costs),
-                "recent_peer_count": len(recent_peer_costs),
-                "peer_median": p_med,
-                "historical_peer_median": hist_p_med,
-                "recent_peer_median": recent_p_med,
-                "peer_shift_percent": round(peer_shift_pct, 1),
-                "peer_average": p_avg,
-                "peer_mad": p_mad,
-                "peer_min": min(peer_costs),
-                "peer_max": max(peer_costs),
-                "peer_dispersion": "LOW" if p_mad / max(p_med, 1.0) < 0.1 else ("MEDIUM" if p_mad / max(p_med, 1.0) < 0.25 else "HIGH"),
-                "peer_attenuation_status": peer_attenuation_status
-            }
+            for h in peer_pool:
+                d = parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date"))
+                if d and d >= recent_cutoff_date:
+                    recent_peer_pool.append(h)
+                else:
+                    hist_peer_pool.append(h)
+
+            hist_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in hist_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+            recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in recent_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+
+            min_peer_hist = self.minimum_history # 20
+            min_peer_recent = int(config.get("peer_movement", {}).get("minimum_peer_recent_history", 5)) if config else 5
+
+            # Dual Minimum History Gating for Peer Attenuation
+            if len(hist_peer_costs) < min_peer_hist or len(recent_peer_costs) < min_peer_recent:
+                peer_stats = {
+                    "peer_count": len(peer_costs),
+                    "historical_peer_count": len(hist_peer_costs),
+                    "recent_peer_count": len(recent_peer_costs),
+                    "peer_median": calculate_median(peer_costs) if peer_costs else None,
+                    "historical_peer_median": calculate_median(hist_peer_costs) if hist_peer_costs else None,
+                    "recent_peer_median": calculate_median(recent_peer_costs) if recent_peer_costs else None,
+                    "peer_shift_percent": None,
+                    "peer_average": (sum(peer_costs) / len(peer_costs)) if peer_costs else None,
+                    "peer_mad": calculate_mad(peer_costs) if peer_costs else None,
+                    "peer_min": min(peer_costs) if peer_costs else None,
+                    "peer_max": max(peer_costs) if peer_costs else None,
+                    "peer_dispersion": "INSUFFICIENT" if not peer_costs else ("LOW" if calculate_mad(peer_costs) / max(calculate_median(peer_costs), 1.0) < 0.1 else "MEDIUM"),
+                    "peer_attenuation_status": "INSUFFICIENT_EVIDENCE"
+                }
+            else:
+                p_med = calculate_median(peer_costs)
+                p_avg = sum(peer_costs) / len(peer_costs)
+                p_mad = calculate_mad(peer_costs, p_med)
+
+                hist_p_med = calculate_median(hist_peer_costs)
+                recent_p_med = calculate_median(recent_peer_costs)
+
+                peer_shift_pct = abs(recent_p_med - hist_p_med) / max(hist_p_med, 1.0) * 100.0
+
+                base_med = primary_stats.get("median")
+                peer_attenuation_status = "UNATTENUATED"
+                if base_med and base_med > 0:
+                    curr_cost = float(current_tx.get("cost_per_unit") or 0.0)
+                    vendor_dev_pct = abs(curr_cost - base_med) / base_med * 100.0
+                    mat_thresh = float(config.get("peer_movement", {}).get("material_movement_percent", 20.0)) if config else 20.0
+
+                    if vendor_dev_pct >= mat_thresh and peer_shift_pct >= mat_thresh:
+                        peer_attenuation_status = "ATTENUATED"
+
+                peer_stats = {
+                    "peer_count": len(peer_costs),
+                    "historical_peer_count": len(hist_peer_costs),
+                    "recent_peer_count": len(recent_peer_costs),
+                    "peer_median": p_med,
+                    "historical_peer_median": hist_p_med,
+                    "recent_peer_median": recent_p_med,
+                    "peer_shift_percent": round(peer_shift_pct, 1),
+                    "peer_average": p_avg,
+                    "peer_mad": p_mad,
+                    "peer_min": min(peer_costs),
+                    "peer_max": max(peer_costs),
+                    "peer_dispersion": "LOW" if p_mad / max(p_med, 1.0) < 0.1 else "MEDIUM",
+                    "peer_attenuation_status": peer_attenuation_status
+                }
 
         # Supporting baselines list for finding inspection
         supporting_baselines = []

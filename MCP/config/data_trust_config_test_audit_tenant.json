@@ -131,6 +131,14 @@
       ]
     }
   },
+  "payment_timing": {
+    "enabled": true,
+    "historical_pattern": {
+      "minimum_history": 20,
+      "lookback_months": 12,
+      "unusual_deviation_days": 7
+    }
+  },
   "inventory_costing": {
     "enabled": true,
     "minimum_amount": 0,

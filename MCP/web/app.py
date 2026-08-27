@@ -509,13 +509,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     new_config = cfg_mgr.load_config()
 
             user_identity = session_info.get("username") or "admin@opsmeld.com"
-            saved = cfg_mgr.save_config(new_config, user=user_identity)
+            saved, errors = cfg_mgr.save_config(new_config, user=user_identity)
             if saved:
                 res = {"status": "success", "message": "Data Trust configuration saved successfully"}
                 self._set_headers("application/json", 200)
             else:
-                res = {"status": "error", "message": "Failed to save Data Trust configuration"}
-                self._set_headers("application/json", 500)
+                res = {"status": "error", "message": "Failed to save Data Trust configuration", "errors": errors}
+                self._set_headers("application/json", 400)
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":

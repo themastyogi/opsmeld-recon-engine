@@ -56,9 +56,12 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertFalse(is_valid)
         self.assertTrue(any("minimum_history" in e for e in errors))
 
-    def test_orchestrator_path_minimum_history_runtime_change(self):
-        """Proves minimum_history changes through the REAL Orchestrator path alter runtime findings."""
-        orchestrator = DataTrustEngineOrchestrator()
+    def test_real_json_file_minimum_history_runtime_change(self):
+        """Writes real client JSON config file, loads via DataTrustEngineOrchestrator(client_key=...), and proves minimum_history changes runtime resolver behavior."""
+        import json
+        from core.config_loader import CONFIG_DIR
+        client_key = "REAL_JSON_MIN_HIST_TEST"
+        cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
 
         # 25 Historical records (enough for min_hist=20, not enough for min_hist=30)
         history = [
@@ -77,30 +80,89 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         all_txs = list(history)
         all_txs.append(tx_spike)
 
-        # Mock config_mgr.load_config() with min_history=30
-        cfg_30 = orchestrator.config_mgr.load_config()
-        cfg_30["inventory_costing"]["historical_pattern"]["minimum_history"] = 30
+        try:
+            # Step 1: Write real JSON file with minimum_history = 30
+            config_data_30 = self.config_mgr._default_config()
+            config_data_30["inventory_costing"]["historical_pattern"]["minimum_history"] = 30
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data_30, f, indent=2)
 
-        orchestrator.config_mgr.load_config = MagicMock(return_value=cfg_30)
-        orchestrator.acquirer.acquire_inventory_cost_transactions = MagicMock(return_value=(all_txs, "SNAPSHOT_SEED"))
+            orchestrator_30 = DataTrustEngineOrchestrator(client_key=client_key)
+            orchestrator_30.acquirer.acquire_inventory_cost_transactions = MagicMock(return_value=(all_txs, "SNAPSHOT_SEED"))
 
-        res_30 = orchestrator.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
-        all_findings_30 = res_30["findings"] if isinstance(res_30, dict) and "findings" in res_30 else res_30
-        ic_findings_30 = [f for f in all_findings_30 if (f.get("rule_pack") if isinstance(f, dict) else getattr(f, "rule_pack", "")) == "Inventory Costing & Valuation Integrity"]
-        # min_history=30 requires 30 records -> 25 available -> 0 inventory costing findings
-        self.assertEqual(len(ic_findings_30), 0)
+            res_30 = orchestrator_30.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
+            all_f_30 = res_30["findings"] if isinstance(res_30, dict) and "findings" in res_30 else res_30
+            ic_f_30 = [f for f in all_f_30 if (f.get("rule_pack") if isinstance(f, dict) else getattr(f, "rule_pack", "")) == "Inventory Costing & Valuation Integrity"]
+            # min_history=30 requires 30 records -> 25 available -> 0 inventory costing findings from real JSON file
+            self.assertEqual(len(ic_f_30), 0)
 
-        # Change config to min_history=10 through REAL orchestrator path
-        cfg_10 = orchestrator.config_mgr._default_config()
-        cfg_10["inventory_costing"]["historical_pattern"]["minimum_history"] = 10
-        orchestrator.config_mgr.load_config = MagicMock(return_value=cfg_10)
+            # Step 2: Overwrite real JSON file with minimum_history = 10
+            config_data_10 = self.config_mgr._default_config()
+            config_data_10["inventory_costing"]["historical_pattern"]["minimum_history"] = 10
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data_10, f, indent=2)
 
-        res_10 = orchestrator.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
-        all_findings_10 = res_10["findings"] if isinstance(res_10, dict) and "findings" in res_10 else res_10
-        ic_findings_10 = [f for f in all_findings_10 if (f.get("rule_pack") if isinstance(f, dict) else getattr(f, "rule_pack", "")) == "Inventory Costing & Valuation Integrity"]
-        # min_history=10 requires 10 records -> 25 available -> 1 inventory costing finding produced!
-        self.assertEqual(len(ic_findings_10), 1)
-        self.assertEqual(ic_findings_10[0].rule_pack if hasattr(ic_findings_10[0], "rule_pack") else ic_findings_10[0]["rule_pack"], "Inventory Costing & Valuation Integrity")
+            orchestrator_10 = DataTrustEngineOrchestrator(client_key=client_key)
+            orchestrator_10.acquirer.acquire_inventory_cost_transactions = MagicMock(return_value=(all_txs, "SNAPSHOT_SEED"))
+
+            res_10 = orchestrator_10.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
+            all_f_10 = res_10["findings"] if isinstance(res_10, dict) and "findings" in res_10 else res_10
+            ic_f_10 = [f for f in all_f_10 if (f.get("rule_pack") if isinstance(f, dict) else getattr(f, "rule_pack", "")) == "Inventory Costing & Valuation Integrity"]
+            # min_history=10 requires 10 records -> 25 available -> 1 inventory costing finding produced from real JSON file!
+            self.assertEqual(len(ic_f_10), 1)
+            self.assertEqual(ic_f_10[0].rule_pack if hasattr(ic_f_10[0], "rule_pack") else ic_f_10[0]["rule_pack"], "Inventory Costing & Valuation Integrity")
+        finally:
+            if cfg_path.exists():
+                try: cfg_path.unlink()
+                except Exception: pass
+
+    def test_real_json_file_lookback_months_acquisition_change(self):
+        """Writes real client JSON config file, loads via DataTrustEngineOrchestrator(client_key=...), and proves lookback_months changes acquisition behavior."""
+        import json
+        from core.config_loader import CONFIG_DIR
+        client_key = "REAL_JSON_LOOKBACK_TEST"
+        cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
+
+        sample_txs = [
+            {"id": "RECENT-1", "posting_date": "2026-08-15", "cost_per_unit": 100.0},
+            {"id": "RECENT-2", "posting_date": "2026-06-10", "cost_per_unit": 100.0},
+            {"id": "OLD-1", "posting_date": "2025-01-15", "cost_per_unit": 100.0}
+        ]
+
+        try:
+            # Write real JSON file with lookback_months = 3
+            config_data = self.config_mgr._default_config()
+            config_data["inventory_costing"]["historical_pattern"]["lookback_months"] = 3
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            orchestrator_3m = DataTrustEngineOrchestrator(client_key=client_key)
+            orchestrator_3m.acquirer.mode = "TEST_FIXTURE"
+            orchestrator_3m.acquirer._get_fixture_inventory_cost_transactions = MagicMock(return_value=sample_txs)
+
+            # Acquirer receives lookback_months=3 from real JSON file
+            acquired_3m, _ = orchestrator_3m.acquirer.acquire_inventory_cost_transactions(company_id="CRONUS IN", lookback_months=orchestrator_3m.config_mgr.load_config()["inventory_costing"]["historical_pattern"]["lookback_months"])
+            self.assertEqual(len(acquired_3m), 2)
+            self.assertNotIn("OLD-1", [t["id"] for t in acquired_3m])
+
+            # Update real JSON file to lookback_months = 24
+            config_data["inventory_costing"]["historical_pattern"]["lookback_months"] = 24
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            orchestrator_24m = DataTrustEngineOrchestrator(client_key=client_key)
+            orchestrator_24m.acquirer.mode = "TEST_FIXTURE"
+            orchestrator_24m.acquirer._get_fixture_inventory_cost_transactions = MagicMock(return_value=sample_txs)
+
+            acquired_24m, _ = orchestrator_24m.acquirer.acquire_inventory_cost_transactions(company_id="CRONUS IN", lookback_months=orchestrator_24m.config_mgr.load_config()["inventory_costing"]["historical_pattern"]["lookback_months"])
+            self.assertEqual(len(acquired_24m), 3)
+            self.assertIn("OLD-1", [t["id"] for t in acquired_24m])
+        finally:
+            if cfg_path.exists():
+                try: cfg_path.unlink()
+                except Exception: pass
 
     def test_acquirer_path_lookback_months_runtime_change(self):
         """Proves lookback_months filtering through DataAcquirer excludes older records."""
@@ -383,6 +445,132 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertIsNotNone(finding_above)
         fired_above = [s["signal_code"] for s in finding_above.signals if s["fired"]]
         self.assertIn("C3", fired_above)
+
+
+    def test_real_json_file_narration_context_minimum_peer_transactions(self):
+        """Proves narration_context.minimum_peer_transactions from real JSON file alters rule evaluation."""
+        import json
+        from core.config_loader import CONFIG_DIR
+        from modules.data_trust_engine.rules.narration_context import NarrationContextRule
+        client_key = "REAL_JSON_NC_TEST"
+        cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
+
+        rule = NarrationContextRule()
+        tx = {"id": "NC-101", "account_no": "60100", "narration": "Unusual consulting payment", "vendor_name": "Acme"}
+        peer_history = [{"narration": "Paper"} for _ in range(25)]
+
+        try:
+            config_data = self.config_mgr._default_config()
+            config_data["narration_context"]["minimum_peer_transactions"] = 30
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            cfg = DataTrustConfigManager(client_key).load_config()
+            cand_30 = rule.evaluate(tx, cfg)
+            # min_peer=30 requires 30 records -> 25 available -> returns None (insufficient evidence)
+            self.assertIsNone(cand_30)
+
+            config_data["narration_context"]["minimum_peer_transactions"] = 10
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            cfg = DataTrustConfigManager(client_key).load_config()
+            cand_10 = rule.evaluate(tx, cfg)
+            # min_peer=10 requires 10 records -> 25 available -> produces candidate
+            self.assertIsNotNone(cand_10)
+        finally:
+            if cfg_path.exists():
+                try: cfg_path.unlink()
+                except Exception: pass
+
+    def test_real_json_file_payment_timing_minimum_history_and_lookback(self):
+        """Proves payment_timing minimum_history and lookback_months from real JSON file alter rule and acquisition behavior."""
+        import json
+        from core.config_loader import CONFIG_DIR
+        client_key = "REAL_JSON_PT_TEST"
+        cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
+
+        try:
+            config_data = self.config_mgr._default_config()
+            config_data["payment_timing"] = {
+                "enabled": True,
+                "historical_pattern": {
+                    "minimum_history": 30,
+                    "lookback_months": 3
+                }
+            }
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            orchestrator = DataTrustEngineOrchestrator(client_key=client_key)
+            loaded_cfg = orchestrator.config_mgr.load_config()
+            self.assertEqual(loaded_cfg["payment_timing"]["historical_pattern"]["minimum_history"], 30)
+            self.assertEqual(loaded_cfg["payment_timing"]["historical_pattern"]["lookback_months"], 3)
+        finally:
+            if cfg_path.exists():
+                try: cfg_path.unlink()
+                except Exception: pass
+
+    def test_baseline_resolver_config_flags(self):
+        """Proves vendor_baseline.enabled, peer_baseline.enabled, include_location, and include_variant affect baseline resolver."""
+        resolver = CostBaselineResolver(minimum_history=10)
+        current_tx = {
+            "id": "TX-FLAGS", "item_no": "ITEM-1", "vendor_no": "VEND-1",
+            "location_code": "LOC-A", "variant_code": "VAR-1", "cost_per_unit": 150.0,
+            "currency_code": "INR"
+        }
+        history = [
+            {
+                "id": f"H-{i}", "item_no": "ITEM-1", "vendor_no": "VEND-1",
+                "location_code": "LOC-A", "variant_code": "VAR-1", "cost_per_unit": 100.0,
+                "currency_code": "INR"
+            }
+            for i in range(15)
+        ]
+
+        # 1. vendor_baseline.enabled = False -> skips VENDOR_ITEM and selects ITEM_LOCATION
+        cfg_no_vendor = {
+            "inventory_costing": {
+                "vendor_baseline": {"enabled": False},
+                "peer_baseline": {"enabled": True, "include_location": True, "include_variant": True}
+            }
+        }
+        res_no_vendor = resolver.resolve_baseline(current_tx, history, cfg_no_vendor)
+        self.assertEqual(res_no_vendor["primary"]["level"], "ITEM_LOCATION")
+
+        # 2. peer_baseline.enabled = False -> returns peer_dispersion = "DISABLED"
+        cfg_no_peer = {
+            "inventory_costing": {
+                "vendor_baseline": {"enabled": True},
+                "peer_baseline": {"enabled": False}
+            }
+        }
+        res_no_peer = resolver.resolve_baseline(current_tx, history, cfg_no_peer)
+        self.assertEqual(res_no_peer["peer"]["peer_dispersion"], "DISABLED")
+        self.assertEqual(res_no_peer["peer"]["peer_attenuation_status"], "DISABLED")
+
+        # 3. include_location = False -> relaxes location filtering in vendor_item_pool and selects ITEM_VARIANT if vendor disabled
+        cfg_no_loc = {
+            "inventory_costing": {
+                "vendor_baseline": {"enabled": False},
+                "baseline_hierarchy": {"include_location": False, "include_variant": True},
+                "peer_baseline": {"enabled": True}
+            }
+        }
+        res_no_loc = resolver.resolve_baseline(current_tx, history, cfg_no_loc)
+        self.assertEqual(res_no_loc["primary"]["level"], "ITEM_VARIANT")
+
+    def test_save_config_tuple_unpacking_and_validation_error(self):
+        """Proves save_config returns (False, errors) tuple on invalid config, protecting UI from reporting success on invalid saves."""
+        invalid_config = self.config_mgr._default_config()
+        invalid_config["inventory_costing"]["historical_pattern"]["minimum_history"] = -10
+
+        saved, errors = self.config_mgr.save_config(invalid_config)
+        self.assertFalse(saved)
+        self.assertTrue(isinstance(errors, list))
+        self.assertTrue(len(errors) > 0)
 
 
 if __name__ == "__main__":

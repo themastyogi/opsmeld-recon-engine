@@ -142,7 +142,8 @@ class DataTrustEngineOrchestrator:
                     elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.SUCCESS
 
         if pt_rules:
-            pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=target_comp_id)
+            pt_lb = config.get("payment_timing", {}).get("historical_pattern", {}).get("lookback_months")
+            pt_txs, pt_provenance = self.acquirer.acquire_payment_transactions(company_id=target_comp_id, lookback_months=pt_lb)
             if pt_provenance == "DATA_UNAVAILABLE":
                 rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.DATA_UNAVAILABLE
             else:

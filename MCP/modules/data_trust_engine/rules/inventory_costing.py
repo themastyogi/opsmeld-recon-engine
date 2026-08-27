@@ -88,12 +88,9 @@ class InventoryCostingRule:
         signals_list = []
 
         rel_thresh = float(cost_config.get("historical_pattern", {}).get("relative_change_percent", 25.0))
-        abs_change = cost_config.get("historical_pattern", {}).get("absolute_change_amount")
 
         # C1 — Sudden Unit Cost Movement
         c1_fired = abs(dev_pct) >= rel_thresh
-        if abs_change is not None and float(abs_change) > 0:
-            c1_fired = c1_fired or (abs(curr_cost - base_median) >= float(abs_change))
 
         signals_list.append({"signal_code": "C1", "name": "Sudden Unit Cost Movement", "fired": c1_fired})
         if c1_fired:
@@ -128,11 +125,8 @@ class InventoryCostingRule:
             )
 
         # C4 — Cost Adjustment Event (Boolean Normalized & Materiality Gated)
-        adj_mat = float(cost_config.get("cost_adjustment", {}).get("materiality_percent", 25.0))
         c4_raw = normalize_boolean(tx.get("adjustment"))
         c4_fired = c4_raw
-        if c4_raw and base_median > 0:
-            c4_fired = (abs(curr_cost - base_median) / base_median * 100.0 >= adj_mat)
         signals_list.append({"signal_code": "C4", "name": "Cost Adjustment Event", "fired": c4_fired})
         if c4_fired:
             signals_fired.append("C4 (Cost Adjustment Event)")
@@ -141,11 +135,8 @@ class InventoryCostingRule:
             )
 
         # C5 — Revaluation / Partial Revaluation (Boolean Normalized & Materiality Gated)
-        reval_mat = float(cost_config.get("revaluation", {}).get("materiality_percent", 25.0))
         c5_raw = normalize_boolean(tx.get("partial_revaluation"))
         c5_fired = c5_raw
-        if c5_raw and base_median > 0:
-            c5_fired = (abs(curr_cost - base_median) / base_median * 100.0 >= reval_mat)
         signals_list.append({"signal_code": "C5", "name": "Revaluation Event", "fired": c5_fired})
         if c5_fired:
             signals_fired.append("C5 (Revaluation Event)")
@@ -165,8 +156,6 @@ class InventoryCostingRule:
 
         # C7 — Historical Cost Pattern Break
         c7_fired = abs(dev_pct) >= rel_thresh
-        if abs_change is not None and float(abs_change) > 0:
-            c7_fired = c7_fired or (abs(curr_cost - base_median) >= float(abs_change))
 
         signals_list.append({"signal_code": "C7", "name": "Historical Cost Pattern Break", "fired": c7_fired})
         if c7_fired:

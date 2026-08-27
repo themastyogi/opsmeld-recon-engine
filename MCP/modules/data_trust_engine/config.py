@@ -82,6 +82,21 @@ class DataTrustConfigManager:
             if min_rec is not None and (not isinstance(min_rec, int) or min_rec < 0):
                 errors.append("inventory_costing.peer_movement.minimum_peer_recent_history must be >= 0")
 
+        nc_cfg = config_data.get("narration_context", {})
+        min_peer = nc_cfg.get("minimum_peer_transactions")
+        if min_peer is not None and (not isinstance(min_peer, int) or min_peer <= 0):
+            errors.append("narration_context.minimum_peer_transactions must be an integer > 0")
+
+        pt_cfg = config_data.get("payment_timing", {})
+        pt_hist = pt_cfg.get("historical_pattern", {})
+        pt_min_hist = pt_hist.get("minimum_history")
+        if pt_min_hist is not None and (not isinstance(pt_min_hist, int) or pt_min_hist <= 0):
+            errors.append("payment_timing.historical_pattern.minimum_history must be an integer > 0")
+
+        pt_lb = pt_hist.get("lookback_months")
+        if pt_lb is not None and (not isinstance(pt_lb, (int, float)) or pt_lb <= 0):
+            errors.append("payment_timing.historical_pattern.lookback_months must be > 0")
+
         return len(errors) == 0, errors
 
     def save_config(self, config_data: Dict[str, Any], user: str = "admin@opsmeld.com") -> Tuple[bool, List[str]]:
@@ -194,6 +209,14 @@ class DataTrustConfigManager:
                     "Travel & Entertainment": ["flight", "hotel", "taxi", "meal", "travel", "lodging", "uber", "airline"]
                 }
             },
+            "payment_timing": {
+                "enabled": True,
+                "historical_pattern": {
+                    "minimum_history": 20,
+                    "lookback_months": 12,
+                    "unusual_deviation_days": 7
+                }
+            },
             "inventory_costing": {
                 "enabled": True,
                 "minimum_amount": 0,
@@ -202,8 +225,7 @@ class DataTrustConfigManager:
                     "enabled": True,
                     "minimum_history": 20,
                     "lookback_months": 12,
-                    "relative_change_percent": 25,
-                    "absolute_change_amount": None
+                    "relative_change_percent": 25
                 },
                 "vendor_baseline": {
                     "enabled": True
@@ -228,12 +250,10 @@ class DataTrustConfigManager:
                     "relative_tolerance_percent": 5
                 },
                 "revaluation": {
-                    "enabled": True,
-                    "materiality_percent": 25
+                    "enabled": True
                 },
                 "cost_adjustment": {
-                    "enabled": True,
-                    "materiality_percent": 25
+                    "enabled": True
                 }
             }
         }

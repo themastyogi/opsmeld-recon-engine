@@ -172,7 +172,8 @@ class NarrationContextRule(DataTrustRule):
         if peer_history is None:
             peer_history = DEFAULT_PEER_HISTORY
 
-        if len(peer_history) < self.minimum_history:
+        min_peer = config.get("narration_context", {}).get("minimum_peer_transactions", self.minimum_history)
+        if len(peer_history) < min_peer:
             return None
 
         finding = self.evaluate_candidate(context, peer_history, config)

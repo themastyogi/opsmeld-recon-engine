@@ -115,7 +115,8 @@ class DataAcquirer:
     def acquire_payment_transactions(
         self,
         company_id: Optional[str] = None,
-        ledger_type: str = "BOTH"
+        ledger_type: str = "BOTH",
+        lookback_months: Optional[float] = None
     ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Acquires payment and invoice ledger transactions for Payment Timing & Due-Date Compliance analysis.
@@ -123,7 +124,10 @@ class DataAcquirer:
         Fail-closed boundary: on live BC query failure or resolution failure, returns ([], "DATA_UNAVAILABLE").
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
-            return self._get_fixture_payment_transactions(company_id), "SNAPSHOT_SEED"
+            txs = self._get_fixture_payment_transactions(company_id)
+            if lookback_months is not None and float(lookback_months) > 0:
+                txs = self._filter_by_lookback(txs, float(lookback_months))
+            return txs, "SNAPSHOT_SEED"
 
         if self.client:
             token = self.client.get_access_token()
@@ -164,6 +168,9 @@ class DataAcquirer:
 
                     resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", comp_guid)
                     acquired.extend(resolved_cust)
+
+                if lookback_months is not None and float(lookback_months) > 0:
+                    acquired = self._filter_by_lookback(acquired, float(lookback_months))
 
                 return acquired, "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
