@@ -24,11 +24,16 @@ jobs:
           tenant-id: ${{ secrets.OPSMELDRECONAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.OPSMELDRECONAPP_AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build and push container image to registry
+      - name: Log in to ACR and Build/Push Docker Image
+        run: |
+          az acr login --name acropsmeldrecon
+          docker build -t acropsmeldrecon.azurecr.io/opsmeld-recon-app:${{ github.sha }} -t acropsmeldrecon.azurecr.io/opsmeld-recon-app:latest .
+          docker push acropsmeldrecon.azurecr.io/opsmeld-recon-app:${{ github.sha }}
+          docker push acropsmeldrecon.azurecr.io/opsmeld-recon-app:latest
+
+      - name: Deploy to Azure Container App
         uses: azure/container-apps-deploy-action@v2
         with:
-          appSourcePath: ${{ github.workspace }}
-          dockerfilePath: Dockerfile
-          acrName: acropsmeldrecon
+          imageToDeploy: acropsmeldrecon.azurecr.io/opsmeld-recon-app:${{ github.sha }}
           containerAppName: opsmeld-recon-app
           resourceGroup: rg-opsmeld-container
