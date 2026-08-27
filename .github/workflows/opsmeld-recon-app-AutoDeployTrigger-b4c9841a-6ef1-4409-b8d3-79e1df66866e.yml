@@ -29,5 +29,6 @@ jobs:
         with:
           appSourcePath: ${{ github.workspace }}
           dockerfilePath: Dockerfile
+          imageToBuild: opsmeld-recon-app:${{ github.sha }}
           containerAppName: opsmeld-recon-app
           resourceGroup: rg-opsmeld-container
