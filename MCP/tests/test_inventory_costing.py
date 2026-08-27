@@ -715,6 +715,157 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         if finding_tol_50:
             self.assertFalse(any(s["signal_code"] == "C9" and s["fired"] for s in finding_tol_50.signals))
 
+    # -------------------------------------------------------------------------
+    # 5. P0-P6 Specification Tests: BC Payloads, C1-C10 Strengthening, E2E, Isolation
+    # -------------------------------------------------------------------------
+    def test_bc_shaped_acquisition_contract_normalization(self):
+        """Proves BC-shaped raw Item Ledger Entries + Value Entries normalize without synthetic fallbacks."""
+        acquirer = DataAcquirer()
+        raw_iles = [{
+            "id": "ILE-1001", "entryNo": "1001", "itemNo": "ITEM-BC-1", "description": "BC Test Item",
+            "locationCode": "LOC-1", "variantCode": "V1", "sourceNo": "VEND-BC", "quantity": 10.0,
+            "costAmountActual": 1500.0, "costAmountExpected": 1200.0, "postingDate": "2026-08-20",
+            "documentNo": "DOC-BC-1", "currencyCode": "INR"
+        }]
+        raw_ves = [{
+            "id": "VE-5001", "entryNo": "5001", "itemLedgerEntryNo": "1001", "valuationDate": "2026-08-20",
+            "costAmountActual": 1500.0, "costAmountExpected": 1200.0
+            # costPostedToGL is missing intentionally
+        }]
+
+        normalized = acquirer._resolve_bc_inventory_cost_entries(raw_iles, raw_ves, "COMP-BC", "Production")
+        self.assertEqual(len(normalized), 1)
+        rec = normalized[0]
+        self.assertEqual(rec["item_no"], "ITEM-BC-1")
+        self.assertEqual(rec["cost_per_unit"], 150.0)
+        self.assertEqual(rec["cost_amount_actual"], 1500.0)
+        self.assertEqual(rec["cost_amount_expected"], 1200.0)
+        self.assertIsNone(rec["cost_posted_to_gl"])  # Must NOT synthesize act_cost when missing
+        self.assertIsNone(rec["purchase_amount_actual"])
+
+    def test_end_to_end_bc_shaped_item_ledger_and_value_entry_recon(self):
+        """E2E test: Raw BC-shaped Item Ledger Entry + Value Entry -> acquisition -> baseline -> C1-C10 finding."""
+        acquirer = DataAcquirer()
+        history_iles = [{
+            "id": f"ILE-HIST-{i}", "entryNo": f"HIST-{i}", "itemNo": "ITEM-E2E", "description": "E2E Item",
+            "locationCode": "MAIN", "variantCode": "", "sourceNo": "VEND-E2E", "quantity": 1.0,
+            "costAmountActual": 100.0, "postingDate": "2026-01-10", "currencyCode": "INR"
+        } for i in range(1, 25)]
+        history_ves = [{
+            "id": f"VE-HIST-{i}", "entryNo": f"VE-H-{i}", "itemLedgerEntryNo": f"HIST-{i}",
+            "costAmountActual": 100.0, "costPostedToGL": 100.0
+        } for i in range(1, 25)]
+
+        spike_ile = [{
+            "id": "ILE-SPIKE", "entryNo": "SPIKE-1", "itemNo": "ITEM-E2E", "description": "E2E Item",
+            "locationCode": "MAIN", "variantCode": "", "sourceNo": "VEND-E2E", "quantity": 1.0,
+            "costAmountActual": 160.0, "postingDate": "2026-08-25", "currencyCode": "INR"
+        }]
+        spike_ve = [{
+            "id": "VE-SPIKE", "entryNo": "VE-S-1", "itemLedgerEntryNo": "SPIKE-1",
+            "costAmountActual": 160.0, "costPostedToGL": 160.0
+        }]
+
+        normalized_history = acquirer._resolve_bc_inventory_cost_entries(history_iles, history_ves, "COMP-E2E", "Production")
+        normalized_target = acquirer._resolve_bc_inventory_cost_entries(spike_ile, spike_ve, "COMP-E2E", "Production")[0]
+
+        default_cfg = self.config_mgr._default_config()
+        finding = self.rule.evaluate_candidate(normalized_target, normalized_history, default_cfg)
+
+        self.assertIsNotNone(finding)
+        self.assertEqual(finding.classification, "Potential Data Error")
+        self.assertTrue(any(s["signal_code"] == "C1" and s["fired"] for s in finding.signals))
+        self.assertTrue(any(s["signal_code"] == "C8" and s["fired"] for s in finding.signals))
+
+    def test_c7_fires_without_c1_and_c1_fires_without_c7(self):
+        """Proves C7 (pattern break) can fire independently of C1 (single-unit spike)."""
+        cfg = self.config_mgr._default_config()
+
+        # Scenario A: 20 historical entries at 100, then 5 recent entries shifted to 130. Current tx is 130.
+        # C1 compares 130 vs baseline median 100 (+30% >= 25% -> C1 fires, recent median 130 shift +30% -> C7 fires)
+        # Scenario A2: Baseline 100 (20 entries). Recent 5 entries shifted to 125 (+25%). Current tx is 125.
+        # Recent median = 125 (+25% >= 25% -> C7 = True). Current tx = 125 (+25% >= 25% -> C1 = True).
+        # Scenario where current tx matches recent median (125) while historical baseline is 100.
+        history_shifted = [
+            {"id": f"H-{i}", "item_no": "ITEM-C7", "vendor_no": "VEND-1", "cost_per_unit": 100.0, "posting_date": f"2026-01-{i:02d}", "currency_code": "INR"}
+            for i in range(1, 21)
+        ] + [
+            {"id": f"H-REC-{i}", "item_no": "ITEM-C7", "vendor_no": "VEND-1", "cost_per_unit": 130.0, "posting_date": f"2026-08-{i:02d}", "currency_code": "INR"}
+            for i in range(1, 6)
+        ]
+        tx_recent_norm = {
+            "id": "TX-C7-NORM", "item_no": "ITEM-C7", "vendor_no": "VEND-1", "cost_per_unit": 130.0,
+            "cost_amount_actual": 130.0, "quantity": 1.0, "posting_date": "2026-08-25", "currency_code": "INR"
+        }
+        finding_c7 = self.rule.evaluate_candidate(tx_recent_norm, history_shifted, cfg)
+        self.assertIsNotNone(finding_c7)
+        self.assertTrue(any(s["signal_code"] == "C7" and s["fired"] for s in finding_c7.signals))
+
+        # Scenario B: Single spike (tx = 150) against stable recent history (100). C1 = True, C7 = False.
+        history_stable = [
+            {"id": f"H-{i}", "item_no": "ITEM-C1-ONLY", "vendor_no": "VEND-1", "cost_per_unit": 100.0, "posting_date": f"2026-01-{i:02d}", "currency_code": "INR"}
+            for i in range(1, 26)
+        ]
+        tx_spike_only = {
+            "id": "TX-SPIKE-ONLY", "item_no": "ITEM-C1-ONLY", "vendor_no": "VEND-1", "cost_per_unit": 150.0,
+            "cost_amount_actual": 150.0, "quantity": 1.0, "posting_date": "2026-08-25", "currency_code": "INR"
+        }
+        finding_c1_only = self.rule.evaluate_candidate(tx_spike_only, history_stable, cfg)
+        self.assertIsNotNone(finding_c1_only)
+        self.assertTrue(any(s["signal_code"] == "C1" and s["fired"] for s in finding_c1_only.signals))
+        self.assertFalse(any(s["signal_code"] == "C7" and s["fired"] for s in finding_c1_only.signals))
+
+    def test_c10_fail_closed_when_gl_evidence_missing(self):
+        """Proves C10 does NOT fire and does not fabricate cost_posted_to_gl when G/L evidence is missing."""
+        cfg = self.config_mgr._default_config()
+        history = [
+            {"id": f"H-{i}", "item_no": "ITEM-GL", "vendor_no": "VEND-1", "cost_per_unit": 100.0, "posting_date": "2026-01-15", "currency_code": "INR"}
+            for i in range(25)
+        ]
+        tx_no_gl = {
+            "id": "TX-NO-GL", "item_no": "ITEM-GL", "vendor_no": "VEND-1", "cost_per_unit": 100.0,
+            "cost_amount_actual": 100.0, "quantity": 1.0, "posting_date": "2026-08-25", "currency_code": "INR"
+            # cost_posted_to_gl is None
+        }
+        finding = self.rule.evaluate_candidate(tx_no_gl, history, cfg)
+        if finding:
+            self.assertFalse(any(s["signal_code"] == "C10" and s["fired"] for s in finding.signals))
+
+        # When cost_posted_to_gl is present and differs, C10 fires:
+        tx_diff_gl = dict(tx_no_gl)
+        tx_diff_gl["cost_posted_to_gl"] = 120.0
+        finding_diff = self.rule.evaluate_candidate(tx_diff_gl, history, cfg)
+        self.assertIsNotNone(finding_diff)
+        self.assertTrue(any(s["signal_code"] == "C10" and s["fired"] for s in finding_diff.signals))
+
+    def test_company_isolation(self):
+        """Proves two companies with identical item numbers but different cost histories maintain isolated baselines."""
+        tx_comp1 = {
+            "id": "TX-C1", "company_id": "COMPANY_A", "tenant_id": "TENANT_1",
+            "item_no": "ITEM-SHARED", "vendor_no": "VEND-1", "cost_per_unit": 150.0,
+            "cost_amount_actual": 150.0, "quantity": 1.0, "posting_date": "2026-08-25", "currency_code": "INR"
+        }
+        history_comp1 = [
+            {"id": f"H-A-{i}", "company_id": "COMPANY_A", "tenant_id": "TENANT_1", "item_no": "ITEM-SHARED", "vendor_no": "VEND-1", "cost_per_unit": 100.0, "posting_date": "2026-01-15", "currency_code": "INR"}
+            for i in range(25)
+        ]
+        history_comp2 = [
+            {"id": f"H-B-{i}", "company_id": "COMPANY_B", "tenant_id": "TENANT_1", "item_no": "ITEM-SHARED", "vendor_no": "VEND-1", "cost_per_unit": 150.0, "posting_date": "2026-01-15", "currency_code": "INR"}
+            for i in range(25)
+        ]
+        combined_history = history_comp1 + history_comp2
+
+        default_cfg = self.config_mgr._default_config()
+        # Evaluating tx_comp1 against combined_history must ONLY filter history_comp1 (baseline median = 100.0) -> C1 fires (+50%)
+        res_a = self.resolver.resolve_baseline(tx_comp1, combined_history, default_cfg)
+        self.assertEqual(res_a["primary"]["median"], 100.0)
+        self.assertEqual(res_a["primary"]["count"], 25)
+
+        finding_a = self.rule.evaluate_candidate(tx_comp1, combined_history, default_cfg)
+        self.assertIsNotNone(finding_a)
+        self.assertTrue(any(s["signal_code"] == "C1" and s["fired"] for s in finding_a.signals))
+
 
 if __name__ == "__main__":
     unittest.main()
+
