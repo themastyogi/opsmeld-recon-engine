@@ -119,7 +119,11 @@ class DataTrustEngineOrchestrator:
                 "rule_status": rule_status_missing,
                 "message": user_msg,
                 "diagnostics": {
-                    "validation_errors": config.get("_validation_errors", [])
+                    "error_code": "ConfigurationMissing",
+                    "error_message": user_msg,
+                    "validation_errors": config.get("_validation_errors", []),
+                    "run_id": run_id,
+                    "timestamp": datetime.datetime.now().isoformat()
                 },
                 "run_summary": {
                     "records_scanned": 0,

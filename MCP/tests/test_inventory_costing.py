@@ -563,9 +563,16 @@ class TestInventoryCostingPhase3(unittest.TestCase):
             res = orchestrator.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
 
             # Assert structured CONFIGURATION_MISSING execution response
+            self.assertIn("DT-", res["run_id"])
             self.assertEqual(res["status"], DataTrustState.CONFIGURATION_MISSING)
             self.assertEqual(res["findings"], [])
+            self.assertTrue(isinstance(res["message"], str) and len(res["message"]) > 0)
+            self.assertEqual(res["rule_status"]["POSTING_DATE"], RuleExecutionStatus.CONFIGURATION_MISSING)
+            self.assertEqual(res["rule_status"]["SUBLEDGER_BYPASS"], RuleExecutionStatus.CONFIGURATION_MISSING)
+            self.assertEqual(res["rule_status"]["NARRATION_CONTEXT"], RuleExecutionStatus.CONFIGURATION_MISSING)
+            self.assertEqual(res["rule_status"]["PAYMENT_TIMING"], RuleExecutionStatus.CONFIGURATION_MISSING)
             self.assertEqual(res["rule_status"]["INVENTORY_COSTING"], RuleExecutionStatus.CONFIGURATION_MISSING)
+            self.assertEqual(res["diagnostics"]["error_code"], "ConfigurationMissing")
             self.assertTrue(len(res["diagnostics"]["validation_errors"]) > 0)
 
             # Assert ZERO acquisition calls occurred
