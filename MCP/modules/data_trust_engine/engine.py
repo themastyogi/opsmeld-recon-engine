@@ -19,6 +19,7 @@ from modules.data_trust_engine.rules.posting_date import PostingDatePolicyRule
 from modules.data_trust_engine.rules.subledger_bypass import SubledgerBypassRule
 from modules.data_trust_engine.rules.narration_context import NarrationContextRule
 from modules.data_trust_engine.rules.payment_timing import PaymentTimingRule
+from modules.data_trust_engine.rules.inventory_costing import InventoryCostingRule
 
 
 class DataTrustEngineOrchestrator:
@@ -33,7 +34,8 @@ class DataTrustEngineOrchestrator:
             PostingDatePolicyRule(),
             SubledgerBypassRule(),
             NarrationContextRule(),
-            PaymentTimingRule()
+            PaymentTimingRule(),
+            InventoryCostingRule()
         ]
 
     def run_recon(self, company_id: Optional[str] = None, session_info: Optional[Dict[str, Any]] = None, sample_transactions: Optional[List[Dict[str, Any]]] = None, mode: str = 'AUTO') -> Dict[str, Any]:
@@ -61,7 +63,8 @@ class DataTrustEngineOrchestrator:
             "POSTING_DATE": RuleExecutionStatus.NOT_RUN,
             "SUBLEDGER_BYPASS": RuleExecutionStatus.NOT_RUN,
             "NARRATION_CONTEXT": RuleExecutionStatus.NOT_RUN,
-            "PAYMENT_TIMING": RuleExecutionStatus.NOT_RUN
+            "PAYMENT_TIMING": RuleExecutionStatus.NOT_RUN,
+            "INVENTORY_COSTING": RuleExecutionStatus.NOT_RUN
         }
 
         if not is_auth:
@@ -131,6 +134,17 @@ class DataTrustEngineOrchestrator:
             else:
                 rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.SUCCESS
 
+        ic_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "INVENTORY_COST_TRANSACTIONS" and r.enabled]
+        ic_txs: List[Dict[str, Any]] = []
+        ic_provenance = "AUTO"
+
+        if ic_rules:
+            ic_txs, ic_provenance = self.acquirer.acquire_inventory_cost_transactions(company_id=target_comp_id)
+            if ic_provenance == "DATA_UNAVAILABLE":
+                rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.DATA_UNAVAILABLE
+            else:
+                rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.SUCCESS
+
         config = self.config_mgr.load_config()
         config["tenant_id"] = self.client_key
         candidates = []
@@ -144,6 +158,13 @@ class DataTrustEngineOrchestrator:
         for ptx in pt_txs:
             for rule in pt_rules:
                 cand = rule.evaluate(ptx, config)
+                if cand and cand.eligibility == "ELIGIBLE":
+                    candidates.append((rule, cand))
+
+        for ictx in ic_txs:
+            for rule in ic_rules:
+                ictx["historical_transactions"] = ic_txs
+                cand = rule.evaluate(ictx, config)
                 if cand and cand.eligibility == "ELIGIBLE":
                     candidates.append((rule, cand))
 

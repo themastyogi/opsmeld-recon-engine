@@ -138,5 +138,45 @@ class DataTrustConfigManager:
                     "IT Hardware & Software": ["laptop", "monitor", "keyboard", "server", "cable", "memory", "storage", "software", "license"],
                     "Travel & Entertainment": ["flight", "hotel", "taxi", "meal", "travel", "lodging", "uber", "airline"]
                 }
+            },
+            "inventory_costing": {
+                "enabled": True,
+                "minimum_amount": 0,
+                "minimum_quantity": 1,
+                "historical_pattern": {
+                    "enabled": True,
+                    "minimum_history": 20,
+                    "lookback_months": 12,
+                    "relative_change_percent": 25,
+                    "absolute_change_amount": None
+                },
+                "vendor_baseline": {
+                    "enabled": True
+                },
+                "peer_baseline": {
+                    "enabled": True,
+                    "include_location": True,
+                    "include_variant": True
+                },
+                "peer_movement": {
+                    "enabled": True,
+                    "material_movement_percent": 20
+                },
+                "expected_actual": {
+                    "enabled": True,
+                    "relative_variance_percent": 20
+                },
+                "quantity_cost": {
+                    "enabled": True,
+                    "relative_tolerance_percent": 5
+                },
+                "revaluation": {
+                    "enabled": True,
+                    "materiality_percent": 25
+                },
+                "cost_adjustment": {
+                    "enabled": True,
+                    "materiality_percent": 25
+                }
             }
         }

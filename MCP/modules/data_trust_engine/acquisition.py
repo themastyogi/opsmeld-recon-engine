@@ -172,6 +172,226 @@ class DataAcquirer:
 
         return [], "DATA_UNAVAILABLE"
 
+    def acquire_inventory_cost_transactions(
+        self,
+        company_id: Optional[str] = None,
+        lookback_months: Optional[int] = None
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Acquires Item Ledger Entries and Value Entries for Inventory Costing analysis.
+        Enforces partial acquisition fail-closed rule: if Item Ledger succeeds but Value Entry fails,
+        returns ([], "DATA_UNAVAILABLE").
+        """
+        if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
+            return self._get_fixture_inventory_cost_transactions(company_id), "SNAPSHOT_SEED"
+
+        if self.client:
+            token = self.client.get_access_token()
+            if not token:
+                return [], "DATA_UNAVAILABLE"
+
+            comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id)
+            if not comp_guid:
+                return [], "DATA_UNAVAILABLE"
+
+            try:
+                # Step A: Retrieve Item Ledger Entries
+                ile_resp = self.client._execute_bc_rest(f"companies({comp_guid})/itemLedgerEntries")
+                if isinstance(ile_resp, dict) and (ile_resp.get("is_error") or "error" in ile_resp):
+                    logger.error(f"itemLedgerEntries request failed: {ile_resp.get('error')}")
+                    return [], "DATA_UNAVAILABLE"
+
+                # Step B: Retrieve Value Entries (Partial Acquisition Fail-Closed Boundary)
+                ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
+                if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
+                    logger.error(f"valueEntries request failed: {ve_resp.get('error')}. Failing closed.")
+                    return [], "DATA_UNAVAILABLE"
+
+                ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
+                ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
+
+                env_id = self.client.config.environment if (hasattr(self.client, "config") and getattr(self.client.config, "environment", None)) else "Production"
+                resolved_cost_txs = self._resolve_bc_inventory_cost_entries(ile_raw, ve_raw, comp_guid, env_id)
+                return resolved_cost_txs, "LIVE_BUSINESS_CENTRAL"
+            except Exception as e:
+                logger.error(f"Inventory Costing acquisition exception: {str(e)}")
+                return [], "DATA_UNAVAILABLE"
+
+        return [], "DATA_UNAVAILABLE"
+
+    def _resolve_bc_inventory_cost_entries(
+        self,
+        item_ledger_entries: List[Dict[str, Any]],
+        value_entries: List[Dict[str, Any]],
+        company_id: str,
+        environment_id: str
+    ) -> List[Dict[str, Any]]:
+        """Normalizes Item Ledger & Value Entry payloads and maps cost fields."""
+        ve_by_ile: Dict[str, List[Dict[str, Any]]] = {}
+        for ve in value_entries:
+            ile_no = str(ve.get("itemLedgerEntryNo") or ve.get("itemLedgerEntryNo_") or ve.get("entryNo") or "")
+            if ile_no:
+                if ile_no not in ve_by_ile:
+                    ve_by_ile[ile_no] = []
+                ve_by_ile[ile_no].append(ve)
+
+        records: List[Dict[str, Any]] = []
+        for ile in item_ledger_entries:
+            ile_id = str(ile.get("id") or ile.get("entryNo") or ile.get("itemLedgerEntryNo") or "")
+            matched_ves = ve_by_ile.get(ile_id, [])
+
+            qty = abs(float(ile.get("quantity") or ile.get("invoicedQuantity") or 1.0))
+            if qty == 0.0:
+                qty = 1.0
+
+            act_cost = float(ile.get("costAmountActual") or (matched_ves[0].get("costAmountActual") if matched_ves else 0.0) or 0.0)
+            exp_cost = float(ile.get("costAmountExpected") or (matched_ves[0].get("costAmountExpected") if matched_ves else 0.0) or 0.0)
+            cost_unit = act_cost / qty if qty > 0 else act_cost
+
+            ve_primary = matched_ves[0] if matched_ves else {}
+
+            rec = {
+                "id": f"IC-ILE-{ile_id}",
+                "environment_id": environment_id,
+                "company_id": company_id,
+                "company_name": company_id,
+                "item_no": str(ile.get("itemNo") or ile.get("itemNumber") or "ITEM-100"),
+                "item_description": str(ile.get("description") or ile.get("itemDescription") or "Inventory Item"),
+                "location_code": str(ile.get("locationCode") or "MAIN"),
+                "variant_code": str(ile.get("variantCode") or "DEFAULT"),
+                "vendor_no": str(ile.get("sourceNo") or ile.get("vendorNo") or "VEND-01"),
+                "vendor_name": str(ile.get("sourceName") or ile.get("vendorName") or "Vendor"),
+                "source_type": str(ile.get("sourceType") or "Vendor"),
+                "source_no": str(ile.get("sourceNo") or ""),
+                "item_ledger_entry_no": ile_id,
+                "value_entry_no": str(ve_primary.get("entryNo") or ve_primary.get("id") or ""),
+                "posting_date": str(ile.get("postingDate") or "2026-08-01"),
+                "document_date": str(ile.get("documentDate") or ile.get("postingDate") or "2026-08-01"),
+                "valuation_date": str(ve_primary.get("valuationDate") or ile.get("postingDate") or "2026-08-01"),
+                "document_no": str(ile.get("documentNo") or ile.get("documentNumber") or f"DOC-{ile_id}"),
+                "document_type": str(ile.get("documentType") or "Purchase Receipt"),
+                "entry_type": str(ile.get("entryType") or "Purchase"),
+                "quantity": qty,
+                "invoiced_quantity": float(ile.get("invoicedQuantity") or qty),
+                "cost_per_unit": abs(cost_unit),
+                "cost_amount_actual": abs(act_cost),
+                "cost_amount_expected": abs(exp_cost),
+                "cost_posted_to_gl": float(ve_primary.get("costPostedToGL") or act_cost),
+                "expected_cost_posted_to_gl": float(ve_primary.get("expectedCostPostedToGL") or exp_cost),
+                "purchase_amount_actual": float(ve_primary.get("purchaseAmountActual") or act_cost),
+                "purchase_amount_expected": float(ve_primary.get("purchaseAmountExpected") or exp_cost),
+                "expected_cost": float(ve_primary.get("expectedCost") or exp_cost),
+                "adjustment": bool(ve_primary.get("adjustment", False)),
+                "partial_revaluation": bool(ve_primary.get("partialRevaluation", False)),
+                "average_cost_exception": bool(ve_primary.get("averageCostException", False)),
+                "valued_by_average_cost": bool(ve_primary.get("valuedByAverageCost", False)),
+                "item_charge_no": str(ve_primary.get("itemChargeNo") or ""),
+                "variance_type": str(ve_primary.get("varianceType") or ""),
+                "dimension_set_id": str(ve_primary.get("dimensionSetID") or ""),
+                "source_code": str(ile.get("sourceCode") or "INV"),
+                "reason_code": str(ile.get("reasonCode") or ""),
+                "currency_code": "INR"
+            }
+            records.append(rec)
+
+        return records
+
+    def _get_fixture_inventory_cost_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Returns synthetic inventory costing transactions for offline testing & demo modes."""
+        comp = company_id or "FIXTURE_COMPANY"
+        base_records = []
+        
+        # Build 30 historical baseline entries for Item X + Vendor A (Median = 105.0)
+        for i in range(1, 31):
+            base_records.append({
+                "id": f"IC-BASE-{i}",
+                "environment_id": "test_fixture_env",
+                "company_id": comp,
+                "company_name": comp,
+                "item_no": "ITEM-X",
+                "item_description": "Industrial Widget X",
+                "location_code": "DELHI",
+                "variant_code": "DEFAULT",
+                "vendor_no": "VENDOR-A",
+                "vendor_name": "Fabrikam Supplies",
+                "source_type": "Vendor",
+                "source_no": "VENDOR-A",
+                "item_ledger_entry_no": f"100{i}",
+                "value_entry_no": f"200{i}",
+                "posting_date": f"2026-07-{min(i, 28):02d}",
+                "document_date": f"2026-07-{min(i, 28):02d}",
+                "valuation_date": f"2026-07-{min(i, 28):02d}",
+                "document_no": f"PINV-10{i}",
+                "document_type": "Purchase Invoice",
+                "entry_type": "Purchase",
+                "quantity": 10.0,
+                "invoiced_quantity": 10.0,
+                "cost_per_unit": 105.0 + (i % 3),
+                "cost_amount_actual": 1050.0,
+                "cost_amount_expected": 1050.0,
+                "cost_posted_to_gl": 1050.0,
+                "expected_cost_posted_to_gl": 1050.0,
+                "purchase_amount_actual": 1050.0,
+                "purchase_amount_expected": 1050.0,
+                "expected_cost": 1050.0,
+                "adjustment": False,
+                "partial_revaluation": False,
+                "average_cost_exception": False,
+                "valued_by_average_cost": False,
+                "item_charge_no": "",
+                "variance_type": "",
+                "dimension_set_id": "DIM-1",
+                "source_code": "PURCHASES",
+                "reason_code": "",
+                "currency_code": "INR"
+            })
+
+        # Add current transaction: unexplained cost spike (+38% -> 145.0)
+        base_records.append({
+            "id": "IC-CURR-SPIKE",
+            "environment_id": "test_fixture_env",
+            "company_id": comp,
+            "company_name": comp,
+            "item_no": "ITEM-X",
+            "item_description": "Industrial Widget X",
+            "location_code": "DELHI",
+            "variant_code": "DEFAULT",
+            "vendor_no": "VENDOR-A",
+            "vendor_name": "Fabrikam Supplies",
+            "source_type": "Vendor",
+            "source_no": "VENDOR-A",
+            "item_ledger_entry_no": "1099",
+            "value_entry_no": "2099",
+            "posting_date": "2026-08-25",
+            "document_date": "2026-08-25",
+            "valuation_date": "2026-08-25",
+            "document_no": "PINV-9999",
+            "document_type": "Purchase Invoice",
+            "entry_type": "Purchase",
+            "quantity": 10.0,
+            "invoiced_quantity": 10.0,
+            "cost_per_unit": 145.0,
+            "cost_amount_actual": 1450.0,
+            "cost_amount_expected": 1450.0,
+            "cost_posted_to_gl": 1450.0,
+            "expected_cost_posted_to_gl": 1450.0,
+            "purchase_amount_actual": 1450.0,
+            "purchase_amount_expected": 1450.0,
+            "expected_cost": 1450.0,
+            "adjustment": False,
+            "partial_revaluation": False,
+            "average_cost_exception": False,
+            "valued_by_average_cost": False,
+            "item_charge_no": "",
+            "variance_type": "",
+            "dimension_set_id": "DIM-1",
+            "source_code": "PURCHASES",
+            "reason_code": "",
+            "currency_code": "INR"
+        })
+
+        return base_records
+
     def _resolve_bc_payment_entries(
         self,
         ledger_entries: List[Dict[str, Any]],
