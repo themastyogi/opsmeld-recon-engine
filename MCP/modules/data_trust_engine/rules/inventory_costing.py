@@ -12,6 +12,18 @@ from modules.data_trust_engine.models import DataTrustFinding
 from modules.data_trust_engine.baseline_resolver import CostBaselineResolver
 
 
+def normalize_boolean(val: Any) -> bool:
+    """Normalizes string 'false', '0', 0, False, None to boolean False."""
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val != 0)
+    s = str(val).strip().lower()
+    return s in ("true", "1", "yes", "y", "t")
+
+
 class InventoryCostingRule(DataTrustRule):
     rule_id = "INVENTORY_COSTING"
     rule_version = "1.0"
@@ -27,6 +39,9 @@ class InventoryCostingRule(DataTrustRule):
     def assess_eligibility(self, context: Dict[str, Any]) -> str:
         cost = float(context.get("cost_per_unit") or context.get("cost_amount_actual") or 0.0)
         qty = float(context.get("quantity") or 0.0)
+        curr = context.get("currency_code")
+        if not curr:
+            return "INSUFFICIENT_EVIDENCE"
         if cost <= 0 and qty <= 0:
             return "INSUFFICIENT_EVIDENCE"
         return "ELIGIBLE"
@@ -74,27 +89,30 @@ class InventoryCostingRule(DataTrustRule):
         # C2 — Unusual Purchase Cost Variance
         purch_act = float(tx.get("purchase_amount_actual") or 0.0)
         purch_exp = float(tx.get("purchase_amount_expected") or 0.0)
-        c2_fired = (purch_act > 0 and purch_exp > 0 and abs(purch_act - purch_exp) / max(purch_exp, 1.0) >= 0.20)
+        purch_thresh = float(cost_config.get("expected_actual", {}).get("relative_variance_percent", 20.0)) / 100.0
+        c2_fired = (purch_act > 0 and purch_exp > 0 and abs(purch_act - purch_exp) / max(purch_exp, 1.0) >= purch_thresh)
         signals_list.append({"signal_code": "C2", "name": "Unusual Purchase Cost Variance", "fired": c2_fired})
         if c2_fired:
             signals_fired.append("C2 (Unusual Purchase Cost Variance)")
             evidence_chain.append(
-                f"[C2 Purchase Cost Variance] Fired: Purchase actual ${purch_act:,.2f} vs expected ${purch_exp:,.2f} variance >= 20%."
+                f"[C2 Purchase Cost Variance] Fired: Purchase actual ${purch_act:,.2f} vs expected ${purch_exp:,.2f} variance >= {int(purch_thresh*100)}%."
             )
 
-        # C3 — Expected-to-Actual Cost Change
+        # C3 — Expected-to-Actual Cost Change (Gated by Materiality Threshold)
+        exp_act_thresh = float(cost_config.get("expected_actual", {}).get("relative_variance_percent", 20.0))
         act_cost = float(tx.get("cost_amount_actual") or 0.0)
         exp_cost = float(tx.get("cost_amount_expected") or 0.0)
-        c3_fired = (exp_cost > 0 and act_cost > 0 and exp_cost != act_cost)
+        c3_variance_pct = (abs(act_cost - exp_cost) / max(exp_cost, 1.0) * 100.0) if exp_cost > 0 else 0.0
+        c3_fired = (exp_cost > 0 and act_cost > 0 and c3_variance_pct >= exp_act_thresh)
         signals_list.append({"signal_code": "C3", "name": "Expected-to-Actual Cost Change", "fired": c3_fired})
         if c3_fired:
             signals_fired.append("C3 (Expected-to-Actual Cost Change)")
             evidence_chain.append(
-                f"[C3 Expected-to-Actual] Fired: Expected cost ${exp_cost:,.2f} transitioned to actual cost ${act_cost:,.2f}."
+                f"[C3 Expected-to-Actual] Fired: Expected cost ${exp_cost:,.2f} transitioned to actual cost ${act_cost:,.2f} (variance {c3_variance_pct:.1f}% >= {exp_act_thresh:.0f}%)."
             )
 
-        # C4 — Cost Adjustment Event
-        c4_fired = bool(tx.get("adjustment", False))
+        # C4 — Cost Adjustment Event (Boolean Normalized)
+        c4_fired = normalize_boolean(tx.get("adjustment"))
         signals_list.append({"signal_code": "C4", "name": "Cost Adjustment Event", "fired": c4_fired})
         if c4_fired:
             signals_fired.append("C4 (Cost Adjustment Event)")
@@ -102,8 +120,8 @@ class InventoryCostingRule(DataTrustRule):
                 "[C4 Cost Adjustment] Fired: Transaction represents a Business Central cost adjustment entry."
             )
 
-        # C5 — Revaluation / Partial Revaluation
-        c5_fired = bool(tx.get("partial_revaluation", False))
+        # C5 — Revaluation / Partial Revaluation (Boolean Normalized)
+        c5_fired = normalize_boolean(tx.get("partial_revaluation"))
         signals_list.append({"signal_code": "C5", "name": "Revaluation Event", "fired": c5_fired})
         if c5_fired:
             signals_fired.append("C5 (Revaluation Event)")
@@ -160,7 +178,7 @@ class InventoryCostingRule(DataTrustRule):
             )
 
         # C9 — Cost / Quantity Inconsistency
-        qty = float(tx.get("quantity") or 0.0)
+        qty = float(tx.get("quantity") if tx.get("quantity") is not None else 0.0)
         c9_fired = (qty == 0.0 and act_cost > 0.0)
         signals_list.append({"signal_code": "C9", "name": "Cost/Quantity Inconsistency", "fired": c9_fired})
         if c9_fired:
@@ -182,16 +200,12 @@ class InventoryCostingRule(DataTrustRule):
         if not any(s["fired"] for s in signals_list):
             return None
 
-        # Step 6: Peer Movement Attenuation (Numeric Check)
-        peer_med = peer.get("peer_median")
-        peer_mov_pct = 0.0
-        if peer_med and peer_med > 0 and base_median > 0:
-            peer_mov_pct = abs(peer_med - base_median) / base_median * 100.0
-
-        is_peer_attenuated = (abs(dev_pct) >= rel_thresh and peer_mov_pct >= 20.0)
+        # Step 6: Peer Movement Attenuation Status Check
+        peer_attenuation_status = peer.get("peer_attenuation_status", "UNATTENUATED")
+        is_peer_attenuated = (peer_attenuation_status == "ATTENUATED")
         if is_peer_attenuated:
             evidence_chain.append(
-                f"[Peer Attenuation] Broad market/item movement detected ({peer_mov_pct:.1f}% peer shift). Anomaly severity attenuated."
+                "[Peer Attenuation] Broad market/item movement detected (peer shift >= 20%). Anomaly severity attenuated to MEDIUM."
             )
 
         # Classification & Evidence Strength Selection
@@ -216,8 +230,8 @@ class InventoryCostingRule(DataTrustRule):
             evidence_strength = "LOW"
             severity = "INFORMATIONAL"
 
-        item_no = tx.get("item_no", "ITEM")
-        tx_id = tx.get("id") or tx.get("item_ledger_entry_no") or "000"
+        item_no = str(tx.get("item_no") or "ITEM")
+        tx_id = str(tx.get("id") or tx.get("item_ledger_entry_no") or "000")
 
         impact = f"Inventory costing movement ({dev_pct:+.1f}%) detected for Item '{item_no}'. Identified driver: {known_driver}."
 

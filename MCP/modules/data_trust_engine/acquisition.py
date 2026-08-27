@@ -226,7 +226,7 @@ class DataAcquirer:
         company_id: str,
         environment_id: str
     ) -> List[Dict[str, Any]]:
-        """Normalizes Item Ledger & Value Entry payloads and maps cost fields."""
+        """Normalizes Item Ledger & Value Entry payloads and maps cost fields without synthetic string fallbacks."""
         ve_by_ile: Dict[str, List[Dict[str, Any]]] = {}
         for ve in value_entries:
             ile_no = str(ve.get("itemLedgerEntryNo") or ve.get("itemLedgerEntryNo_") or ve.get("entryNo") or "")
@@ -240,13 +240,11 @@ class DataAcquirer:
             ile_id = str(ile.get("id") or ile.get("entryNo") or ile.get("itemLedgerEntryNo") or "")
             matched_ves = ve_by_ile.get(ile_id, [])
 
-            qty = abs(float(ile.get("quantity") or ile.get("invoicedQuantity") or 1.0))
-            if qty == 0.0:
-                qty = 1.0
+            qty = float(ile.get("quantity")) if ile.get("quantity") is not None else float(ile.get("invoicedQuantity", 0.0))
 
             act_cost = float(ile.get("costAmountActual") or (matched_ves[0].get("costAmountActual") if matched_ves else 0.0) or 0.0)
             exp_cost = float(ile.get("costAmountExpected") or (matched_ves[0].get("costAmountExpected") if matched_ves else 0.0) or 0.0)
-            cost_unit = act_cost / qty if qty > 0 else act_cost
+            cost_unit = act_cost / qty if qty > 0 else 0.0
 
             ve_primary = matched_ves[0] if matched_ves else {}
 
@@ -255,24 +253,24 @@ class DataAcquirer:
                 "environment_id": environment_id,
                 "company_id": company_id,
                 "company_name": company_id,
-                "item_no": str(ile.get("itemNo") or ile.get("itemNumber") or "ITEM-100"),
-                "item_description": str(ile.get("description") or ile.get("itemDescription") or "Inventory Item"),
-                "location_code": str(ile.get("locationCode") or "MAIN"),
-                "variant_code": str(ile.get("variantCode") or "DEFAULT"),
-                "vendor_no": str(ile.get("sourceNo") or ile.get("vendorNo") or "VEND-01"),
-                "vendor_name": str(ile.get("sourceName") or ile.get("vendorName") or "Vendor"),
-                "source_type": str(ile.get("sourceType") or "Vendor"),
-                "source_no": str(ile.get("sourceNo") or ""),
+                "item_no": ile.get("itemNo") or ile.get("itemNumber"),
+                "item_description": ile.get("description") or ile.get("itemDescription"),
+                "location_code": ile.get("locationCode"),
+                "variant_code": ile.get("variantCode"),
+                "vendor_no": ile.get("sourceNo") or ile.get("vendorNo"),
+                "vendor_name": ile.get("sourceName") or ile.get("vendorName"),
+                "source_type": ile.get("sourceType"),
+                "source_no": ile.get("sourceNo"),
                 "item_ledger_entry_no": ile_id,
-                "value_entry_no": str(ve_primary.get("entryNo") or ve_primary.get("id") or ""),
-                "posting_date": str(ile.get("postingDate") or "2026-08-01"),
-                "document_date": str(ile.get("documentDate") or ile.get("postingDate") or "2026-08-01"),
-                "valuation_date": str(ve_primary.get("valuationDate") or ile.get("postingDate") or "2026-08-01"),
-                "document_no": str(ile.get("documentNo") or ile.get("documentNumber") or f"DOC-{ile_id}"),
-                "document_type": str(ile.get("documentType") or "Purchase Receipt"),
-                "entry_type": str(ile.get("entryType") or "Purchase"),
+                "value_entry_no": str(ve_primary.get("entryNo") or ve_primary.get("id") or "") if ve_primary else None,
+                "posting_date": ile.get("postingDate"),
+                "document_date": ile.get("documentDate") or ile.get("postingDate"),
+                "valuation_date": ve_primary.get("valuationDate") or ile.get("postingDate"),
+                "document_no": ile.get("documentNo") or ile.get("documentNumber"),
+                "document_type": ile.get("documentType"),
+                "entry_type": ile.get("entryType"),
                 "quantity": qty,
-                "invoiced_quantity": float(ile.get("invoicedQuantity") or qty),
+                "invoiced_quantity": float(ile.get("invoicedQuantity")) if ile.get("invoicedQuantity") is not None else qty,
                 "cost_per_unit": abs(cost_unit),
                 "cost_amount_actual": abs(act_cost),
                 "cost_amount_expected": abs(exp_cost),
@@ -281,16 +279,16 @@ class DataAcquirer:
                 "purchase_amount_actual": float(ve_primary.get("purchaseAmountActual") or act_cost),
                 "purchase_amount_expected": float(ve_primary.get("purchaseAmountExpected") or exp_cost),
                 "expected_cost": float(ve_primary.get("expectedCost") or exp_cost),
-                "adjustment": bool(ve_primary.get("adjustment", False)),
-                "partial_revaluation": bool(ve_primary.get("partialRevaluation", False)),
-                "average_cost_exception": bool(ve_primary.get("averageCostException", False)),
-                "valued_by_average_cost": bool(ve_primary.get("valuedByAverageCost", False)),
-                "item_charge_no": str(ve_primary.get("itemChargeNo") or ""),
-                "variance_type": str(ve_primary.get("varianceType") or ""),
-                "dimension_set_id": str(ve_primary.get("dimensionSetID") or ""),
-                "source_code": str(ile.get("sourceCode") or "INV"),
-                "reason_code": str(ile.get("reasonCode") or ""),
-                "currency_code": "INR"
+                "adjustment": ve_primary.get("adjustment"),
+                "partial_revaluation": ve_primary.get("partialRevaluation"),
+                "average_cost_exception": ve_primary.get("averageCostException"),
+                "valued_by_average_cost": ve_primary.get("valuedByAverageCost"),
+                "item_charge_no": ve_primary.get("itemChargeNo"),
+                "variance_type": ve_primary.get("varianceType"),
+                "dimension_set_id": ve_primary.get("dimensionSetID"),
+                "source_code": ile.get("sourceCode"),
+                "reason_code": ile.get("reasonCode"),
+                "currency_code": ile.get("currencyCode") or ve_primary.get("currencyCode")
             }
             records.append(rec)
 

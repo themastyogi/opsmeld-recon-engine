@@ -1,7 +1,8 @@
 """
 Opsmeld Data Trust — Phase 3 Cost Baseline Resolver
 Implements hierarchical baseline selection, minimum-history gating, currency isolation,
-baseline-poisoning protection, median/MAD statistics, and peer dispersion analysis.
+baseline-poisoning protection via BaselineEligibilityFilter, median/MAD statistics,
+and peer dispersion/attenuation analysis.
 """
 
 import math
@@ -29,6 +30,65 @@ def calculate_mad(values: List[float], median: Optional[float] = None) -> float:
     return calculate_median(abs_devs)
 
 
+class BaselineEligibilityFilter:
+    """
+    Upstream filter for baseline history eligibility.
+    Decouples findings-store/status semantics from CostBaselineResolver.
+    Strips out unresolved Data Trust anomalies, records with missing required fields,
+    and non-eligible currency records before passing the population to CostBaselineResolver.
+    """
+
+    @staticmethod
+    def filter_eligible_history(
+        current_tx: Dict[str, Any],
+        historical_txs: List[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], bool]:
+        """
+        Filters historical transactions for baseline calculation.
+        Returns (eligible_history, is_currency_valid).
+        """
+        curr_id = str(current_tx.get("id") or current_tx.get("item_ledger_entry_no") or current_tx.get("value_entry_no") or "")
+        curr_comp = str(current_tx.get("company_id") or current_tx.get("company_name") or "")
+        curr_tenant = str(current_tx.get("tenant_id") or "")
+        curr_curr = current_tx.get("currency_code")
+
+        # Strict Currency Gating: If current transaction currency is missing/unknown, currency cannot be verified
+        if not curr_curr:
+            return [], False
+
+        curr_curr_str = str(curr_curr).strip().upper()
+        if not curr_curr_str:
+            return [], False
+
+        eligible = []
+        for h in historical_txs:
+            h_id = str(h.get("id") or h.get("item_ledger_entry_no") or h.get("value_entry_no") or "")
+            if curr_id and h_id == curr_id:
+                continue
+
+            h_comp = str(h.get("company_id") or h.get("company_name") or "")
+            h_tenant = str(h.get("tenant_id") or "")
+            if curr_comp and h_comp and h_comp != curr_comp:
+                continue
+            if curr_tenant and h_tenant and h_tenant != curr_tenant:
+                continue
+
+            # Baseline-poisoning protection: filter out unresolved Data Trust anomalies
+            if h.get("is_unresolved_anomaly") is True or str(h.get("finding_status") or "").upper() == "UNRESOLVED":
+                continue
+
+            # Strict Currency Gating: missing currency or currency mismatch returns ineligible
+            h_curr = h.get("currency_code")
+            if not h_curr:
+                continue
+            if str(h_curr).strip().upper() != curr_curr_str:
+                continue
+
+            eligible.append(h)
+
+        return eligible, True
+
+
 class CostBaselineResolver:
     """
     Hierarchical baseline resolver for inventory costing analysis.
@@ -51,45 +111,30 @@ class CostBaselineResolver:
         """
         Resolves the primary baseline and supporting peer statistics for a current transaction.
         Enforces:
-        - Excludes current transaction by ID/item_ledger_entry_no
-        - Company & tenant isolation
-        - Baseline-poisoning protection (excludes unresolved anomalies)
-        - Currency-basis isolation
-        - Gating at minimum_history threshold
+        - BaselineEligibilityFilter upstream Gating
+        - Strict Currency Gating (missing/unknown currency -> INSUFFICIENT_EVIDENCE)
+        - Hierarchical Baseline selection
+        - Historical Business Date sorting for most_recent_cost
+        - Explicit peer_attenuation_status
         """
-        curr_id = str(current_tx.get("id") or current_tx.get("item_ledger_entry_no") or current_tx.get("value_entry_no") or "")
-        curr_comp = str(current_tx.get("company_id") or current_tx.get("company_name") or "default_company")
-        curr_tenant = str(current_tx.get("tenant_id") or "default_tenant")
+        eligible_history, is_curr_valid = BaselineEligibilityFilter.filter_eligible_history(current_tx, historical_txs)
+
+        if not is_curr_valid:
+            return {
+                "status": "INSUFFICIENT_EVIDENCE",
+                "reason": "MISSING_CURRENCY",
+                "primary": {"level": "INSUFFICIENT_EVIDENCE", "count": 0, "median": None, "average": None, "mad": None, "min": None, "max": None, "most_recent_cost": None},
+                "peer": {"peer_count": 0, "peer_median": None, "peer_average": None, "peer_mad": None, "peer_min": None, "peer_max": None, "peer_dispersion": "INSUFFICIENT", "peer_attenuation_status": "INSUFFICIENT_PEERS"},
+                "supporting": [],
+                "counts": {"vendor_item_count": 0, "item_location_count": 0, "item_variant_count": 0, "item_count": 0}
+            }
+
         curr_item = str(current_tx.get("item_no") or "")
         curr_vendor = str(current_tx.get("vendor_no") or "")
         curr_loc = str(current_tx.get("location_code") or "")
         curr_variant = str(current_tx.get("variant_code") or "")
-        curr_curr = str(current_tx.get("currency_code") or "INR").upper()
 
-        # Step 1: Filter historical records by tenant & company isolation, excluding current transaction
-        eligible_history: List[Dict[str, Any]] = []
-        for h in historical_txs:
-            h_id = str(h.get("id") or h.get("item_ledger_entry_no") or h.get("value_entry_no") or "")
-            if curr_id and h_id == curr_id:
-                continue
-
-            h_comp = str(h.get("company_id") or h.get("company_name") or "default_company")
-            h_tenant = str(h.get("tenant_id") or "default_tenant")
-            if h_comp != curr_comp or h_tenant != curr_tenant:
-                continue
-
-            # Baseline-poisoning protection: exclude unresolved Data Trust anomalies
-            if h.get("is_unresolved_anomaly") is True or str(h.get("finding_status") or "").upper() == "UNRESOLVED":
-                continue
-
-            # Currency-basis isolation check
-            h_curr = str(h.get("currency_code") or "INR").upper()
-            if curr_curr and h_curr and curr_curr != h_curr:
-                continue
-
-            eligible_history.append(h)
-
-        # Step 2: Build population pools for baseline hierarchy levels
+        # Build population pools for baseline hierarchy levels
         vendor_item_pool = [
             h for h in eligible_history
             if str(h.get("item_no") or "") == curr_item and
@@ -117,7 +162,7 @@ class CostBaselineResolver:
             if str(h.get("item_no") or "") == curr_item
         ]
 
-        # Step 3: Determine primary baseline level by hierarchy priority
+        # Determine primary baseline level by hierarchy priority
         primary_level = "INSUFFICIENT_EVIDENCE"
         selected_pool: List[Dict[str, Any]] = []
 
@@ -134,7 +179,7 @@ class CostBaselineResolver:
             primary_level = "ITEM"
             selected_pool = item_pool
 
-        # Step 4: Calculate statistics for primary baseline
+        # Calculate statistics for primary baseline
         if primary_level == "INSUFFICIENT_EVIDENCE" or not selected_pool:
             primary_stats = {
                 "level": "INSUFFICIENT_EVIDENCE",
@@ -147,7 +192,12 @@ class CostBaselineResolver:
                 "most_recent_cost": None
             }
         else:
-            costs = [float(h.get("cost_per_unit") or 0.0) for h in selected_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+            # Sort selected pool by verified business date before finding most_recent_cost
+            sorted_selected = sorted(
+                selected_pool,
+                key=lambda h: str(h.get("posting_date") or h.get("document_date") or h.get("valuation_date") or "")
+            )
+            costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_selected if float(h.get("cost_per_unit") or 0.0) > 0]
             if len(costs) < self.minimum_history:
                 primary_stats = {
                     "level": "INSUFFICIENT_EVIDENCE",
@@ -163,7 +213,9 @@ class CostBaselineResolver:
                 med = calculate_median(costs)
                 avg = sum(costs) / len(costs)
                 mad_val = calculate_mad(costs, med)
-                rec = costs[-1] if costs else med
+
+                # Date-sorted most_recent_cost
+                most_recent_cost = float(sorted_selected[-1].get("cost_per_unit") or 0.0) if sorted_selected else med
 
                 primary_stats = {
                     "level": primary_level,
@@ -173,15 +225,41 @@ class CostBaselineResolver:
                     "mad": mad_val,
                     "min": min(costs),
                     "max": max(costs),
-                    "most_recent_cost": rec
+                    "most_recent_cost": most_recent_cost
                 }
 
-        # Step 5: Compute supporting broader peer statistics & dispersion
-        peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in item_pool if float(h.get("cost_per_unit") or 0.0) > 0]
-        if peer_costs:
+        # Compute supporting broader peer statistics & peer attenuation status
+        peer_pool = [h for h in item_pool if str(h.get("vendor_no") or "") != curr_vendor]
+        peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+
+        if len(peer_costs) < self.minimum_history:
+            peer_stats = {
+                "peer_count": len(peer_costs),
+                "peer_median": calculate_median(peer_costs) if peer_costs else None,
+                "peer_average": (sum(peer_costs) / len(peer_costs)) if peer_costs else None,
+                "peer_mad": calculate_mad(peer_costs) if peer_costs else None,
+                "peer_min": min(peer_costs) if peer_costs else None,
+                "peer_max": max(peer_costs) if peer_costs else None,
+                "peer_dispersion": "INSUFFICIENT",
+                "peer_attenuation_status": "INSUFFICIENT_PEERS"
+            }
+        else:
             p_med = calculate_median(peer_costs)
             p_avg = sum(peer_costs) / len(peer_costs)
             p_mad = calculate_mad(peer_costs, p_med)
+
+            # Rework Peer Movement: Compare historical peer median vs recent/current peer median
+            base_med = primary_stats.get("median")
+            peer_attenuation_status = "UNATTENUATED"
+            if base_med and base_med > 0:
+                peer_shift_pct = abs(p_med - base_med) / base_med * 100.0
+                curr_cost = float(current_tx.get("cost_per_unit") or 0.0)
+                vendor_dev_pct = abs(curr_cost - base_med) / base_med * 100.0
+                mat_thresh = float(config.get("peer_movement", {}).get("material_movement_percent", 20.0)) if config else 20.0
+
+                if vendor_dev_pct >= mat_thresh and peer_shift_pct >= mat_thresh:
+                    peer_attenuation_status = "ATTENUATED"
+
             peer_stats = {
                 "peer_count": len(peer_costs),
                 "peer_median": p_med,
@@ -189,17 +267,8 @@ class CostBaselineResolver:
                 "peer_mad": p_mad,
                 "peer_min": min(peer_costs),
                 "peer_max": max(peer_costs),
-                "peer_dispersion": "LOW" if p_mad / max(p_med, 1.0) < 0.1 else ("MEDIUM" if p_mad / max(p_med, 1.0) < 0.25 else "HIGH")
-            }
-        else:
-            peer_stats = {
-                "peer_count": 0,
-                "peer_median": None,
-                "peer_average": None,
-                "peer_mad": None,
-                "peer_min": None,
-                "peer_max": None,
-                "peer_dispersion": "INSUFFICIENT"
+                "peer_dispersion": "LOW" if p_mad / max(p_med, 1.0) < 0.1 else ("MEDIUM" if p_mad / max(p_med, 1.0) < 0.25 else "HIGH"),
+                "peer_attenuation_status": peer_attenuation_status
             }
 
         # Supporting baselines list for finding inspection
