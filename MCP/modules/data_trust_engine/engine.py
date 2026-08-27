@@ -98,7 +98,21 @@ class DataTrustEngineOrchestrator:
                 }
             }
 
-        # Step 2: Population Routing by rule.required_data_source
+        # Step 2: Load & Validate Authoritative Configuration
+        config = self.config_mgr.load_config()
+        config["tenant_id"] = self.client_key
+
+        if config.get("_is_valid") is False:
+            logger.error(f"Invalid Data Trust configuration: {config.get('_validation_errors')}")
+            for r in self.rules:
+                if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.CONFIGURATION_MISSING
+                elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.CONFIGURATION_MISSING
+                elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.CONFIGURATION_MISSING
+                elif r.rule_id == "payment_timing": rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.CONFIGURATION_MISSING
+                elif r.rule_id == "inventory_costing": rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.CONFIGURATION_MISSING
+            return []
+
+        # Step 3: Population Routing by rule.required_data_source
         gl_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "GENERAL_LEDGER" and r.enabled]
         pt_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "PAYMENT_TRANSACTIONS" and r.enabled]
 
@@ -139,15 +153,16 @@ class DataTrustEngineOrchestrator:
         ic_provenance = "AUTO"
 
         if ic_rules:
-            ic_txs, ic_provenance = self.acquirer.acquire_inventory_cost_transactions(company_id=target_comp_id)
+            lookback_months = config.get("inventory_costing", {}).get("historical_pattern", {}).get("lookback_months")
+            ic_txs, ic_provenance = self.acquirer.acquire_inventory_cost_transactions(company_id=target_comp_id, lookback_months=lookback_months)
             if ic_provenance == "DATA_UNAVAILABLE":
                 rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.DATA_UNAVAILABLE
             else:
                 rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.SUCCESS
 
-        config = self.config_mgr.load_config()
-        config["tenant_id"] = self.client_key
         candidates = []
+        findings: List[DataTrustFinding] = []
+        llm_calls_count = 0
 
         for tx in gl_txs:
             for rule in gl_rules:
@@ -164,12 +179,12 @@ class DataTrustEngineOrchestrator:
         for ictx in ic_txs:
             for rule in ic_rules:
                 ictx["historical_transactions"] = ic_txs
-                cand = rule.evaluate(ictx, config)
-                if cand and cand.eligibility == "ELIGIBLE":
-                    candidates.append((rule, cand))
-
-        findings: List[DataTrustFinding] = []
-        llm_calls_count = 0
+                cand_or_finding = rule.evaluate(ictx, config)
+                if cand_or_finding:
+                    if isinstance(cand_or_finding, DataTrustFinding):
+                        findings.append(cand_or_finding)
+                    elif getattr(cand_or_finding, "eligibility", "") == "ELIGIBLE":
+                        candidates.append((rule, cand_or_finding))
 
         for rule, cand in candidates:
             llm_info = None

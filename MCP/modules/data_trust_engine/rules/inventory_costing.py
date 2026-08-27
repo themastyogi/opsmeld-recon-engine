@@ -1,40 +1,39 @@
 """
-Rule Pack 4 — Inventory Costing & Valuation Integrity Rule Implementation.
-Evaluates Candidate Transactions carrying signals C1–C10.
-Uses CostBaselineResolver for deterministic hierarchical baseline selection and cost driver analysis.
+Opsmeld Data Trust — Phase 3 Inventory Costing & Valuation Integrity Rule
+Implements deterministic, read-only evaluation of inventory cost entries (C1–C10 signals),
+cost driver analysis, boolean normalization, materiality gating,
+and authoritative configuration integration.
 """
 
 from typing import Any, Dict, List, Optional
-from core.bc_mcp_client import BCMCPClient
-from modules.data_trust_engine.rule_contract import DataTrustRule
-from modules.data_trust_engine.candidate import CandidateTransaction
 from modules.data_trust_engine.models import DataTrustFinding
 from modules.data_trust_engine.baseline_resolver import CostBaselineResolver
+from modules.data_trust_engine.candidate import CandidateTransaction
+from core.bc_mcp_client import BCMCPClient
 
 
 def normalize_boolean(val: Any) -> bool:
-    """Normalizes string 'false', '0', 0, False, None to boolean False."""
+    """Normalizes raw Business Central boolean representations."""
     if val is None:
         return False
     if isinstance(val, bool):
         return val
-    if isinstance(val, (int, float)):
-        return bool(val != 0)
     s = str(val).strip().lower()
-    return s in ("true", "1", "yes", "y", "t")
+    return s in ("true", "1", "yes")
 
 
-class InventoryCostingRule(DataTrustRule):
-    rule_id = "INVENTORY_COSTING"
-    rule_version = "1.0"
-    rule_pack = "Inventory Costing"
+class InventoryCostingRule:
+    rule_id = "inventory_costing"
+    name = "Inventory Costing & Valuation Integrity"
     required_data_source = "INVENTORY_COST_TRANSACTIONS"
-    enabled = True
-    requires_llm = False
 
     def __init__(self, minimum_history: int = 20):
         self.minimum_history = minimum_history
         self.resolver = CostBaselineResolver(minimum_history=minimum_history)
+        self.enabled = True
+
+    def requires_llm(self, candidate: CandidateTransaction) -> bool:
+        return False
 
     def assess_eligibility(self, context: Dict[str, Any]) -> str:
         cost = float(context.get("cost_per_unit") or context.get("cost_amount_actual") or 0.0)
@@ -45,6 +44,17 @@ class InventoryCostingRule(DataTrustRule):
         if cost <= 0 and qty <= 0:
             return "INSUFFICIENT_EVIDENCE"
         return "ELIGIBLE"
+
+    def evaluate(self, context: Dict[str, Any], config: Dict[str, Any]) -> Optional[DataTrustFinding]:
+        cost_config = config.get("inventory_costing", {})
+        if not cost_config.get("enabled", True):
+            return None
+
+        min_hist = int(cost_config.get("historical_pattern", {}).get("minimum_history", self.minimum_history))
+        self.resolver = CostBaselineResolver(minimum_history=min_hist)
+
+        historical_txs = context.get("historical_transactions", [])
+        return self.evaluate_candidate(context, historical_txs, config)
 
     def evaluate_candidate(
         self,
@@ -57,6 +67,9 @@ class InventoryCostingRule(DataTrustRule):
         if not cost_config.get("enabled", True):
             return None
 
+        min_hist = int(cost_config.get("historical_pattern", {}).get("minimum_history", self.minimum_history))
+        self.resolver = CostBaselineResolver(minimum_history=min_hist)
+
         # Step 1: Use CostBaselineResolver once per candidate
         res = self.resolver.resolve_baseline(tx, historical_txs, config)
         primary = res.get("primary", {})
@@ -64,7 +77,6 @@ class InventoryCostingRule(DataTrustRule):
         supporting = res.get("supporting", [])
 
         if res.get("status") == "INSUFFICIENT_EVIDENCE" or primary.get("median") is None:
-            # Baseline insufficient to form a finding
             return None
 
         curr_cost = float(tx.get("cost_per_unit") or 0.0)
@@ -76,9 +88,13 @@ class InventoryCostingRule(DataTrustRule):
         signals_list = []
 
         rel_thresh = float(cost_config.get("historical_pattern", {}).get("relative_change_percent", 25.0))
+        abs_change = cost_config.get("historical_pattern", {}).get("absolute_change_amount")
 
         # C1 — Sudden Unit Cost Movement
         c1_fired = abs(dev_pct) >= rel_thresh
+        if abs_change is not None and float(abs_change) > 0:
+            c1_fired = c1_fired or (abs(curr_cost - base_median) >= float(abs_change))
+
         signals_list.append({"signal_code": "C1", "name": "Sudden Unit Cost Movement", "fired": c1_fired})
         if c1_fired:
             signals_fired.append("C1 (Sudden Unit Cost Movement)")
@@ -111,8 +127,12 @@ class InventoryCostingRule(DataTrustRule):
                 f"[C3 Expected-to-Actual] Fired: Expected cost ${exp_cost:,.2f} transitioned to actual cost ${act_cost:,.2f} (variance {c3_variance_pct:.1f}% >= {exp_act_thresh:.0f}%)."
             )
 
-        # C4 — Cost Adjustment Event (Boolean Normalized)
-        c4_fired = normalize_boolean(tx.get("adjustment"))
+        # C4 — Cost Adjustment Event (Boolean Normalized & Materiality Gated)
+        adj_mat = float(cost_config.get("cost_adjustment", {}).get("materiality_percent", 25.0))
+        c4_raw = normalize_boolean(tx.get("adjustment"))
+        c4_fired = c4_raw
+        if c4_raw and base_median > 0:
+            c4_fired = (abs(curr_cost - base_median) / base_median * 100.0 >= adj_mat)
         signals_list.append({"signal_code": "C4", "name": "Cost Adjustment Event", "fired": c4_fired})
         if c4_fired:
             signals_fired.append("C4 (Cost Adjustment Event)")
@@ -120,8 +140,12 @@ class InventoryCostingRule(DataTrustRule):
                 "[C4 Cost Adjustment] Fired: Transaction represents a Business Central cost adjustment entry."
             )
 
-        # C5 — Revaluation / Partial Revaluation (Boolean Normalized)
-        c5_fired = normalize_boolean(tx.get("partial_revaluation"))
+        # C5 — Revaluation / Partial Revaluation (Boolean Normalized & Materiality Gated)
+        reval_mat = float(cost_config.get("revaluation", {}).get("materiality_percent", 25.0))
+        c5_raw = normalize_boolean(tx.get("partial_revaluation"))
+        c5_fired = c5_raw
+        if c5_raw and base_median > 0:
+            c5_fired = (abs(curr_cost - base_median) / base_median * 100.0 >= reval_mat)
         signals_list.append({"signal_code": "C5", "name": "Revaluation Event", "fired": c5_fired})
         if c5_fired:
             signals_fired.append("C5 (Revaluation Event)")
@@ -141,6 +165,9 @@ class InventoryCostingRule(DataTrustRule):
 
         # C7 — Historical Cost Pattern Break
         c7_fired = abs(dev_pct) >= rel_thresh
+        if abs_change is not None and float(abs_change) > 0:
+            c7_fired = c7_fired or (abs(curr_cost - base_median) >= float(abs_change))
+
         signals_list.append({"signal_code": "C7", "name": "Historical Cost Pattern Break", "fired": c7_fired})
         if c7_fired:
             signals_fired.append("C7 (Historical Cost Pattern Break)")
@@ -179,12 +206,19 @@ class InventoryCostingRule(DataTrustRule):
 
         # C9 — Cost / Quantity Inconsistency
         qty = float(tx.get("quantity") if tx.get("quantity") is not None else 0.0)
+        tol_pct = float(cost_config.get("quantity_cost", {}).get("relative_tolerance_percent", 5.0))
         c9_fired = (qty == 0.0 and act_cost > 0.0)
+        if qty > 0 and base_median > 0:
+            calc_cost = act_cost / qty
+            discrepancy = abs(calc_cost - curr_cost) / max(curr_cost, 1.0) * 100.0
+            if discrepancy >= tol_pct:
+                c9_fired = True
+
         signals_list.append({"signal_code": "C9", "name": "Cost/Quantity Inconsistency", "fired": c9_fired})
         if c9_fired:
             signals_fired.append("C9 (Cost/Quantity Inconsistency)")
             evidence_chain.append(
-                "[C9 Inconsistency] Fired: Zero quantity with positive actual cost amount detected."
+                "[C9 Inconsistency] Fired: Cost/quantity discrepancy or zero quantity detected."
             )
 
         # C10 — Cost-to-G/L Posting Difference
@@ -208,79 +242,36 @@ class InventoryCostingRule(DataTrustRule):
                 "[Peer Attenuation] Broad market/item movement detected (peer shift >= 20%). Anomaly severity attenuated to MEDIUM."
             )
 
-        # Classification & Evidence Strength Selection
-        if c8_fired and not is_peer_attenuated:
+        # Evidence Strength & Classification Determination
+        if driver_explained:
+            classification = "Anomaly"
+            evidence_strength = "MEDIUM" if is_peer_attenuated else "MEDIUM"
+        elif c8_fired or c9_fired or c10_fired:
             classification = "Potential Data Error"
-            evidence_strength = "HIGH"
-            severity = "HIGH"
-        elif c8_fired and is_peer_attenuated:
-            classification = "Anomaly"
-            evidence_strength = "MEDIUM"
-            severity = "MEDIUM"
-        elif driver_explained:
-            classification = "Informational"
-            evidence_strength = "LOW"
-            severity = "INFORMATIONAL"
-        elif c1_fired or c7_fired:
-            classification = "Anomaly"
-            evidence_strength = "MEDIUM"
-            severity = "MEDIUM"
+            evidence_strength = "MEDIUM" if is_peer_attenuated else "HIGH"
         else:
-            classification = "Informational"
+            classification = "Anomaly"
             evidence_strength = "LOW"
-            severity = "INFORMATIONAL"
 
-        item_no = str(tx.get("item_no") or "ITEM")
-        tx_id = str(tx.get("id") or tx.get("item_ledger_entry_no") or "000")
+        tx_id = str(tx.get("id") or tx.get("item_ledger_entry_no") or tx.get("value_entry_no") or "UNKNOWN")
+        comp = str(tx.get("company_id") or tx.get("company_name") or "DEFAULT")
+        item_no = str(tx.get("item_no") or "UNKNOWN")
 
-        impact = f"Inventory costing movement ({dev_pct:+.1f}%) detected for Item '{item_no}'. Identified driver: {known_driver}."
+        tx_clean = {k: v for k, v in tx.items() if k != "historical_transactions"}
 
-        clean_tx = {k: v for k, v in tx.items() if k != "historical_transactions"}
-        return DataTrustFinding(
-            id=f"DT-COST-{tx_id}",
-            dedup_key=f"Inventory Costing:{item_no}:{tx_id}",
-            rule_pack="Inventory Costing",
+        finding = DataTrustFinding(
+            id=f"FINDING-{tx_id}",
+            dedup_key=f"INVENTORY_COSTING_{comp}_{tx_id}",
+            rule_pack="Inventory Costing & Valuation Integrity",
             classification=classification,
             evidence_strength=evidence_strength,
-            severity=severity,
+            severity="HIGH" if evidence_strength == "HIGH" else ("MEDIUM" if evidence_strength == "MEDIUM" else "INFORMATIONAL"),
             signals_fired_count=len(signals_fired),
             evidence_chain=evidence_chain,
-            transaction_details=clean_tx,
-            business_impact=impact,
-            recommended_action="Human review required (never auto-corrected)",
-            data_source=tx.get("provenance_state", "LIVE_BUSINESS_CENTRAL"),
-            structured_evidence=[{"evidence": e} for e in evidence_chain],
+            transaction_details=tx_clean,
+            business_impact=f"Unit cost deviation from {primary.get('level')} baseline median (${base_median:,.2f})",
+            recommended_action="Human review required for inventory cost entry adjustment",
             signals=signals_list,
-            source_metadata={"tenant_id": tx.get("tenant_id", "default_tenant"), "company": tx.get("company_name", "default_company")},
-            rule_version=self.rule_version
+            data_source=tx.get("data_provenance") or "SNAPSHOT_SEED"
         )
-
-    def evaluate(
-        self,
-        context: Dict[str, Any],
-        config: Dict[str, Any]
-    ) -> Optional[CandidateTransaction]:
-        clean_context = {k: v for k, v in context.items() if k != "historical_transactions"}
-        historical_txs = context.get("historical_transactions") or []
-        finding = self.evaluate_candidate(clean_context, historical_txs, config)
-        if finding:
-            return CandidateTransaction(
-                candidate_id=f"CAND-{finding.id}",
-                rule_id=self.rule_id,
-                rule_version=self.rule_version,
-                tenant=config.get("tenant_id", "default_tenant"),
-                company=config.get("company_name", "default_company"),
-                source_record=clean_context,
-                eligibility="ELIGIBLE",
-                evidence_strength=finding.evidence_strength,
-                classification=finding.classification,
-                severity=finding.severity,
-                dedup_key=finding.dedup_key,
-                signals=finding.signals,
-                evidence=finding.structured_evidence,
-                requires_llm=False
-            )
-        return None
-
-    def requires_llm(self, candidate: CandidateTransaction) -> bool:
-        return False
+        return finding

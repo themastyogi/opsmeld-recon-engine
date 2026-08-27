@@ -179,11 +179,15 @@ class DataAcquirer:
     ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Acquires Item Ledger Entries and Value Entries for Inventory Costing analysis.
+        Filters acquired population by lookback_months if provided.
         Enforces partial acquisition fail-closed rule: if Item Ledger succeeds but Value Entry fails,
         returns ([], "DATA_UNAVAILABLE").
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
-            return self._get_fixture_inventory_cost_transactions(company_id), "SNAPSHOT_SEED"
+            txs = self._get_fixture_inventory_cost_transactions(company_id)
+            if lookback_months is not None and float(lookback_months) > 0:
+                txs = self._filter_by_lookback(txs, float(lookback_months))
+            return txs, "SNAPSHOT_SEED"
 
         if self.client:
             token = self.client.get_access_token()
@@ -212,12 +216,42 @@ class DataAcquirer:
 
                 env_id = self.client.config.environment if (hasattr(self.client, "config") and getattr(self.client.config, "environment", None)) else "Production"
                 resolved_cost_txs = self._resolve_bc_inventory_cost_entries(ile_raw, ve_raw, comp_guid, env_id)
+                if lookback_months is not None and float(lookback_months) > 0:
+                    resolved_cost_txs = self._filter_by_lookback(resolved_cost_txs, float(lookback_months))
                 return resolved_cost_txs, "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
                 logger.error(f"Inventory Costing acquisition exception: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
         return [], "DATA_UNAVAILABLE"
+
+    def _filter_by_lookback(self, txs: List[Dict[str, Any]], lookback_months: float) -> List[Dict[str, Any]]:
+        """Filters transactions by lookback_months relative to latest business date in population."""
+        from datetime import datetime, date, timedelta
+
+        def parse_tx_date(tx: Dict[str, Any]) -> Optional[date]:
+            d_str = str(tx.get("posting_date") or tx.get("document_date") or tx.get("valuation_date") or "")
+            if not d_str:
+                return None
+            try:
+                return datetime.strptime(d_str[:10], "%Y-%m-%d").date()
+            except Exception:
+                return None
+
+        dates = [parse_tx_date(t) for t in txs]
+        valid_dates = [d for d in dates if d]
+        if not valid_dates:
+            return txs
+
+        ref_date = max(valid_dates)
+        cutoff_date = ref_date - timedelta(days=int(lookback_months * 30.4375))
+
+        filtered = []
+        for t in txs:
+            d = parse_tx_date(t)
+            if not d or d >= cutoff_date:
+                filtered.append(t)
+        return filtered
 
     def _resolve_bc_inventory_cost_entries(
         self,

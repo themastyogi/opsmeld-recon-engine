@@ -130,5 +130,47 @@
         "airline"
       ]
     }
+  },
+  "inventory_costing": {
+    "enabled": true,
+    "minimum_amount": 0,
+    "minimum_quantity": 1,
+    "historical_pattern": {
+      "enabled": true,
+      "minimum_history": 20,
+      "lookback_months": 12,
+      "relative_change_percent": 25,
+      "absolute_change_amount": null
+    },
+    "vendor_baseline": {
+      "enabled": true
+    },
+    "peer_baseline": {
+      "enabled": true,
+      "include_location": true,
+      "include_variant": true
+    },
+    "peer_movement": {
+      "enabled": true,
+      "material_movement_percent": 20,
+      "recent_lookback_months": 3,
+      "minimum_peer_recent_history": 5
+    },
+    "expected_actual": {
+      "enabled": true,
+      "relative_variance_percent": 20
+    },
+    "quantity_cost": {
+      "enabled": true,
+      "relative_tolerance_percent": 5
+    },
+    "revaluation": {
+      "enabled": true,
+      "materiality_percent": 25
+    },
+    "cost_adjustment": {
+      "enabled": true,
+      "materiality_percent": 25
+    }
   }
 }
