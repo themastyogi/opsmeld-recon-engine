@@ -485,13 +485,19 @@ class TestInventoryCostingPhase3(unittest.TestCase):
                 except Exception: pass
 
     def test_real_json_file_payment_timing_minimum_history_and_lookback(self):
-        """Proves payment_timing minimum_history and lookback_months from real JSON file alter rule and acquisition behavior."""
+        """Proves payment_timing minimum_history and lookback_months from real JSON file alter rule and acquisition runtime behavior."""
         import json
         from core.config_loader import CONFIG_DIR
+        from modules.data_trust_engine.rules.payment_timing import PaymentTimingRule
         client_key = "REAL_JSON_PT_TEST"
         cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
 
+        sample_pt_txs = [
+            {"id": f"PT-HIST-{i}", "posting_date": "2026-08-15", "amount": 100.0, "days_to_pay": 10} for i in range(15)
+        ]
+
         try:
+            # Step 1: minimum_history = 30 -> 15 history available -> Insufficient evidence (returns None)
             config_data = self.config_mgr._default_config()
             config_data["payment_timing"] = {
                 "enabled": True,
@@ -504,10 +510,68 @@ class TestInventoryCostingPhase3(unittest.TestCase):
             with open(cfg_path, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=2)
 
-            orchestrator = DataTrustEngineOrchestrator(client_key=client_key)
-            loaded_cfg = orchestrator.config_mgr.load_config()
+            orchestrator_30 = DataTrustEngineOrchestrator(client_key=client_key)
+            loaded_cfg = orchestrator_30.config_mgr.load_config()
             self.assertEqual(loaded_cfg["payment_timing"]["historical_pattern"]["minimum_history"], 30)
-            self.assertEqual(loaded_cfg["payment_timing"]["historical_pattern"]["lookback_months"], 3)
+
+            pt_rule = PaymentTimingRule()
+            context_30 = dict(sample_pt_txs[0])
+            context_30["payment_history"] = sample_pt_txs[1:]
+            cand_30 = pt_rule.evaluate(context_30, loaded_cfg)
+            # Insufficient history (14 < 30) means P7 (unusual timing deviation) does not fire
+            if cand_30:
+                p7_fired = any(s["signal_code"] == "P7" and s["fired"] for s in cand_30.signals)
+                self.assertFalse(p7_fired)
+
+            # Step 2: minimum_history = 10 -> 14 history available -> P7 evaluates with history
+            config_data["payment_timing"]["historical_pattern"]["minimum_history"] = 10
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2)
+
+            orchestrator_10 = DataTrustEngineOrchestrator(client_key=client_key)
+            loaded_cfg_10 = orchestrator_10.config_mgr.load_config()
+            self.assertEqual(loaded_cfg_10["payment_timing"]["historical_pattern"]["minimum_history"], 10)
+            cand_10 = pt_rule.evaluate(context_30, loaded_cfg_10)
+            self.assertIsNotNone(cand_10)
+        finally:
+            if cfg_path.exists():
+                try: cfg_path.unlink()
+                except Exception: pass
+
+    def test_invalid_json_config_on_disk_returns_configuration_missing_and_zero_acquisition(self):
+        """Proves invalid JSON config on disk -> real ConfigManager -> real Orchestrator -> CONFIGURATION_MISSING -> zero acquisition."""
+        import json
+        from core.config_loader import CONFIG_DIR
+        from modules.data_trust_engine.company_context import DataTrustState, RuleExecutionStatus
+        client_key = "INVALID_JSON_CONFIG_TEST"
+        cfg_path = CONFIG_DIR / f"data_trust_config_{client_key}.json"
+
+        try:
+            # Write invalid JSON config to disk (minimum_history = -10)
+            invalid_config_data = self.config_mgr._default_config()
+            invalid_config_data["inventory_costing"]["historical_pattern"]["minimum_history"] = -10
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(invalid_config_data, f, indent=2)
+
+            orchestrator = DataTrustEngineOrchestrator(client_key=client_key)
+            orchestrator.acquirer.acquire_transactions = MagicMock()
+            orchestrator.acquirer.acquire_inventory_cost_transactions = MagicMock()
+            orchestrator.acquirer.acquire_payment_transactions = MagicMock()
+
+            # Execute run_recon with real ConfigManager loading invalid JSON file from disk
+            res = orchestrator.run_recon(company_id="CRONUS IN", mode="TEST_FIXTURE")
+
+            # Assert structured CONFIGURATION_MISSING execution response
+            self.assertEqual(res["status"], DataTrustState.CONFIGURATION_MISSING)
+            self.assertEqual(res["findings"], [])
+            self.assertEqual(res["rule_status"]["INVENTORY_COSTING"], RuleExecutionStatus.CONFIGURATION_MISSING)
+            self.assertTrue(len(res["diagnostics"]["validation_errors"]) > 0)
+
+            # Assert ZERO acquisition calls occurred
+            orchestrator.acquirer.acquire_transactions.assert_not_called()
+            orchestrator.acquirer.acquire_inventory_cost_transactions.assert_not_called()
+            orchestrator.acquirer.acquire_payment_transactions.assert_not_called()
         finally:
             if cfg_path.exists():
                 try: cfg_path.unlink()

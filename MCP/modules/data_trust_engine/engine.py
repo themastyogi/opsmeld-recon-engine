@@ -6,6 +6,7 @@ Generates unique run_id correlation IDs, per-rule execution status tracking, and
 import datetime
 import time
 import uuid
+import logging
 from typing import Optional, Dict, Any, List
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config
@@ -20,6 +21,8 @@ from modules.data_trust_engine.rules.subledger_bypass import SubledgerBypassRule
 from modules.data_trust_engine.rules.narration_context import NarrationContextRule
 from modules.data_trust_engine.rules.payment_timing import PaymentTimingRule
 from modules.data_trust_engine.rules.inventory_costing import InventoryCostingRule
+
+logger = logging.getLogger(__name__)
 
 
 class DataTrustEngineOrchestrator:
@@ -104,13 +107,29 @@ class DataTrustEngineOrchestrator:
 
         if config.get("_is_valid") is False:
             logger.error(f"Invalid Data Trust configuration: {config.get('_validation_errors')}")
-            for r in self.rules:
-                if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.CONFIGURATION_MISSING
-                elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.CONFIGURATION_MISSING
-                elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.CONFIGURATION_MISSING
-                elif r.rule_id == "payment_timing": rule_status["PAYMENT_TIMING"] = RuleExecutionStatus.CONFIGURATION_MISSING
-                elif r.rule_id == "inventory_costing": rule_status["INVENTORY_COSTING"] = RuleExecutionStatus.CONFIGURATION_MISSING
-            return []
+            rule_status_missing = {k: RuleExecutionStatus.CONFIGURATION_MISSING for k in rule_status}
+            user_msg = build_user_message(DataTrustState.CONFIGURATION_MISSING, run_id=run_id)
+            return {
+                "run_id": run_id,
+                "status": DataTrustState.CONFIGURATION_MISSING,
+                "tenant_id": self.client_key,
+                "company_id": target_comp_id,
+                "company_name": target_comp_name,
+                "findings": [],
+                "rule_status": rule_status_missing,
+                "message": user_msg,
+                "diagnostics": {
+                    "validation_errors": config.get("_validation_errors", [])
+                },
+                "run_summary": {
+                    "records_scanned": 0,
+                    "candidates_generated": 0,
+                    "llm_calls": 0,
+                    "findings_generated": 0,
+                    "duration_seconds": round(time.time() - start_time, 2),
+                    "data_source": "DATA_UNAVAILABLE"
+                }
+            }
 
         # Step 3: Population Routing by rule.required_data_source
         gl_rules = [r for r in self.rules if getattr(r, "required_data_source", "GENERAL_LEDGER") == "GENERAL_LEDGER" and r.enabled]
