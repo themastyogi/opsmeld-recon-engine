@@ -2,11 +2,29 @@
 Opsmeld Data Trust — Phase 3 Cost Baseline Resolver
 Implements hierarchical baseline selection, minimum-history gating, currency isolation,
 baseline-poisoning protection via BaselineEligibilityFilter, median/MAD statistics,
-and peer dispersion/attenuation analysis.
+and date-based peer dispersion/attenuation analysis with dual minimum history gating.
 """
 
+from datetime import datetime, date, timedelta
 import math
 from typing import Any, Dict, List, Optional, Tuple
+
+
+def parse_date(val: Any) -> Optional[date]:
+    """Parses date string or object into datetime.date."""
+    if not val:
+        return None
+    if isinstance(val, date) and not isinstance(val, datetime):
+        return val
+    if isinstance(val, datetime):
+        return val.date()
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
 
 
 def calculate_median(values: List[float]) -> float:
@@ -115,7 +133,7 @@ class CostBaselineResolver:
         - Strict Currency Gating (missing/unknown currency -> INSUFFICIENT_EVIDENCE)
         - Hierarchical Baseline selection
         - Historical Business Date sorting for most_recent_cost
-        - Explicit peer_attenuation_status
+        - Date-Based Peer Time Window splitting and Dual Minimum History Gating for Peer Attenuation
         """
         eligible_history, is_curr_valid = BaselineEligibilityFilter.filter_eligible_history(current_tx, historical_txs)
 
@@ -124,7 +142,7 @@ class CostBaselineResolver:
                 "status": "INSUFFICIENT_EVIDENCE",
                 "reason": "MISSING_CURRENCY",
                 "primary": {"level": "INSUFFICIENT_EVIDENCE", "count": 0, "median": None, "average": None, "mad": None, "min": None, "max": None, "most_recent_cost": None},
-                "peer": {"peer_count": 0, "peer_median": None, "peer_average": None, "peer_mad": None, "peer_min": None, "peer_max": None, "peer_dispersion": "INSUFFICIENT", "peer_attenuation_status": "INSUFFICIENT_PEERS"},
+                "peer": {"peer_count": 0, "historical_peer_count": 0, "recent_peer_count": 0, "peer_median": None, "historical_peer_median": None, "recent_peer_median": None, "peer_shift_percent": None, "peer_average": None, "peer_mad": None, "peer_min": None, "peer_max": None, "peer_dispersion": "INSUFFICIENT", "peer_attenuation_status": "INSUFFICIENT_EVIDENCE"},
                 "supporting": [],
                 "counts": {"vendor_item_count": 0, "item_location_count": 0, "item_variant_count": 0, "item_count": 0}
             }
@@ -228,42 +246,64 @@ class CostBaselineResolver:
                     "most_recent_cost": most_recent_cost
                 }
 
-        # Compute supporting broader peer statistics & peer attenuation status
+        # Compute supporting broader peer statistics & Date-Based Peer Time Window Attenuation
         peer_pool = [h for h in item_pool if str(h.get("vendor_no") or "") != curr_vendor]
         peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
 
-        if len(peer_costs) < self.minimum_history:
+        # Determine reference date for date-based windowing
+        ref_date = parse_date(current_tx.get("posting_date") or current_tx.get("document_date") or current_tx.get("valuation_date"))
+        if not ref_date and peer_pool:
+            dates = [parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date")) for h in peer_pool]
+            valid_dates = [d for d in dates if d]
+            if valid_dates:
+                ref_date = max(valid_dates)
+
+        if not ref_date:
+            ref_date = date.today()
+
+        recent_months = int(config.get("peer_movement", {}).get("recent_lookback_months", 3)) if config else 3
+        recent_cutoff_date = ref_date - timedelta(days=int(recent_months * 30.4375))
+
+        hist_peer_pool = []
+        recent_peer_pool = []
+
+        for h in peer_pool:
+            d = parse_date(h.get("posting_date") or h.get("document_date") or h.get("valuation_date"))
+            if d and d >= recent_cutoff_date:
+                recent_peer_pool.append(h)
+            else:
+                hist_peer_pool.append(h)
+
+        hist_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in hist_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+        recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in recent_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+
+        min_peer_hist = self.minimum_history # 20
+        min_peer_recent = int(config.get("peer_movement", {}).get("minimum_peer_recent_history", 5)) if config else 5
+
+        # Dual Minimum History Gating for Peer Attenuation
+        if len(hist_peer_costs) < min_peer_hist or len(recent_peer_costs) < min_peer_recent:
             peer_stats = {
                 "peer_count": len(peer_costs),
+                "historical_peer_count": len(hist_peer_costs),
+                "recent_peer_count": len(recent_peer_costs),
                 "peer_median": calculate_median(peer_costs) if peer_costs else None,
+                "historical_peer_median": calculate_median(hist_peer_costs) if hist_peer_costs else None,
+                "recent_peer_median": calculate_median(recent_peer_costs) if recent_peer_costs else None,
+                "peer_shift_percent": None,
                 "peer_average": (sum(peer_costs) / len(peer_costs)) if peer_costs else None,
                 "peer_mad": calculate_mad(peer_costs) if peer_costs else None,
                 "peer_min": min(peer_costs) if peer_costs else None,
                 "peer_max": max(peer_costs) if peer_costs else None,
-                "peer_dispersion": "INSUFFICIENT",
-                "peer_attenuation_status": "INSUFFICIENT_PEERS"
+                "peer_dispersion": "INSUFFICIENT" if not peer_costs else ("LOW" if calculate_mad(peer_costs) / max(calculate_median(peer_costs), 1.0) < 0.1 else "MEDIUM"),
+                "peer_attenuation_status": "INSUFFICIENT_EVIDENCE"
             }
         else:
-            # Sort peer_pool by verified business date
-            sorted_peer_pool = sorted(
-                peer_pool,
-                key=lambda h: str(h.get("posting_date") or h.get("document_date") or h.get("valuation_date") or "")
-            )
-            peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
-
             p_med = calculate_median(peer_costs)
             p_avg = sum(peer_costs) / len(peer_costs)
             p_mad = calculate_mad(peer_costs, p_med)
 
-            # Rework Peer Movement: Compare historical peer median vs recent peer median across time windows
-            n_peers = len(sorted_peer_pool)
-            split_idx = max(1, int(n_peers * 0.75))
-
-            hist_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool[:split_idx] if float(h.get("cost_per_unit") or 0.0) > 0]
-            recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool[split_idx:] if float(h.get("cost_per_unit") or 0.0) > 0]
-
-            hist_p_med = calculate_median(hist_peer_costs) if hist_peer_costs else p_med
-            recent_p_med = calculate_median(recent_peer_costs) if recent_peer_costs else p_med
+            hist_p_med = calculate_median(hist_peer_costs)
+            recent_p_med = calculate_median(recent_peer_costs)
 
             peer_shift_pct = abs(recent_p_med - hist_p_med) / max(hist_p_med, 1.0) * 100.0
 
@@ -279,6 +319,8 @@ class CostBaselineResolver:
 
             peer_stats = {
                 "peer_count": len(peer_costs),
+                "historical_peer_count": len(hist_peer_costs),
+                "recent_peer_count": len(recent_peer_costs),
                 "peer_median": p_med,
                 "historical_peer_median": hist_p_med,
                 "recent_peer_median": recent_p_med,

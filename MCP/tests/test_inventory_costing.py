@@ -2,7 +2,8 @@
 Opsmeld Data Trust — Dedicated Test Suite for Phase 3 Inventory Costing & Valuation Integrity.
 Verifies BaselineEligibilityFilter, CostBaselineResolver, DataAcquirer inventory endpoints,
 population routing, company isolation, C1–C10 signals, boolean normalization,
-C3 materiality threshold, currency gating, peer attenuation Gating, and End-to-End Scenarios A-D.
+C3 materiality threshold, currency gating, date-based peer time windowing,
+uneven transaction volume handling, and dual minimum history gating for peer attenuation.
 """
 
 import unittest
@@ -41,7 +42,6 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertEqual(res["status"], "INSUFFICIENT_EVIDENCE")
         self.assertEqual(res["reason"], "MISSING_CURRENCY")
 
-        # Gated by rule eligibility as well
         elig = self.rule.assess_eligibility(tx_no_curr)
         self.assertEqual(elig, "INSUFFICIENT_EVIDENCE")
 
@@ -72,7 +72,6 @@ class TestInventoryCostingPhase3(unittest.TestCase):
             "item_no": "ITEM-100", "vendor_no": "VEND-A", "location_code": "MAIN",
             "variant_code": "VAR-1", "cost_per_unit": 150.0, "currency_code": "INR"
         }
-        # Add out-of-order date entries
         history = [
             {
                 "id": "HIST-LATEST", "company_id": "COMP1", "tenant_id": "TEN1",
@@ -96,111 +95,93 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertEqual(res["primary"]["most_recent_cost"], 120.0)
 
     # -------------------------------------------------------------------------
-    # 3. Peer Attenuation & Peer Movement Calculation Tests
+    # 3. Date-Based Peer Time Windowing & Dual Minimum History Tests
     # -------------------------------------------------------------------------
-    def test_peer_history_under_20_does_not_attenuate(self):
+    def test_peer_recent_history_under_threshold_returns_insufficient_evidence(self):
+        """Historical peer count = 40 (>=20), Recent peer count = 3 (<5) -> INSUFFICIENT_EVIDENCE, peer_shift = None, do NOT attenuate."""
         tx = {
             "id": "SPIKE-1", "company_id": "COMP1", "tenant_id": "TEN1",
             "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-            "variant_code": "DEFAULT", "cost_per_unit": 145.0, "quantity": 10.0, "currency_code": "INR"
+            "variant_code": "DEFAULT", "cost_per_unit": 145.0, "quantity": 10.0, "posting_date": "2026-08-25", "currency_code": "INR"
         }
-        # Vendor-specific history = 25 (median = 100)
+        # Vendor-specific history = 25
         history = [
             {
                 "id": f"HIST-V-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
                 "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "currency_code": "INR"
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": "2026-01-15", "currency_code": "INR"
             }
             for i in range(25)
         ]
-        # Peer history = 5 (< 20 threshold) even with high peer median = 135
-        history.extend([
-            {
+        # Historical peer window (Jan-May): 40 entries
+        for i in range(40):
+            history.append({
                 "id": f"HIST-PEER-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
                 "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-{i}", "location_code": "OTHER",
-                "variant_code": "DEFAULT", "cost_per_unit": 135.0, "currency_code": "INR"
-            }
-            for i in range(5)
-        ])
-        config = {"inventory_costing": {"enabled": True, "historical_pattern": {"relative_change_percent": 25.0}}}
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-02-{min(i+1, 28):02d}", "currency_code": "INR"
+            })
+        # Recent peer window (August): only 3 entries (< 5 threshold)
+        for i in range(3):
+            history.append({
+                "id": f"HIST-PEER-RECENT-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-REC-{i}", "location_code": "OTHER",
+                "variant_code": "DEFAULT", "cost_per_unit": 135.0, "posting_date": f"2026-08-{i+1:02d}", "currency_code": "INR"
+            })
 
+        config = {"inventory_costing": {"enabled": True, "peer_movement": {"minimum_peer_recent_history": 5}}}
         res = self.resolver.resolve_baseline(tx, history, config)
-        self.assertEqual(res["peer"]["peer_attenuation_status"], "INSUFFICIENT_PEERS")
+
+        self.assertEqual(res["peer"]["historical_peer_count"], 40)
+        self.assertEqual(res["peer"]["recent_peer_count"], 3)
+        self.assertIsNone(res["peer"]["peer_shift_percent"])
+        self.assertEqual(res["peer"]["peer_attenuation_status"], "INSUFFICIENT_EVIDENCE")
 
         finding = self.rule.evaluate_candidate(tx, history, config)
         self.assertEqual(finding.classification, "Potential Data Error")
         self.assertEqual(finding.evidence_strength, "HIGH")
 
-    def test_vendor_spike_vs_broad_market_movement(self):
+    def test_date_based_peer_window_with_uneven_volumes(self):
+        """Proves peer windows are strictly date-based rather than 75%/25% positional splits on volume."""
         tx = {
-            "id": "SPIKE-1", "company_id": "COMP1", "tenant_id": "TEN1",
+            "id": "UNEVEN-1", "company_id": "COMP1", "tenant_id": "TEN1",
             "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-            "variant_code": "DEFAULT", "cost_per_unit": 135.0, "quantity": 10.0, "currency_code": "INR"
+            "variant_code": "DEFAULT", "cost_per_unit": 130.0, "posting_date": "2026-08-25", "currency_code": "INR"
         }
-        # Vendor A historical median = 100.0
         history = [
             {
                 "id": f"HIST-V-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
                 "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "currency_code": "INR"
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": "2026-01-15", "currency_code": "INR"
             }
             for i in range(25)
         ]
-        # Earlier peer transactions (Jan-June): cost = 100.0
+        # Jan-June: 20 peer transactions @ 100.0
         for i in range(20):
             history.append({
-                "id": f"HIST-PEER-EARLY-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
-                "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-{i}", "location_code": "OTHER",
+                "id": f"HIST-PEER-JAN-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-P-{i}", "location_code": "OTHER",
                 "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-02-{min(i+1, 28):02d}", "currency_code": "INR"
             })
-        # Recent peer transactions (August): cost = 125.0
+        # July: Massive volume spike of 100 peer transactions @ 100.0 (still historical > 3 months ago relative to Aug 25)
+        for i in range(100):
+            history.append({
+                "id": f"HIST-PEER-JUL-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-P-JUL-{i}", "location_code": "OTHER",
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": "2026-05-10", "currency_code": "INR"
+            })
+        # August (Recent window within 3 months): 10 peer transactions @ 125.0
         for i in range(10):
             history.append({
-                "id": f"HIST-PEER-RECENT-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
-                "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-{i+20}", "location_code": "OTHER",
+                "id": f"HIST-PEER-AUG-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-P-AUG-{i}", "location_code": "OTHER",
                 "variant_code": "DEFAULT", "cost_per_unit": 125.0, "posting_date": f"2026-08-{min(i+1, 28):02d}", "currency_code": "INR"
             })
-        config = {"inventory_costing": {"enabled": True, "historical_pattern": {"relative_change_percent": 25.0}}}
 
+        config = {"inventory_costing": {"enabled": True, "peer_movement": {"recent_lookback_months": 3, "minimum_peer_recent_history": 5}}}
         res = self.resolver.resolve_baseline(tx, history, config)
-        self.assertEqual(res["peer"]["peer_attenuation_status"], "ATTENUATED")
 
-        finding = self.rule.evaluate_candidate(tx, history, config)
-        self.assertEqual(finding.classification, "Anomaly")
-        self.assertEqual(finding.evidence_strength, "MEDIUM")
-
-    def test_peer_movement_time_window_separation(self):
-        """Verifies peer movement is calculated by comparing historical peer median vs recent peer median across distinct time windows."""
-        tx = {
-            "id": "CURR-PEER-SHIFT", "company_id": "COMP1", "tenant_id": "TEN1",
-            "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-            "variant_code": "DEFAULT", "cost_per_unit": 130.0, "currency_code": "INR"
-        }
-        # Vendor A historical median = 100.0
-        history = [
-            {
-                "id": f"HIST-V-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
-                "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
-                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-01-{min(i+1, 28):02d}", "currency_code": "INR"
-            }
-            for i in range(25)
-        ]
-        # Earlier peer transactions (Jan-June): cost = 100.0
-        for i in range(20):
-            history.append({
-                "id": f"HIST-PEER-EARLY-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
-                "item_no": "ITEM-X", "vendor_no": f"VENDOR-PEER-{i}", "location_code": "OTHER",
-                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-02-{min(i+1, 28):02d}", "currency_code": "INR"
-            })
-        # Recent peer transactions (August): cost = 125.0
-        for i in range(10):
-            history.append({
-                "id": f"HIST-PEER-RECENT-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
-                "item_no": "ITEM-X", "vendor_no": f"VENDOR-PEER-{i+20}", "location_code": "OTHER",
-                "variant_code": "DEFAULT", "cost_per_unit": 125.0, "posting_date": f"2026-08-{min(i+1, 28):02d}", "currency_code": "INR"
-            })
-
-        res = self.resolver.resolve_baseline(tx, history)
+        self.assertEqual(res["peer"]["historical_peer_count"], 120)
+        self.assertEqual(res["peer"]["recent_peer_count"], 10)
         self.assertEqual(res["peer"]["historical_peer_median"], 100.0)
         self.assertEqual(res["peer"]["recent_peer_median"], 125.0)
         self.assertEqual(res["peer"]["peer_shift_percent"], 25.0)
@@ -276,14 +257,12 @@ class TestInventoryCostingPhase3(unittest.TestCase):
             self.assertNotIn("C5", fired_codes)
 
     def test_c3_below_and_above_materiality_threshold(self):
-        # Small variance (5% < 20% thresh) -> C3 does NOT fire
         tx_below = {
             "id": "C3-BELOW", "company_id": "COMP1", "tenant_id": "TEN1",
             "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "MAIN",
             "variant_code": "VAR-1", "cost_per_unit": 100.0, "quantity": 10.0,
             "cost_amount_expected": 1000.0, "cost_amount_actual": 1050.0, "currency_code": "INR"
         }
-        # Large variance (30% >= 20% thresh) -> C3 fires
         tx_above = {
             "id": "C3-ABOVE", "company_id": "COMP1", "tenant_id": "TEN1",
             "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "MAIN",

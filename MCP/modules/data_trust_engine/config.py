@@ -160,7 +160,9 @@ class DataTrustConfigManager:
                 },
                 "peer_movement": {
                     "enabled": True,
-                    "material_movement_percent": 20
+                    "material_movement_percent": 20,
+                    "recent_lookback_months": 3,
+                    "minimum_peer_recent_history": 5
                 },
                 "expected_actual": {
                     "enabled": True,
