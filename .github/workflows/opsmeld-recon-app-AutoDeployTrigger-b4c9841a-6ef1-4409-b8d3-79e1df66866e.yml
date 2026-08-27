@@ -33,6 +33,14 @@ jobs:
 
       - name: Deploy to Azure Container App
         run: |
+          az acr update --name acropsmeldrecon --admin-enabled true
+          ACR_PASS=$(az acr credential show --name acropsmeldrecon --query "passwords[0].value" -o tsv)
+          az containerapp registry set \
+            --name opsmeld-recon-app \
+            --resource-group rg-opsmeld-container \
+            --server acropsmeldrecon.azurecr.io \
+            --username acropsmeldrecon \
+            --password $ACR_PASS
           az containerapp update \
             --name opsmeld-recon-app \
             --resource-group rg-opsmeld-container \
