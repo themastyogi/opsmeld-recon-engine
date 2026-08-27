@@ -146,15 +146,20 @@ class TestInventoryCostingPhase3(unittest.TestCase):
             }
             for i in range(25)
         ]
-        # Peer Vendors historical median = 125.0 (25% peer shift >= 20%)
-        history.extend([
-            {
-                "id": f"HIST-PEER-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+        # Earlier peer transactions (Jan-June): cost = 100.0
+        for i in range(20):
+            history.append({
+                "id": f"HIST-PEER-EARLY-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
                 "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-{i}", "location_code": "OTHER",
-                "variant_code": "DEFAULT", "cost_per_unit": 125.0, "currency_code": "INR"
-            }
-            for i in range(25)
-        ])
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-02-{min(i+1, 28):02d}", "currency_code": "INR"
+            })
+        # Recent peer transactions (August): cost = 125.0
+        for i in range(10):
+            history.append({
+                "id": f"HIST-PEER-RECENT-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-OTHER-{i+20}", "location_code": "OTHER",
+                "variant_code": "DEFAULT", "cost_per_unit": 125.0, "posting_date": f"2026-08-{min(i+1, 28):02d}", "currency_code": "INR"
+            })
         config = {"inventory_costing": {"enabled": True, "historical_pattern": {"relative_change_percent": 25.0}}}
 
         res = self.resolver.resolve_baseline(tx, history, config)
@@ -163,6 +168,43 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         finding = self.rule.evaluate_candidate(tx, history, config)
         self.assertEqual(finding.classification, "Anomaly")
         self.assertEqual(finding.evidence_strength, "MEDIUM")
+
+    def test_peer_movement_time_window_separation(self):
+        """Verifies peer movement is calculated by comparing historical peer median vs recent peer median across distinct time windows."""
+        tx = {
+            "id": "CURR-PEER-SHIFT", "company_id": "COMP1", "tenant_id": "TEN1",
+            "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
+            "variant_code": "DEFAULT", "cost_per_unit": 130.0, "currency_code": "INR"
+        }
+        # Vendor A historical median = 100.0
+        history = [
+            {
+                "id": f"HIST-V-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": "VENDOR-A", "location_code": "DELHI",
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-01-{min(i+1, 28):02d}", "currency_code": "INR"
+            }
+            for i in range(25)
+        ]
+        # Earlier peer transactions (Jan-June): cost = 100.0
+        for i in range(20):
+            history.append({
+                "id": f"HIST-PEER-EARLY-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-PEER-{i}", "location_code": "OTHER",
+                "variant_code": "DEFAULT", "cost_per_unit": 100.0, "posting_date": f"2026-02-{min(i+1, 28):02d}", "currency_code": "INR"
+            })
+        # Recent peer transactions (August): cost = 125.0
+        for i in range(10):
+            history.append({
+                "id": f"HIST-PEER-RECENT-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-X", "vendor_no": f"VENDOR-PEER-{i+20}", "location_code": "OTHER",
+                "variant_code": "DEFAULT", "cost_per_unit": 125.0, "posting_date": f"2026-08-{min(i+1, 28):02d}", "currency_code": "INR"
+            })
+
+        res = self.resolver.resolve_baseline(tx, history)
+        self.assertEqual(res["peer"]["historical_peer_median"], 100.0)
+        self.assertEqual(res["peer"]["recent_peer_median"], 125.0)
+        self.assertEqual(res["peer"]["peer_shift_percent"], 25.0)
+        self.assertEqual(res["peer"]["peer_attenuation_status"], "ATTENUATED")
 
     # -------------------------------------------------------------------------
     # 4. Quantity Zero & Payload Normalization Tests

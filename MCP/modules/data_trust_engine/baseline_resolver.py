@@ -244,15 +244,32 @@ class CostBaselineResolver:
                 "peer_attenuation_status": "INSUFFICIENT_PEERS"
             }
         else:
+            # Sort peer_pool by verified business date
+            sorted_peer_pool = sorted(
+                peer_pool,
+                key=lambda h: str(h.get("posting_date") or h.get("document_date") or h.get("valuation_date") or "")
+            )
+            peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
+
             p_med = calculate_median(peer_costs)
             p_avg = sum(peer_costs) / len(peer_costs)
             p_mad = calculate_mad(peer_costs, p_med)
 
-            # Rework Peer Movement: Compare historical peer median vs recent/current peer median
+            # Rework Peer Movement: Compare historical peer median vs recent peer median across time windows
+            n_peers = len(sorted_peer_pool)
+            split_idx = max(1, int(n_peers * 0.75))
+
+            hist_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool[:split_idx] if float(h.get("cost_per_unit") or 0.0) > 0]
+            recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in sorted_peer_pool[split_idx:] if float(h.get("cost_per_unit") or 0.0) > 0]
+
+            hist_p_med = calculate_median(hist_peer_costs) if hist_peer_costs else p_med
+            recent_p_med = calculate_median(recent_peer_costs) if recent_peer_costs else p_med
+
+            peer_shift_pct = abs(recent_p_med - hist_p_med) / max(hist_p_med, 1.0) * 100.0
+
             base_med = primary_stats.get("median")
             peer_attenuation_status = "UNATTENUATED"
             if base_med and base_med > 0:
-                peer_shift_pct = abs(p_med - base_med) / base_med * 100.0
                 curr_cost = float(current_tx.get("cost_per_unit") or 0.0)
                 vendor_dev_pct = abs(curr_cost - base_med) / base_med * 100.0
                 mat_thresh = float(config.get("peer_movement", {}).get("material_movement_percent", 20.0)) if config else 20.0
@@ -263,6 +280,9 @@ class CostBaselineResolver:
             peer_stats = {
                 "peer_count": len(peer_costs),
                 "peer_median": p_med,
+                "historical_peer_median": hist_p_med,
+                "recent_peer_median": recent_p_med,
+                "peer_shift_percent": round(peer_shift_pct, 1),
                 "peer_average": p_avg,
                 "peer_mad": p_mad,
                 "peer_min": min(peer_costs),
