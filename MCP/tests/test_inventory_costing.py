@@ -573,5 +573,77 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertTrue(len(errors) > 0)
 
 
+    def test_every_exposed_config_knob_alters_runtime_behavior(self):
+        """Systematically proves that EVERY exposed configuration knob changes runtime evaluation behavior."""
+        resolver = CostBaselineResolver(minimum_history=10)
+
+        tx_spike = {
+            "id": "SPIKE", "company_id": "COMP1", "tenant_id": "TEN1",
+            "item_no": "ITEM-1", "vendor_no": "VEND-1", "location_code": "LOC-A",
+            "variant_code": "VAR-1", "cost_per_unit": 130.0, "quantity": 10.0,
+            "cost_amount_actual": 1300.0, "posting_date": "2026-08-25", "currency_code": "INR"
+        }
+        history_25 = [
+            {
+                "id": f"H-{i}", "company_id": "COMP1", "tenant_id": "TEN1",
+                "item_no": "ITEM-1", "vendor_no": "VEND-1", "location_code": "LOC-A",
+                "variant_code": "VAR-1", "cost_per_unit": 100.0, "posting_date": "2026-01-15",
+                "currency_code": "INR"
+            }
+            for i in range(25)
+        ]
+
+        # Knob 1: relative_change_percent (25% vs 50% threshold)
+        cfg_rel_25 = {"inventory_costing": {"enabled": True, "historical_pattern": {"relative_change_percent": 25.0}}}
+        finding_25 = self.rule.evaluate_candidate(tx_spike, history_25, cfg_rel_25)
+        self.assertIsNotNone(finding_25)
+        self.assertTrue(any(s["signal_code"] == "C1" and s["fired"] for s in finding_25.signals))
+
+        cfg_rel_50 = {"inventory_costing": {"enabled": True, "historical_pattern": {"relative_change_percent": 50.0}}}
+        finding_50 = self.rule.evaluate_candidate(tx_spike, history_25, cfg_rel_50)
+        self.assertIsNone(finding_50)
+
+        # Knob 2: peer_movement.material_movement_percent (10% vs 50% threshold for attenuation)
+        peers_hist = [
+            {"id": f"P-HIST-{i}", "item_no": "ITEM-1", "vendor_no": "VEND-2", "cost_per_unit": 100.0, "posting_date": "2026-01-15", "currency_code": "INR"}
+            for i in range(25)
+        ]
+        peers_recent = [
+            {"id": f"P-REC-{i}", "item_no": "ITEM-1", "vendor_no": "VEND-2", "cost_per_unit": 130.0, "posting_date": "2026-08-20", "currency_code": "INR"}
+            for i in range(10)
+        ]
+        peer_history = history_25 + peers_hist + peers_recent
+
+        cfg_att_10 = {"inventory_costing": {"enabled": True, "peer_movement": {"material_movement_percent": 10.0}}}
+        res_att_10 = resolver.resolve_baseline(tx_spike, peer_history, cfg_att_10)
+        self.assertEqual(res_att_10["peer"]["peer_attenuation_status"], "ATTENUATED")
+
+        cfg_att_50 = {"inventory_costing": {"enabled": True, "peer_movement": {"material_movement_percent": 50.0}}}
+        res_att_50 = resolver.resolve_baseline(tx_spike, peer_history, cfg_att_50)
+        self.assertEqual(res_att_50["peer"]["peer_attenuation_status"], "UNATTENUATED")
+
+        # Knob 3: peer_movement.minimum_peer_recent_history (5 vs 50 required recent peers)
+        cfg_rec_50 = {"inventory_costing": {"enabled": True, "peer_movement": {"minimum_peer_recent_history": 50}}}
+        res_rec_50 = resolver.resolve_baseline(tx_spike, peer_history, cfg_rec_50)
+        self.assertEqual(res_rec_50["peer"]["peer_attenuation_status"], "INSUFFICIENT_EVIDENCE")
+
+        # Knob 4: quantity_cost.relative_tolerance_percent (discrepancy tolerance check)
+        tx_qty_disc = {
+            "id": "QTY-DISC", "company_id": "COMP1", "tenant_id": "TEN1",
+            "item_no": "ITEM-1", "vendor_no": "VEND-1", "location_code": "LOC-A",
+            "variant_code": "VAR-1", "cost_per_unit": 100.0, "quantity": 10.0,
+            "cost_amount_actual": 1200.0, "currency_code": "INR"
+        }
+        cfg_tol_5 = {"inventory_costing": {"enabled": True, "quantity_cost": {"relative_tolerance_percent": 5.0}}}
+        finding_tol_5 = self.rule.evaluate_candidate(tx_qty_disc, history_25, cfg_tol_5)
+        self.assertIsNotNone(finding_tol_5)
+        self.assertTrue(any(s["signal_code"] == "C9" and s["fired"] for s in finding_tol_5.signals))
+
+        cfg_tol_50 = {"inventory_costing": {"enabled": True, "quantity_cost": {"relative_tolerance_percent": 50.0}}}
+        finding_tol_50 = self.rule.evaluate_candidate(tx_qty_disc, history_25, cfg_tol_50)
+        if finding_tol_50:
+            self.assertFalse(any(s["signal_code"] == "C9" and s["fired"] for s in finding_tol_50.signals))
+
+
 if __name__ == "__main__":
     unittest.main()

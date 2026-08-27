@@ -285,7 +285,7 @@ class CostBaselineResolver:
             if not ref_date:
                 ref_date = date.today()
 
-            recent_months = int(config.get("peer_movement", {}).get("recent_lookback_months", 3)) if config else 3
+            recent_months = int(cost_cfg.get("peer_movement", {}).get("recent_lookback_months", 3))
             recent_cutoff_date = ref_date - timedelta(days=int(recent_months * 30.4375))
 
             hist_peer_pool = []
@@ -302,7 +302,7 @@ class CostBaselineResolver:
             recent_peer_costs = [float(h.get("cost_per_unit") or 0.0) for h in recent_peer_pool if float(h.get("cost_per_unit") or 0.0) > 0]
 
             min_peer_hist = self.minimum_history # 20
-            min_peer_recent = int(config.get("peer_movement", {}).get("minimum_peer_recent_history", 5)) if config else 5
+            min_peer_recent = int(cost_cfg.get("peer_movement", {}).get("minimum_peer_recent_history", 5))
 
             # Dual Minimum History Gating for Peer Attenuation
             if len(hist_peer_costs) < min_peer_hist or len(recent_peer_costs) < min_peer_recent:
@@ -336,7 +336,7 @@ class CostBaselineResolver:
                 if base_med and base_med > 0:
                     curr_cost = float(current_tx.get("cost_per_unit") or 0.0)
                     vendor_dev_pct = abs(curr_cost - base_med) / base_med * 100.0
-                    mat_thresh = float(config.get("peer_movement", {}).get("material_movement_percent", 20.0)) if config else 20.0
+                    mat_thresh = float(cost_cfg.get("peer_movement", {}).get("material_movement_percent", 20.0))
 
                     if vendor_dev_pct >= mat_thresh and peer_shift_pct >= mat_thresh:
                         peer_attenuation_status = "ATTENUATED"
