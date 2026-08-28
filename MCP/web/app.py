@@ -23,6 +23,12 @@ CURRENT_DEVICE_FLOW = None
 
 class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
+    def _write_response(self, data: bytes):
+        try:
+            self.wfile.write(data)
+        except Exception:
+            pass
+
     def _set_headers(self, content_type: str = "text/html", status_code: int = 200, cookie: Optional[str] = None):
         self.send_response(status_code)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8")

@@ -2497,6 +2497,34 @@
         `;
     }
 
+    function openDataTrustModal(docNo, amount, impact, recAction, dedupKey) {
+        const modal = document.getElementById('opsmeld-datatrust-modal');
+        if (modal) {
+            if (docNo) document.getElementById('dt-doc-no').innerText = docNo;
+            if (amount) document.getElementById('dt-amount').innerText = (String(amount).startsWith('$') ? amount : '$' + formatMoney(amount) + ' USD');
+            if (impact) document.getElementById('dt-impact').innerText = impact;
+            if (recAction) document.getElementById('dt-rec-action').innerText = recAction;
+            if (dedupKey) document.getElementById('dt-dedup-key').innerText = dedupKey;
+            modal.style.display = 'flex';
+        }
+    }
+
+    function closeDataTrustModal() {
+        const modal = document.getElementById('opsmeld-datatrust-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function performAppLogout() {
+        const modal = document.getElementById('opsmeld-app-login-modal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function performAppLogin(e) {
+        if (e) e.preventDefault();
+        const modal = document.getElementById('opsmeld-app-login-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
     // Call loadAuthorizedCompanies on window load
     window.addEventListener('DOMContentLoaded', () => {
         loadAuthorizedCompanies();
