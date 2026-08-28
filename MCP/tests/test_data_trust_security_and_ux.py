@@ -429,6 +429,51 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertEqual(res["run_summary"]["data_source"], "LIVE_BUSINESS_CENTRAL")
         self.assertEqual(res["findings"], [])
 
+    def test_load_stored_findings_has_zero_fallbacks(self):
+        """Strict Trust Boundary: load_stored_findings for an un-reconciled company returns [] with ZERO fallbacks."""
+        from modules.data_trust import DataTrustEngine
+        engine = DataTrustEngine(client_key="TEST_FAIL_CLOSED")
+        findings = engine.load_stored_findings(company_id="NON_EXISTENT_COMPANY_GUID_999")
+        self.assertEqual(findings, [], "Must return empty list with zero fallbacks to default or fixture files")
+
+    def test_live_production_excludes_non_live_data_sources(self):
+        """Strict Provenance: Live production mode strictly excludes SNAPSHOT_SEED, TEST_FIXTURE, DEMO_FIXTURE."""
+        from modules.data_trust import DataTrustEngine
+        from unittest.mock import MagicMock
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+
+        engine = DataTrustEngine(mcp_client=mock_client, client_key="TEST_LIVE_ONLY")
+        mixed_findings = [
+            {"id": "F-LIVE", "data_source": "LIVE_BUSINESS_CENTRAL"},
+            {"id": "F-SEED", "data_source": "SNAPSHOT_SEED"},
+            {"id": "F-FIXTURE", "data_source": "TEST_FIXTURE"}
+        ]
+        engine.save_stored_findings(mixed_findings, company_id="GUID-MIXED", data_source="LIVE_BUSINESS_CENTRAL")
+
+        loaded = engine.load_stored_findings(company_id="GUID-MIXED")
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["id"], "F-LIVE")
+
+    def test_company_access_manager_fails_closed_on_bc_errors(self):
+        """Fail-Closed Authorization: CompanyAccessManager returns False on BC Step B 401/403/404/500 errors."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        from modules.data_trust_engine.company_context import DataTrustState
+        from unittest.mock import MagicMock
+
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+        mock_client._execute_bc_rest.side_effect = lambda ep: {
+            "value": [{"id": "GUID-COMP-FAIL", "name": "FAIL_COMP"}]
+        } if ep == "companies" else {"is_error": True, "http_status": 403, "error": "Access Denied"}
+
+        mgr = CompanyAccessManager()
+        is_auth, st_name, details = mgr.validate_company_access(mock_client, requested_company="GUID-COMP-FAIL")
+
+        self.assertFalse(is_auth)
+        self.assertEqual(st_name, DataTrustState.ACCESS_DENIED)
+        self.assertEqual(details["http_status"], 403)
+
     def test_bc_unavailable_returns_data_unavailable_zero_findings_no_fallback(self):
         """State 1 Ground State: BC unavailable returns DATA_UNAVAILABLE or AUTHENTICATION_UNAVAILABLE, [] findings, and 0 snapshot fallback."""
         from modules.data_trust_engine.engine import DataTrustEngineOrchestrator

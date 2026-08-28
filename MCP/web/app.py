@@ -526,13 +526,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 finding_id = data.get("finding_id")
                 new_status = data.get("status")
                 if not company_id:
-                    company_id = data.get("company_id") or "default_company"
+                    company_id = data.get("company_id")
             except Exception:
                 post_data = urllib.parse.parse_qs(body)
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
                 if not company_id:
-                    company_id = post_data.get("company_id", ["default_company"])[0]
+                    company_id = post_data.get("company_id", [None])[0]
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)

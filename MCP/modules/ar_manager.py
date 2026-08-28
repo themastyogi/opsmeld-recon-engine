@@ -60,10 +60,12 @@ class ARManagerReport:
 
         raw_customers = customers_resp.get("value", [])
         if not isinstance(raw_customers, list) or len(raw_customers) == 0:
-            # Fallback: Query Business Central REST v2.0 API for companies and customers
-            companies_resp = self.client._execute_bc_rest("companies")
-            if "value" in companies_resp and len(companies_resp["value"]) > 0:
-                comp_id = companies_resp["value"][0].get("id")
+            # Query Business Central REST v2.0 API for authorized company customers
+            from modules.data_trust_engine.authorization import CompanyAccessManager
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(self.client)
+            if is_auth and details.get("company_id"):
+                comp_id = details["company_id"]
                 cust_resp = self.client._execute_bc_rest(f"companies({comp_id})/customers")
                 if "value" in cust_resp and isinstance(cust_resp["value"], list):
                     raw_customers = cust_resp["value"]

@@ -259,7 +259,7 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
             try: snap_p.unlink()
             except Exception: pass
         engine = DataTrustEngine(client_key="test_workflow_tenant")
-        findings = engine.run_recon()
+        findings = engine.run_recon(company_id="FIXTURE_COMPANY")
         self.assertGreater(len(findings), 0)
 
         first_finding = findings[0]
@@ -267,11 +267,11 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         self.assertEqual(first_finding.get("status"), "Open")
 
         # Transition status to Under Review
-        success = engine.update_finding_status(finding_id, "Under Review")
+        success = engine.update_finding_status(finding_id, "Under Review", company_id="FIXTURE_COMPANY")
         self.assertTrue(success)
 
         # Verify persisted status change
-        stored = engine.load_stored_findings()
+        stored = engine.load_stored_findings(company_id="FIXTURE_COMPANY")
         updated_f = next(f for f in stored if f.get("id") == finding_id)
         self.assertEqual(updated_f.get("status"), "Under Review")
 
@@ -378,13 +378,13 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
             "status": "Open"
         }
 
-        engine_a.save_stored_findings([finding_a])
-        engine_b.save_stored_findings([finding_b])
+        engine_a.save_stored_findings([finding_a], company_id="COMPANY_A", data_source="LIVE_BUSINESS_CENTRAL")
+        engine_b.save_stored_findings([finding_b], company_id="COMPANY_B", data_source="LIVE_BUSINESS_CENTRAL")
 
-        loaded_a = engine_a.load_stored_findings()
-        loaded_b = engine_b.load_stored_findings()
+        loaded_a = engine_a.load_stored_findings(company_id="COMPANY_A")
+        loaded_b = engine_b.load_stored_findings(company_id="COMPANY_B")
 
-        self.assertNotEqual(engine_a.get_findings_file_path(), engine_b.get_findings_file_path())
+        self.assertNotEqual(engine_a.get_findings_file_path(company_id="COMPANY_A"), engine_b.get_findings_file_path(company_id="COMPANY_B"))
 
         # Data content isolation verification
         self.assertTrue(any(f.get("id") == "DT-TENANT-A-01" for f in loaded_a))
@@ -541,13 +541,14 @@ class TestDataTrustWebAPIs(unittest.TestCase):
         ).to_dict()
 
         # Execute run_recon with live findings result
-        engine.run_recon = MagicMock(return_value=engine.save_stored_findings([live_finding]) or [live_finding])
+        comp_id = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
+        engine.save_stored_findings([live_finding], company_id=comp_id, data_source="LIVE_BUSINESS_CENTRAL")
         
         # Load stored findings for live client
-        loaded = engine.load_stored_findings()
+        loaded = engine.load_stored_findings(company_id=comp_id)
 
         # Assert arbitrary SNAPSHOT_SEED / TEST_FIXTURE findings are PURGED exclusively by provenance
-        doc_nos = [f.get("transaction_details", {}).get("document_no") for f in loaded]
+        doc_nos = [f.get("transaction_details", {}).get("documentNumber") or f.get("transaction_details", {}).get("document_no") for f in loaded]
         data_sources = [f.get("data_source") for f in loaded]
 
         self.assertNotIn("DOC-RANDOM-FIXTURE-9876", doc_nos)

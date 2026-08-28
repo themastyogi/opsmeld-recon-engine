@@ -111,18 +111,15 @@ class DataTrustEngine:
             if is_auth and details.get("company_id"):
                 target_comp = details["company_id"]
 
+        if not target_comp:
+            return []
+
         active_findings, _ = self._load_from_disk(company_id=target_comp)
-        if not active_findings and not company_id:
-            for fallback in ("default_company", "FIXTURE_COMPANY", "unspecified_company"):
-                candidate_findings, _ = self._load_from_disk(company_id=fallback)
-                if candidate_findings:
-                    active_findings = candidate_findings
-                    break
 
         if self.client:
             live_findings = [
                 f for f in active_findings
-                if f.get("data_source") in ("LIVE_BUSINESS_CENTRAL", "SNAPSHOT_SEED")
+                if f.get("data_source") == "LIVE_BUSINESS_CENTRAL"
             ]
             return live_findings
 
@@ -132,13 +129,16 @@ class DataTrustEngine:
         self,
         findings: List[Dict[str, Any]],
         company_id: Optional[str] = None,
-        audit_history: Optional[List[Dict[str, Any]]] = None
+        audit_history: Optional[List[Dict[str, Any]]] = None,
+        data_source: Optional[str] = None
     ) -> bool:
-        p = self.get_findings_file_path(company_id=company_id)
+        target_comp = company_id or "unspecified_company"
+        p = self.get_findings_file_path(company_id=target_comp)
+        eff_ds = data_source or ("LIVE_BUSINESS_CENTRAL" if (self.client and self.client.get_access_token()) else "TEST_FIXTURE")
         payload = {
             "client_key": self.client_key,
-            "company_id": company_id or "unspecified_company",
-            "data_source": "LIVE_BUSINESS_CENTRAL" if (self.client and self.client.get_access_token()) else "TEST_FIXTURE",
+            "company_id": target_comp,
+            "data_source": eff_ds,
             "last_reconciled_at": datetime.now().isoformat(),
             "active_findings": findings,
             "_audit_history": audit_history or []
@@ -151,27 +151,20 @@ class DataTrustEngine:
             return False
 
     def update_finding_status(self, finding_id: str, new_status: str, company_id: Optional[str] = None) -> bool:
-        """Mutates status of an existing finding for the authorized company. Returns False if finding_id is not found."""
+        """Mutates status of an existing finding within the authorized company scope. Returns False if finding_id is not found."""
         valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
         if new_status not in valid_statuses:
             return False
-        candidate_companies = []
-        if company_id:
-            candidate_companies.append(company_id)
-        else:
-            if self.client:
-                from modules.data_trust_engine.authorization import CompanyAccessManager
-                mgr = CompanyAccessManager()
-                is_auth, st_name, details = mgr.validate_company_access(self.client)
-                if is_auth and details.get("company_id"):
-                    candidate_companies.append(details["company_id"])
-            candidate_companies.extend(["default_company", "FIXTURE_COMPANY", "unspecified_company"])
-            snap_dir = BASE_DIR / "data" / "snapshots"
-            if snap_dir.exists():
-                for fn in snap_dir.glob(f"data_trust_findings_{self.client_key}_*.json"):
-                    comp_part = fn.stem.replace(f"data_trust_findings_{self.client_key}_", "")
-                    if comp_part not in candidate_companies:
-                        candidate_companies.append(comp_part)
+
+        target_comp = company_id
+        if not target_comp and self.client:
+            from modules.data_trust_engine.authorization import CompanyAccessManager
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(self.client)
+            if is_auth and details.get("company_id"):
+                target_comp = details["company_id"]
+
+        candidate_companies = [target_comp] if target_comp else ["default_company", "FIXTURE_COMPANY", "unspecified_company"]
 
         for cid in candidate_companies:
             active_findings, audit_history = self._load_from_disk(company_id=cid)
@@ -182,9 +175,11 @@ class DataTrustEngine:
                     f["last_evaluated_at"] = datetime.now().isoformat()
                     updated = True
                     break
+
             if updated:
-                self.save_stored_findings(active_findings, company_id=cid, audit_history=audit_history)
+                self.save_stored_findings(active_findings, company_id=cid, audit_history=audit_history, data_source="LIVE_BUSINESS_CENTRAL")
                 return True
+
         return False
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:

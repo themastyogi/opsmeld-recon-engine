@@ -153,13 +153,15 @@ class CompanyAccessManager:
             if status_code == 403:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
-            elif status_code in (401, 500, 404):
-                # Discovered company from GET /companies is authorized for candidate scope when test mock lacks sub-endpoints
-                return True, DataTrustState.SUCCESS, {
-                    "company_id": target_comp_guid,
-                    "company_name": target_comp_name,
-                    "is_offline_preview": False
-                }
+            elif status_code == 401:
+                msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id)
+                return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
+            elif status_code == 404:
+                err_mapped = map_http_error(404, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id)
+                return False, DataTrustState.DATA_REQUEST_INVALID, {"message": err_mapped["message"], "http_status": 404}
+            else:
+                err_mapped = map_http_error(status_code, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id)
+                return False, err_mapped["status"], {"message": err_mapped["message"], "http_status": status_code}
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,
