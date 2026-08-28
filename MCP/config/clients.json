@@ -2,13 +2,13 @@
   "active_client": "default_client",
   "clients": {
     "default_client": {
-      "name": "opsmeld-dev",
-      "tenant_id": "db961cfa-b4ab-42c5-9ab4-90b82e0da387",
-      "app_client_id": "5accae97-5fc5-4a13-9600-2cbe0065d83a",
+      "name": "Test Company Corp",
+      "tenant_id": "test-tenant-123",
+      "app_client_id": "test-client-456",
       "client_secret": "",
       "environment": "Production",
-      "company_name": "CRONUS IN",
-      "mcp_server_url": "https://api.businesscentral.dynamics.com/v2.0/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production/mcp",
+      "company_name": "CRONUS USA, Inc.",
+      "mcp_server_url": "https://api.businesscentral.dynamics.com/v2.0/test-tenant-123/Production/mcp",
       "scopes": [
         "https://api.businesscentral.dynamics.com/.default"
       ],

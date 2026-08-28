@@ -162,9 +162,15 @@ class DataTrustEngine:
                 f["last_evaluated_at"] = datetime.now().isoformat()
                 updated = True
                 break
-        if updated:
-            self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history)
-        return updated
+        if not updated:
+            active_findings.append({
+                "id": finding_id,
+                "status": new_status,
+                "last_evaluated_at": datetime.now().isoformat()
+            })
+            updated = True
+        self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history)
+        return True
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Legacy façade method delegating to DataTrustEngineOrchestrator inside data_trust_engine."""

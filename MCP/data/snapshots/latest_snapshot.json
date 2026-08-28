@@ -1,112 +1,17 @@
 {
-  "total_receivables": 44369.81,
+  "total_receivables": 0,
   "overdue_receivables": 0,
-  "high_risk_amount": 32644.3,
-  "expected_collections_7d": 10205.06,
+  "high_risk_amount": 0,
+  "expected_collections_7d": 0.0,
   "dso_days": 0.0,
   "disputed_amount": 0,
-  "overnight_changes": [
-    {
-      "type": "CRITICAL",
-      "customer_no": "20000",
-      "customer": "20000 - Trey Research",
-      "risk_change": "Credit Exposure Exceeded",
-      "amount": 2345.63,
-      "subtext": "Credit utilization surged 0% \u2192 163.2% ($12,644.30 excess over limit)",
-      "why_changed": "Open balance ($2,345.63) exceeds configured credit limit ($0.00) by $12,644.30.",
-      "action_label": "Review Credit Exposure",
-      "tier": "high"
-    },
-    {
-      "type": "CRITICAL",
-      "customer_no": "30000",
-      "customer": "30000 - School of Fine Art",
-      "risk_change": "Credit Exposure Exceeded",
-      "amount": 32644.3,
-      "subtext": "Credit utilization surged 0% \u2192 163.2% ($12,644.30 excess over limit)",
-      "why_changed": "Open balance ($32,644.30) exceeds configured credit limit ($20,000.00) by $12,644.30.",
-      "action_label": "Review Credit Exposure",
-      "tier": "high"
-    },
-    {
-      "type": "CRITICAL",
-      "customer_no": "40000",
-      "customer": "40000 - Alpine Ski House",
-      "risk_change": "Credit Exposure Exceeded",
-      "amount": 2617.5,
-      "subtext": "Credit utilization surged 0% \u2192 163.2% ($12,644.30 excess over limit)",
-      "why_changed": "Open balance ($2,617.50) exceeds configured credit limit ($0.00) by $12,644.30.",
-      "action_label": "Review Credit Exposure",
-      "tier": "high"
-    }
-  ],
-  "next_actions": [
-    {
-      "customer_no": "30000",
-      "customer": "30000 - School of Fine Art",
-      "opportunity": 32644.3,
-      "amount_label": "Exposure at Risk",
-      "effort": "15 min",
-      "priority": "High",
-      "action": "Review Credit Exposure",
-      "why_flagged": "Credit limit exceeded (163.2% utilization \u2022 $12,644.30 excess)",
-      "rec_action": "Review credit limit before releasing new orders.",
-      "tier": "high"
-    },
-    {
-      "customer_no": "50000",
-      "customer": "50000 - Relecloud",
-      "opportunity": 6762.38,
-      "amount_label": "Exposure at Risk",
-      "effort": "15 min",
-      "priority": "High",
-      "action": "Review Credit Exposure",
-      "why_flagged": "Credit limit exceeded (163.2% utilization \u2022 $12,644.30 excess)",
-      "rec_action": "Review credit limit before releasing new orders.",
-      "tier": "high"
-    },
-    {
-      "customer_no": "40000",
-      "customer": "40000 - Alpine Ski House",
-      "opportunity": 2617.5,
-      "amount_label": "Exposure at Risk",
-      "effort": "15 min",
-      "priority": "High",
-      "action": "Review Credit Exposure",
-      "why_flagged": "Credit limit exceeded (163.2% utilization \u2022 $12,644.30 excess)",
-      "rec_action": "Review credit limit before releasing new orders.",
-      "tier": "high"
-    },
-    {
-      "customer_no": "20000",
-      "customer": "20000 - Trey Research",
-      "opportunity": 2345.63,
-      "amount_label": "Exposure at Risk",
-      "effort": "15 min",
-      "priority": "High",
-      "action": "Review Credit Exposure",
-      "why_flagged": "Credit limit exceeded (163.2% utilization \u2022 $12,644.30 excess)",
-      "rec_action": "Review credit limit before releasing new orders.",
-      "tier": "high"
-    },
-    {
-      "customer_no": "10000",
-      "customer": "10000 - Adatum Corporation",
-      "opportunity": 0.0,
-      "amount_label": "Amount to Monitor",
-      "effort": "10 min",
-      "priority": "Low",
-      "action": "Pre-Due Courtesy Check",
-      "why_flagged": "Payment velocity watch (78.2% utilization \u2022 $2,345.63)",
-      "rec_action": "Send automated courtesy reminder.",
-      "tier": "low"
-    }
-  ],
-  "total_ranked_population": 5,
+  "overnight_changes": [],
+  "next_actions": [],
+  "total_ranked_population": 0,
   "aging_summary": {
-    "total_customers": 5,
+    "total_customers": 0,
     "current_0_30": {
-      "count": 5,
+      "count": 0,
       "pct": 100
     },
     "days_31_60": {
@@ -124,8 +29,8 @@
   },
   "ai_risk_drivers": {
     "credit_limit_exceeded": {
-      "count": 4,
-      "amount": 24369.809999999998
+      "count": 0,
+      "amount": 0
     },
     "payment_velocity_watch": {
       "count": 3,
@@ -138,7 +43,7 @@
   },
   "ai_recommendation": {
     "title": "Credit Exposure Needs Review",
-    "count": 4,
+    "count": 0,
     "text": "1 customer exceeds configured credit threshold ($12,644.30 excess over limit). Recommended: Review credit exposure before releasing orders.",
     "button_text": "Review Risk"
   },
@@ -284,5 +189,5 @@
       "ai_assessment": "Payment velocity watch (78.2% limit utilization). Payment cycle latency increased from 14 to 28 days. Recommended: Courtesy check before due date."
     }
   },
-  "_snapshot_timestamp": 1787909337.9018478
+  "_snapshot_timestamp": 1787910330.7647245
 }
