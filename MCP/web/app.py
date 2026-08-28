@@ -588,7 +588,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"400 Bad Request")
 
 
-class ReusableHTTPServer(HTTPServer):
+from http.server import ThreadingHTTPServer
+
+class ReusableHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
 
