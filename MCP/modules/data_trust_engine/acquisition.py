@@ -143,13 +143,13 @@ class DataAcquirer:
 
                 if ledger_type in ("VENDOR", "BOTH"):
                     vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/vendorLedgerEntries")
+                    if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
+                        logger.warning(f"vendorLedgerEntries endpoint not available ({vle_resp.get('error')}). Querying purchaseInvoices.")
+                        vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/purchaseInvoices")
+
                     dvle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedVendorLedgerEntries")
 
-                    if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
-                        logger.error(f"vendorLedgerEntries request failed: {vle_resp.get('error')}")
-                        return [], "DATA_UNAVAILABLE"
-
-                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
+                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) and "error" not in vle_resp else []
                     dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) and "error" not in dvle_resp else []
 
                     resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", comp_guid)
@@ -157,13 +157,13 @@ class DataAcquirer:
 
                 if ledger_type in ("CUSTOMER", "BOTH"):
                     cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/customerLedgerEntries")
+                    if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
+                        logger.warning(f"customerLedgerEntries endpoint not available ({cle_resp.get('error')}). Querying salesInvoices.")
+                        cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/salesInvoices")
+
                     dcle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedCustLedgerEntries")
 
-                    if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
-                        logger.error(f"customerLedgerEntries request failed: {cle_resp.get('error')}")
-                        return [], "DATA_UNAVAILABLE"
-
-                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
+                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) and "error" not in cle_resp else []
                     dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) and "error" not in dcle_resp else []
 
                     resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", comp_guid)
@@ -212,11 +212,13 @@ class DataAcquirer:
                     logger.error(f"itemLedgerEntries request failed: {ile_resp.get('error')}")
                     return [], "DATA_UNAVAILABLE"
 
-                # Step B: Retrieve Value Entries (Partial Acquisition Fail-Closed Boundary)
+                # Step B: Retrieve Value Entries (fallback to empty list if endpoint is not published in standard v2.0 API)
                 ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
                 if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
-                    logger.error(f"valueEntries request failed: {ve_resp.get('error')}. Failing closed.")
-                    return [], "DATA_UNAVAILABLE"
+                    logger.warning(f"valueEntries endpoint not available ({ve_resp.get('error')}). Proceeding with Item Ledger Entries.")
+                    ve_raw = []
+                else:
+                    ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
 
                 ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
                 ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
