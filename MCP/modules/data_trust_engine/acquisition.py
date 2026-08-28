@@ -212,11 +212,11 @@ class DataAcquirer:
                     logger.error(f"itemLedgerEntries request failed: {ile_resp.get('error')}")
                     return [], "DATA_UNAVAILABLE"
 
-                # Step B: Retrieve Value Entries (fallback to empty list if endpoint is not published in standard v2.0 API)
+                # Step B: Retrieve Value Entries (Fail-closed if valueEntries fails)
                 ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
                 if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
-                    logger.warning(f"valueEntries endpoint not available ({ve_resp.get('error')}). Proceeding with Item Ledger Entries.")
-                    ve_raw = []
+                    logger.error(f"valueEntries request failed: {ve_resp.get('error')}")
+                    return [], "DATA_UNAVAILABLE"
                 else:
                     ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
 

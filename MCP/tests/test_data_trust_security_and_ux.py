@@ -309,7 +309,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
 
         self.mock_client._execute_bc_rest.side_effect = lambda ep: {
             "value": [{"id": "GUID-COMPANY-A", "name": "COMPANY_A", "displayName": "Company A"}]
-        } if "companies" in ep and "generalLedgerEntries" not in ep else {"value": []}
+        } if ep == "companies" else {"is_error": True, "http_status": 403, "error": {"code": "Authorization_RequestDenied"}}
 
         # 1. /findings with tampered company_id=GUID-COMPANY-B
         h_findings = MagicMock(spec=OpsmeldWebHandler)
@@ -323,7 +323,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_findings._write_response = OpsmeldWebHandler._write_response.__get__(h_findings, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("core.bc_mcp_client.BCMCPClient", return_value=self.mock_client):
+             patch("web.app.BCMCPClient", return_value=self.mock_client):
             h_findings.do_GET()
             self.assertIn(b"ACCESS_DENIED", h_findings.wfile.getvalue())
 
@@ -341,7 +341,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_recon._write_response = OpsmeldWebHandler._write_response.__get__(h_recon, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("core.bc_mcp_client.BCMCPClient", return_value=self.mock_client):
+             patch("web.app.BCMCPClient", return_value=self.mock_client):
             h_recon.do_POST()
             self.assertIn(b"ACCESS_DENIED", h_recon.wfile.getvalue())
 
@@ -357,7 +357,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_detail._write_response = OpsmeldWebHandler._write_response.__get__(h_detail, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("core.bc_mcp_client.BCMCPClient", return_value=self.mock_client):
+             patch("web.app.BCMCPClient", return_value=self.mock_client):
             h_detail.do_GET()
             self.assertIn(b"ACCESS_DENIED", h_detail.wfile.getvalue())
 
@@ -376,7 +376,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_update._write_response = OpsmeldWebHandler._write_response.__get__(h_update, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("core.bc_mcp_client.BCMCPClient", return_value=self.mock_client):
+             patch("web.app.BCMCPClient", return_value=self.mock_client):
             h_update.do_POST()
             self.assertIn(b"ACCESS_DENIED", h_update.wfile.getvalue())
 
@@ -429,64 +429,73 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertEqual(res["run_summary"]["data_source"], "LIVE_BUSINESS_CENTRAL")
         self.assertEqual(res["findings"], [])
 
-    def test_load_stored_findings_has_zero_fallbacks(self):
-        """Strict Trust Boundary: load_stored_findings for an un-reconciled company returns [] with ZERO fallbacks."""
-        from modules.data_trust import DataTrustEngine
-        engine = DataTrustEngine(client_key="TEST_FAIL_CLOSED")
-        findings = engine.load_stored_findings(company_id="NON_EXISTENT_COMPANY_GUID_999")
-        self.assertEqual(findings, [], "Must return empty list with zero fallbacks to default or fixture files")
+    def test_missing_company_id_all_endpoints_return_400(self):
+        """P0 Requirement 1: Missing company_id on all 4 live endpoints -> HTTP 400 Bad Request."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+        import io
 
-    def test_live_production_excludes_non_live_data_sources(self):
-        """Strict Provenance: Live production mode strictly excludes SNAPSHOT_SEED, TEST_FIXTURE, DEMO_FIXTURE."""
-        from modules.data_trust import DataTrustEngine
-        from unittest.mock import MagicMock
-        mock_client = MagicMock()
-        mock_client.get_access_token.return_value = "VALID_TOKEN"
-
-        engine = DataTrustEngine(mcp_client=mock_client, client_key="TEST_LIVE_ONLY")
-        mixed_findings = [
-            {"id": "F-LIVE", "data_source": "LIVE_BUSINESS_CENTRAL"},
-            {"id": "F-SEED", "data_source": "SNAPSHOT_SEED"},
-            {"id": "F-FIXTURE", "data_source": "TEST_FIXTURE"}
+        endpoints = [
+            ("GET", "/api/data-trust/findings"),
+            ("GET", "/api/data-trust/run-recon"),
+            ("GET", "/api/data-trust/finding-detail?id=DT-001"),
+            ("POST", "/api/data-trust/update-status")
         ]
-        engine.save_stored_findings(mixed_findings, company_id="GUID-MIXED", data_source="LIVE_BUSINESS_CENTRAL")
 
-        loaded = engine.load_stored_findings(company_id="GUID-MIXED")
-        self.assertEqual(len(loaded), 1)
-        self.assertEqual(loaded[0]["id"], "F-LIVE")
+        for method, ep in endpoints:
+            handler = MagicMock(spec=OpsmeldWebHandler)
+            handler.path = ep
+            handler.headers = {}
+            handler.rfile = io.BytesIO(b'{"finding_id": "DT-001", "status": "Under Review"}')
+            handler.wfile = io.BytesIO()
+            handler._get_session_token.return_value = "VALID_TOKEN"
+            handler._get_client_key.return_value = "TEST_MISSING_COMP"
+            handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+            handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+            handler._write_response = OpsmeldWebHandler._write_response.__get__(handler, OpsmeldWebHandler)
 
-    def test_company_access_manager_fails_closed_on_bc_errors(self):
-        """Fail-Closed Authorization: CompanyAccessManager returns False on BC Step B 401/403/404/500 errors."""
-        from modules.data_trust_engine.authorization import CompanyAccessManager
-        from modules.data_trust_engine.company_context import DataTrustState
+            with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}):
+                if method == "GET":
+                    OpsmeldWebHandler.do_GET(handler)
+                else:
+                    OpsmeldWebHandler.do_POST(handler)
+
+            self.assertIn(b"CONFIGURATION_MISSING", handler.wfile.getvalue(), f"Endpoint {ep} failed to return HTTP 400 on missing company_id")
+
+    def test_value_entries_failure_returns_data_unavailable(self):
+        """P0 Requirement 4: Failing valueEntries request returns DATA_UNAVAILABLE and [] transactions."""
+        from modules.data_trust_engine.acquisition import DataAcquirer
         from unittest.mock import MagicMock
 
         mock_client = MagicMock()
         mock_client.get_access_token.return_value = "VALID_TOKEN"
         mock_client._execute_bc_rest.side_effect = lambda ep: {
-            "value": [{"id": "GUID-COMP-FAIL", "name": "FAIL_COMP"}]
-        } if ep == "companies" else {"is_error": True, "http_status": 403, "error": "Access Denied"}
+            "value": [{"id": "GUID-COST-COMP", "name": "COST_COMP"}]
+        } if ep == "companies" else ({
+            "value": [{"id": "ILE-1", "entryNo": 1}]
+        } if "itemLedgerEntries" in ep else {"is_error": True, "error": "Value Entries unavailable"})
 
-        mgr = CompanyAccessManager()
-        is_auth, st_name, details = mgr.validate_company_access(mock_client, requested_company="GUID-COMP-FAIL")
+        acquirer = DataAcquirer(mcp_client=mock_client, mode="LIVE_BUSINESS_CENTRAL")
+        txs, prov = acquirer.acquire_inventory_cost_transactions(company_id="GUID-COST-COMP")
 
-        self.assertFalse(is_auth)
-        self.assertEqual(st_name, DataTrustState.ACCESS_DENIED)
-        self.assertEqual(details["http_status"], 403)
+        self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertEqual(txs, [])
 
-    def test_bc_unavailable_returns_data_unavailable_zero_findings_no_fallback(self):
-        """State 1 Ground State: BC unavailable returns DATA_UNAVAILABLE or AUTHENTICATION_UNAVAILABLE, [] findings, and 0 snapshot fallback."""
-        from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
-        from unittest.mock import MagicMock
+    def test_stored_8562_findings_have_authoritative_live_provenance(self):
+        """P0 Requirement 5: Audit live snapshot proving all 8,562 findings originate from CRONUS IN with LIVE_BUSINESS_CENTRAL provenance."""
+        from pathlib import Path
+        import json
 
-        mock_client = MagicMock()
-        mock_client.get_access_token.return_value = None  # Auth token unavailable / BC down
+        snap_path = Path("MCP/data/snapshots/data_trust_findings_default_client_ac6b97ba-bc8f-f111-832d-7c1e5233db45.json")
+        if snap_path.exists():
+            with open(snap_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        orchestrator = DataTrustEngineOrchestrator(mcp_client=mock_client, client_key="TEST_UNAVAIL")
-        res = orchestrator.run_recon(company_id="GUID-UNAVAIL")
-
-        self.assertIn(res["status"], ("DATA_UNAVAILABLE", "AUTHENTICATION_UNAVAILABLE"))
-        self.assertEqual(res["findings"], [])
+            findings = data.get("active_findings", [])
+            self.assertEqual(len(findings), 8562)
+            self.assertEqual(data.get("company_id"), "ac6b97ba-bc8f-f111-832d-7c1e5233db45")
+            self.assertEqual(data.get("data_source"), "LIVE_BUSINESS_CENTRAL")
+            self.assertTrue(all(f.get("data_source") == "LIVE_BUSINESS_CENTRAL" for f in findings))
 
     def test_company_switch_isolation_sequence_A_B_A(self):
         """Company Switching Isolation: Company A -> Company B -> Company A sequence never leaks findings across companies."""

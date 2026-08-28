@@ -278,21 +278,29 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
+            if not company_id:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing mandatory company_id parameter",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
+
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard for run-recon
-            if company_id:
-                mgr = CompanyAccessManager()
-                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth:
-                    self._set_headers("application/json", 403)
-                    self._write_response(json.dumps({
-                        "error": "Forbidden: Company GUID unauthorized for current session",
-                        "status": "ACCESS_DENIED"
-                    }).encode("utf-8"))
-                    return
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+            if not is_auth:
+                status_code = details.get("http_status") or 403
+                self._set_headers("application/json", status_code)
+                self._write_response(json.dumps({
+                    "error": details.get("message", "Forbidden: Company GUID unauthorized for current session"),
+                    "status": st_name
+                }).encode("utf-8"))
+                return
 
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
@@ -303,6 +311,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
+            if not company_id:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing mandatory company_id parameter",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
+
             classification = query_params.get("classification", [None])[0]
             evidence_strength = query_params.get("evidence_strength", [None])[0]
             rule_pack = query_params.get("rule_pack", [None])[0]
@@ -316,16 +332,16 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard: Validate company authorization BEFORE loading snapshot or reading storage
-            if company_id:
-                mgr = CompanyAccessManager()
-                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth:
-                    self._set_headers("application/json", 403)
-                    self._write_response(json.dumps({
-                        "error": "Forbidden: Company GUID unauthorized for current session",
-                        "status": "ACCESS_DENIED"
-                    }).encode("utf-8"))
-                    return
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+            if not is_auth:
+                status_code = details.get("http_status") or 403
+                self._set_headers("application/json", status_code)
+                self._write_response(json.dumps({
+                    "error": details.get("message", "Forbidden: Company GUID unauthorized for current session"),
+                    "status": st_name
+                }).encode("utf-8"))
+                return
 
             engine = DataTrustEngine(client, client_key=client_key)
             raw_findings = engine.load_stored_findings(company_id=company_id)
@@ -337,7 +353,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             filtered = []
             for f in all_findings:
-                # Default filter: Exclude Insufficient Evidence from main action table unless explicitly selected
                 if not classification and not include_insufficient and f.get("classification") == "Insufficient Evidence":
                     continue
                 if classification and f.get("classification") != classification:
@@ -370,21 +385,29 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             query_params = urllib.parse.parse_qs(parsed_url.query)
             finding_id = query_params.get("id", [None])[0]
             company_id = query_params.get("company_id", [None])[0]
+            if not company_id:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing mandatory company_id parameter",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
+
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard for finding-detail
-            if company_id:
-                mgr = CompanyAccessManager()
-                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth:
-                    self._set_headers("application/json", 403)
-                    self._write_response(json.dumps({
-                        "error": "Forbidden: Company GUID unauthorized for current session",
-                        "status": "ACCESS_DENIED"
-                    }).encode("utf-8"))
-                    return
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+            if not is_auth:
+                status_code = details.get("http_status") or 403
+                self._set_headers("application/json", status_code)
+                self._write_response(json.dumps({
+                    "error": details.get("message", "Forbidden: Company GUID unauthorized for current session"),
+                    "status": st_name
+                }).encode("utf-8"))
+                return
 
             engine = DataTrustEngine(client, client_key=client_key)
             all_findings = engine.load_stored_findings(company_id=company_id)
@@ -531,24 +554,29 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 post_data = urllib.parse.parse_qs(body)
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
-                if not company_id:
-                    company_id = post_data.get("company_id", [None])[0]
+            if not company_id:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing mandatory company_id parameter",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard for update-status
-            if company_id:
-                mgr = CompanyAccessManager()
-                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth:
-                    self._set_headers("application/json", 403)
-                    self._write_response(json.dumps({
-                        "error": "Forbidden: Company GUID unauthorized for current session",
-                        "status": "ACCESS_DENIED"
-                    }).encode("utf-8"))
-                    return
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+            if not is_auth:
+                status_code = details.get("http_status") or 403
+                self._set_headers("application/json", status_code)
+                self._write_response(json.dumps({
+                    "error": details.get("message", "Forbidden: Company GUID unauthorized for current session"),
+                    "status": st_name
+                }).encode("utf-8"))
+                return
 
             valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
             if new_status not in valid_statuses:
