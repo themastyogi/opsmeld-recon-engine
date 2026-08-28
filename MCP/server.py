@@ -1,12 +1,7 @@
-"""
-Opsmeld Reconciliation Engine - Server Launcher
-One-command web management console launcher.
-"""
+import sys, os, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from web.app import create_server
-
-
-import os
 
 
 def main():

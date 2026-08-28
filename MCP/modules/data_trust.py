@@ -110,17 +110,20 @@ class DataTrustEngine:
 
     def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         active_findings, _ = self._load_from_disk(company_id=company_id)
-        # Live Production Mode: When authenticated to live BC, strictly purge all fixture/snapshot findings
-        if self.client and self.client.get_access_token():
+        # Production Rule: When client object is present, strictly filter out SNAPSHOT_SEED, TEST_FIXTURE, DEMO_FIXTURE and PINV-9999
+        if self.client:
             live_findings = [
                 f for f in active_findings
                 if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
+                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
             ]
-            if not live_findings:
-                return self.run_recon(company_id=company_id)
+            if self.client.get_access_token():
+                if not live_findings:
+                    return self.run_recon(company_id=company_id)
+                return live_findings
             return live_findings
 
-        # In offline/unauthenticated test mode, return active_findings (or trigger run_recon if empty)
+        # When self.client is None (explicit unit test runner), return active_findings (or trigger run_recon if empty)
         if not active_findings:
             return self.run_recon(company_id=company_id)
         return active_findings
