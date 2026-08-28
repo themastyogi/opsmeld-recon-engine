@@ -1297,12 +1297,14 @@
     }
 
     function loadDataTrustFindings() {
+        const compEl = document.getElementById('dt-company-select');
         const clsEl = document.getElementById('dt-filter-classification');
         const strEl = document.getElementById('dt-filter-evidence-strength');
         const rpEl = document.getElementById('dt-filter-rule-pack');
         const stEl = document.getElementById('dt-filter-status');
         const qEl = document.getElementById('dt-search-input');
 
+        const company_id = compEl ? compEl.value : '';
         const cls = clsEl ? clsEl.value : '';
         const str = strEl ? strEl.value : '';
         const rp = rpEl ? rpEl.value : '';
@@ -1310,6 +1312,7 @@
         const q = qEl ? qEl.value : '';
 
         let url = `/api/data-trust/findings?c=1`;
+        if (company_id) url += `&company_id=${encodeURIComponent(company_id)}`;
         if (cls) url += `&classification=${encodeURIComponent(cls)}`;
         if (str) url += `&evidence_strength=${encodeURIComponent(str)}`;
         if (rp) url += `&rule_pack=${encodeURIComponent(rp)}`;
@@ -2422,14 +2425,27 @@
             .catch(err => console.log('Company discovery fallback to active context'));
     }
 
-    function onCompanySelectChange(selectedCompany) {
-        // Instant State Clearing: Clear visible Company A data immediately
+    function runDataTrustRecon(company_id) {
         clearDataTrustStateDisplay();
+        renderPlatformStateBanner('LOADING', 'Running live Data Trust audit engine against Business Central...');
+        const compId = company_id || (document.getElementById('dt-company-select') ? document.getElementById('dt-company-select').value : '');
         
-        // Show loading banner
-        renderPlatformStateBanner('LOADING', `Loading selected company data for ${selectedCompany}...`);
+        fetch(`/api/data-trust/run-recon?company_id=${encodeURIComponent(compId)}`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                renderPlatformStateBanner(data.status || 'SUCCESS', data.message || 'Reconciliation completed', data.run_id);
+                loadDataTrustFindings();
+            })
+            .catch(err => {
+                console.error("Recon error:", err);
+                renderPlatformStateBanner('DATA_UNAVAILABLE', 'Data Trust reconciliation error: ' + err.message);
+                loadDataTrustFindings();
+            });
+    }
 
-        // Run recon for selected company
+    function onCompanySelectChange(selectedCompany) {
+        clearDataTrustStateDisplay();
+        renderPlatformStateBanner('LOADING', `Loading selected company data for ${selectedCompany}...`);
         runDataTrustRecon(selectedCompany);
     }
 
