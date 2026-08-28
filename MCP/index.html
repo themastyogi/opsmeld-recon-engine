@@ -1360,17 +1360,10 @@
                     const tx = f.transaction_details || {};
                     let docNo = tx.documentNumber || tx.document_no || tx.doc_no || tx.documentNo || tx.entryNumber || tx.entry_number || '';
                     if (!docNo || docNo === 'N/A') {
-                        if (tx.id && typeof tx.id === 'string' && tx.id.length < 25) {
-                            docNo = tx.id;
-                        } else if (f.id) {
-                            const parts = f.id.split('-');
-                            if (parts.length >= 3) {
-                                docNo = parts.slice(2).join('-');
-                            } else {
-                                docNo = f.id;
-                            }
+                        if (f.id) {
+                            docNo = f.id.replace(/^DT-(PD|BYPASS|NARR|PT|IC)-/, '');
                         } else {
-                            docNo = 'N/A';
+                            docNo = tx.id || 'N/A';
                         }
                     }
                     let accName = tx.accountNumber || tx.accountCaption || tx.account_name || tx.account_no || tx.gAccountNo || tx.description || 'G/L Ledger Entry';
