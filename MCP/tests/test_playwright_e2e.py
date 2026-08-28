@@ -18,15 +18,16 @@ from web.app import OpsmeldWebHandler
 class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # 1. Spin up robust ThreadingHTTPServer on localhost:8899
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 8899), OpsmeldWebHandler)
+        # 1. Spin up robust ThreadingHTTPServer on an OS-assigned free port
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), OpsmeldWebHandler)
+        cls.port = cls.server.server_address[1]
         cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.server_thread.start()
 
         # 2. Launch Playwright headless Chromium
         cls.playwright = sync_playwright().start()
         cls.browser: Browser = cls.playwright.chromium.launch(headless=True)
-        cls.base_url = "http://127.0.0.1:8899"
+        cls.base_url = f"http://127.0.0.1:{cls.port}"
 
     @classmethod
     def tearDownClass(cls):
@@ -44,13 +45,12 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         self.context.close()
 
     def _open_page(self):
-        for _ in range(3):
+        for _ in range(5):
             try:
                 self.page.goto(self.base_url)
-                self.page.wait_for_load_state("domcontentloaded")
                 return
             except Exception:
-                time.sleep(0.2)
+                time.sleep(0.5)
 
     # -------------------------------------------------------------------------
     # 1. Authentication Area (3 Tests)
@@ -331,6 +331,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_ui_broken_modals(self):
         """Broken modals: Validates opening and closing modals without DOM errors."""
         self._open_page()
+        self.page.wait_for_function("typeof window.openDataTrustModal === 'function'")
         self.page.evaluate("openDataTrustModal('DOC-MODAL', '10000', 'Impact', 'Action', 'Key-Modal')")
         disp_open = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
         self.assertEqual(disp_open, "flex")

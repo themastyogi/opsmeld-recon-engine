@@ -98,12 +98,11 @@ class DataTrustEngine:
 
     def load_stored_findings(self) -> List[Dict[str, Any]]:
         findings = self._load_from_disk()
-        if self.client:
-            # When live BC client is attached, exclude legacy fixture findings
+        # Only enforce live provenance isolation when an active live BC token is authenticated
+        if self.client and self.client.get_access_token():
             live_findings = [
                 f for f in findings
                 if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
-                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
             ]
             if not live_findings:
                 return self.run_recon()
@@ -157,13 +156,11 @@ class DataTrustEngine:
         # Is newly evaluated run from live BC data?
         is_live_run = any(f.get("data_source") == "LIVE_BUSINESS_CENTRAL" for f in newly_eval_findings) or (res.get("run_summary", {}).get("data_source") == "LIVE_BUSINESS_CENTRAL")
 
-        # In live runs, filter out legacy fixture/snapshot findings so fixture data never pollutes live production UI
+        # In live runs, filter out legacy fixture findings exclusively by provenance
         if is_live_run:
             existing_findings_raw = [
                 f for f in existing_findings_raw
                 if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
-                and "FIXTURE" not in str(f.get("dedup_key", "")).upper()
-                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
             ]
 
         existing_map = {f.get("dedup_key"): f for f in existing_findings_raw if f.get("dedup_key")}

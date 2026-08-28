@@ -420,11 +420,12 @@ class TestDataTrustWebAPIs(unittest.TestCase):
     def setUpClass(cls):
         from web.app import create_server
         from core.auth import get_auth_manager
-        cls.server = create_server("127.0.0.1", 8899)
+        cls.server = create_server("127.0.0.1", 0)
+        cls.port = cls.server.server_address[1]
         cls.server_thread = threading.Thread(target=cls.server.serve_forever)
         cls.server_thread.daemon = True
         cls.server_thread.start()
-        cls.server_url = "http://127.0.0.1:8899"
+        cls.server_url = f"http://127.0.0.1:{cls.port}"
         
         # Authenticate and obtain valid session token for web tests
         auth_mgr = get_auth_manager()
@@ -486,23 +487,34 @@ class TestDataTrustWebAPIs(unittest.TestCase):
             self.assertEqual(data.get("status"), "success")
 
     def test_fixture_findings_purged_on_live_production_recon(self):
-        """Regression test: Proves that live BC runs purge legacy SNAPSHOT_SEED / TEST_FIXTURE findings (such as PINV-9999)."""
+        """Regression test: Proves that live BC runs purge arbitrary SNAPSHOT_SEED / TEST_FIXTURE findings exclusively by provenance."""
         from unittest.mock import MagicMock
         from modules.data_trust_engine.models import DataTrustFinding
 
         engine = DataTrustEngine(client_key="TEST_PROVENANCE_PURGE")
         
-        # Seed snapshot disk with a legacy fixture finding containing PINV-9999
-        fixture_finding = {
-            "id": "FINDING-IC-CURR-SPIKE",
-            "dedup_key": "INVENTORY_COSTING_FIXTURE_COMPANY_IC-CURR-SPIKE",
-            "rule_pack": "Inventory Costing & Valuation Integrity",
-            "classification": "Potential Data Error",
-            "severity": "HIGH",
-            "data_source": "SNAPSHOT_SEED",
-            "transaction_details": {"document_no": "PINV-9999", "item_no": "ITEM-X"}
-        }
-        engine.save_stored_findings([fixture_finding])
+        # Seed snapshot disk with arbitrary fixture findings (no hardcoded document_no assumption)
+        fixture_findings = [
+            {
+                "id": "FINDING-RANDOM-001",
+                "dedup_key": "KEY-RANDOM-001",
+                "rule_pack": "Inventory Costing & Valuation Integrity",
+                "classification": "Potential Data Error",
+                "severity": "HIGH",
+                "data_source": "SNAPSHOT_SEED",
+                "transaction_details": {"document_no": "DOC-RANDOM-FIXTURE-9876", "item_no": "ITEM-ARBITRARY"}
+            },
+            {
+                "id": "FINDING-RANDOM-002",
+                "dedup_key": "KEY-RANDOM-002",
+                "rule_pack": "Posting-Date Policy",
+                "classification": "Policy Violation",
+                "severity": "HIGH",
+                "data_source": "TEST_FIXTURE",
+                "transaction_details": {"document_no": "DOC-TEST-5544", "item_no": "ITEM-TEST"}
+            }
+        ]
+        engine.save_stored_findings(fixture_findings)
 
         # Attach mock live BC client
         mock_client = MagicMock()
@@ -531,11 +543,13 @@ class TestDataTrustWebAPIs(unittest.TestCase):
         # Load stored findings for live client
         loaded = engine.load_stored_findings()
 
-        # Assert PINV-9999 / SNAPSHOT_SEED fixture findings are PURGED and NOT present
+        # Assert arbitrary SNAPSHOT_SEED / TEST_FIXTURE findings are PURGED exclusively by provenance
         doc_nos = [f.get("transaction_details", {}).get("document_no") for f in loaded]
         data_sources = [f.get("data_source") for f in loaded]
 
-        self.assertNotIn("PINV-9999", doc_nos)
+        self.assertNotIn("DOC-RANDOM-FIXTURE-9876", doc_nos)
+        self.assertNotIn("DOC-TEST-5544", doc_nos)
         self.assertNotIn("SNAPSHOT_SEED", data_sources)
+        self.assertNotIn("TEST_FIXTURE", data_sources)
         self.assertIn("107239", doc_nos)
         self.assertIn("LIVE_BUSINESS_CENTRAL", data_sources)

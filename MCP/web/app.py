@@ -331,7 +331,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "findings": filtered
             }
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/finding-detail":
             query_params = urllib.parse.parse_qs(parsed_url.query)
