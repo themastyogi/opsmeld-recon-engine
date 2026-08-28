@@ -320,8 +320,8 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         self.assertEqual(finding_1.evidence_strength, "LOW")
 
         # Save finding to disk and mark status as False Positive
-        engine.save_stored_findings([finding_1.to_dict()])
-        engine.update_finding_status(finding_1.id, "False Positive")
+        engine.save_stored_findings([finding_1.to_dict()], company_id="default_company")
+        engine.update_finding_status(finding_1.id, "False Positive", company_id="default_company")
 
         # Re-evaluate transaction with adequate peer history (>=20) so N1 & N5 also fire -> HIGH strength
         adequate_peer = [{"narration": "Office paper", "amount": 50.0}] * 25
@@ -333,7 +333,7 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         self.assertEqual(finding_2.evidence_strength, "HIGH")
 
         # Run recon with escalated candidate
-        merged = engine.run_recon(sample_transactions=[tx_high])
+        merged = engine.run_recon(sample_transactions=[tx_high], company_id="default_company")
         escalated_f = next(f for f in merged if f.get("dedup_key") == finding_1.dedup_key)
 
         # Asserts: Status automatically reopened to Open, Evidence Strength updated to HIGH, escalation note prepended
@@ -474,17 +474,20 @@ class TestDataTrustWebAPIs(unittest.TestCase):
 
     def test_update_status_api(self):
         import urllib.request
-        payload = json.dumps({"finding_id": "DT-BYPASS-TX-1001", "status": "Under Review"}).encode("utf-8")
+        from unittest.mock import patch
+        payload = json.dumps({"finding_id": "DT-BYPASS-TX-1001", "status": "Under Review", "company_id": "default_company"}).encode("utf-8")
         req = urllib.request.Request(
             f"{self.server_url}/api/data-trust/update-status",
             data=payload,
             headers={"Content-Type": "application/json", "Cookie": f"session={self.session_token}"},
             method="POST"
         )
-        with urllib.request.urlopen(req) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode("utf-8"))
-            self.assertEqual(data.get("status"), "success")
+        with patch("core.bc_mcp_client.BCMCPClient.get_access_token", return_value="TEST_TOKEN"), \
+             patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest", return_value={"value": [{"id": "default_company", "name": "default_company"}]}):
+            with urllib.request.urlopen(req) as resp:
+                self.assertEqual(resp.status, 200)
+                data = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(data.get("status"), "success")
 
     def test_fixture_findings_purged_on_live_production_recon(self):
         """Regression test: Proves that live BC runs purge arbitrary SNAPSHOT_SEED / TEST_FIXTURE findings exclusively by provenance."""

@@ -281,6 +281,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
+
+            # Anti-BOLA/IDOR Guard for run-recon
+            if company_id:
+                mgr = CompanyAccessManager()
+                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+                if not is_auth:
+                    self._set_headers("application/json", 403)
+                    self._write_response(json.dumps({
+                        "error": "Forbidden: Company GUID unauthorized for current session",
+                        "status": "ACCESS_DENIED"
+                    }).encode("utf-8"))
+                    return
+
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
             status_code = res.get("http_status") or (403 if res.get("status") == "ACCESS_DENIED" else 200)
@@ -303,10 +316,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard: Validate company authorization BEFORE loading snapshot or reading storage
-            if company_id and client and client.get_access_token():
+            if company_id:
                 mgr = CompanyAccessManager()
                 is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth and details.get("http_status") == 403:
+                if not is_auth:
                     self._set_headers("application/json", 403)
                     self._write_response(json.dumps({
                         "error": "Forbidden: Company GUID unauthorized for current session",
@@ -362,10 +375,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config)
 
             # Anti-BOLA/IDOR Guard for finding-detail
-            if company_id and client and client.get_access_token():
+            if company_id:
                 mgr = CompanyAccessManager()
                 is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
-                if not is_auth and details.get("http_status") == 403:
+                if not is_auth:
                     self._set_headers("application/json", 403)
                     self._write_response(json.dumps({
                         "error": "Forbidden: Company GUID unauthorized for current session",
@@ -504,29 +517,54 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             session_info = self._require_auth()
             if not session_info:
                 return
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            company_id = query_params.get("company_id", [None])[0]
             content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length).decode("utf-8")
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else ""
             try:
-                data = json.loads(body)
+                data = json.loads(body) if body else {}
                 finding_id = data.get("finding_id")
                 new_status = data.get("status")
+                if not company_id:
+                    company_id = data.get("company_id") or "default_company"
             except Exception:
                 post_data = urllib.parse.parse_qs(body)
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
+                if not company_id:
+                    company_id = post_data.get("company_id", ["default_company"])[0]
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
+
+            # Anti-BOLA/IDOR Guard for update-status
+            if company_id:
+                mgr = CompanyAccessManager()
+                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+                if not is_auth:
+                    self._set_headers("application/json", 403)
+                    self._write_response(json.dumps({
+                        "error": "Forbidden: Company GUID unauthorized for current session",
+                        "status": "ACCESS_DENIED"
+                    }).encode("utf-8"))
+                    return
+
+            valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
+            if new_status not in valid_statuses:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": f"Invalid status '{new_status}'", "status": "DATA_REQUEST_INVALID"}).encode("utf-8"))
+                return
+
             engine = DataTrustEngine(client, client_key=client_key)
-            success = engine.update_finding_status(finding_id, new_status)
+            success = engine.update_finding_status(finding_id, new_status, company_id=company_id)
             if success:
                 res = {"status": "success", "finding_id": finding_id, "new_status": new_status}
                 self._set_headers("application/json", 200)
+                self._write_response(json.dumps(res).encode("utf-8"))
             else:
-                res = {"status": "error", "message": f"Could not update status for finding '{finding_id}'"}
-                self._set_headers("application/json", 400)
-            self._write_response(json.dumps(res).encode("utf-8"))
+                self._set_headers("application/json", 404)
+                self._write_response(json.dumps({"error": f"Finding '{finding_id}' not found", "status": "NOT_FOUND"}).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
             session_info = self._require_auth()

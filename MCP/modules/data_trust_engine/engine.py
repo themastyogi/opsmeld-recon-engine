@@ -271,7 +271,7 @@ class DataTrustEngineOrchestrator:
             overall_status = DataTrustState.PARTIAL
             message = build_user_message(DataTrustState.PARTIAL, run_id=run_id, detail=f" {unavail_count} rule pack(s) unavailable.")
         elif len(findings) == 0:
-            overall_status = DataTrustState.NO_FINDINGS
+            overall_status = DataTrustState.SUCCESS
             message = build_user_message(DataTrustState.NO_FINDINGS, run_id=run_id)
         else:
             overall_status = DataTrustState.SUCCESS

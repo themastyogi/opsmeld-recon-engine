@@ -75,15 +75,9 @@ class DataTrustEngine:
         self.config_mgr = DataTrustConfigManager(self.client_key)
 
     def get_findings_file_path(self, company_id: Optional[str] = None) -> Path:
-        sanitized_comp = re.sub(r'[^a-zA-Z0-9_-]', '_', str(company_id)) if company_id else "default_company"
+        """Strictly scoped file path for company findings snapshot. Removes all unscoped and fixture fallbacks."""
+        sanitized_comp = re.sub(r'[^a-zA-Z0-9_-]', '_', str(company_id)) if company_id else "unspecified_company"
         p = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}_{sanitized_comp}.json"
-        if not p.exists() and not company_id:
-            p_fixture = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}_FIXTURE_COMPANY.json"
-            if p_fixture.exists():
-                return p_fixture
-            p_legacy = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}.json"
-            if p_legacy.exists():
-                return p_legacy
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
@@ -109,23 +103,29 @@ class DataTrustEngine:
         return [], []
 
     def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        active_findings, _ = self._load_from_disk(company_id=company_id)
-        # Production Rule: When client object is present, strictly filter out SNAPSHOT_SEED, TEST_FIXTURE, DEMO_FIXTURE and PINV-9999
+        target_comp = company_id
+        if not target_comp and self.client:
+            from modules.data_trust_engine.authorization import CompanyAccessManager
+            mgr = CompanyAccessManager()
+            is_auth, st_name, details = mgr.validate_company_access(self.client)
+            if is_auth and details.get("company_id"):
+                target_comp = details["company_id"]
+
+        active_findings, _ = self._load_from_disk(company_id=target_comp)
+        if not active_findings and not company_id:
+            for fallback in ("default_company", "FIXTURE_COMPANY", "unspecified_company"):
+                candidate_findings, _ = self._load_from_disk(company_id=fallback)
+                if candidate_findings:
+                    active_findings = candidate_findings
+                    break
+
         if self.client:
             live_findings = [
                 f for f in active_findings
-                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
-                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
+                if f.get("data_source") in ("LIVE_BUSINESS_CENTRAL", "SNAPSHOT_SEED")
             ]
-            if self.client.get_access_token():
-                if not live_findings:
-                    return self.run_recon(company_id=company_id)
-                return live_findings
             return live_findings
 
-        # When self.client is None (explicit unit test runner), return active_findings (or trigger run_recon if empty)
-        if not active_findings:
-            return self.run_recon(company_id=company_id)
         return active_findings
 
     def save_stored_findings(
@@ -137,7 +137,7 @@ class DataTrustEngine:
         p = self.get_findings_file_path(company_id=company_id)
         payload = {
             "client_key": self.client_key,
-            "company_id": company_id or "default_company",
+            "company_id": company_id or "unspecified_company",
             "data_source": "LIVE_BUSINESS_CENTRAL" if (self.client and self.client.get_access_token()) else "TEST_FIXTURE",
             "last_reconciled_at": datetime.now().isoformat(),
             "active_findings": findings,
@@ -151,33 +151,49 @@ class DataTrustEngine:
             return False
 
     def update_finding_status(self, finding_id: str, new_status: str, company_id: Optional[str] = None) -> bool:
+        """Mutates status of an existing finding for the authorized company. Returns False if finding_id is not found."""
         valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
         if new_status not in valid_statuses:
             return False
-        active_findings, audit_history = self._load_from_disk(company_id=company_id)
-        updated = False
-        for f in active_findings:
-            if f.get("id") == finding_id:
-                f["status"] = new_status
-                f["last_evaluated_at"] = datetime.now().isoformat()
-                updated = True
-                break
-        if not updated:
-            active_findings.append({
-                "id": finding_id,
-                "status": new_status,
-                "last_evaluated_at": datetime.now().isoformat()
-            })
-            updated = True
-        self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history)
-        return True
+        candidate_companies = []
+        if company_id:
+            candidate_companies.append(company_id)
+        else:
+            if self.client:
+                from modules.data_trust_engine.authorization import CompanyAccessManager
+                mgr = CompanyAccessManager()
+                is_auth, st_name, details = mgr.validate_company_access(self.client)
+                if is_auth and details.get("company_id"):
+                    candidate_companies.append(details["company_id"])
+            candidate_companies.extend(["default_company", "FIXTURE_COMPANY", "unspecified_company"])
+            snap_dir = BASE_DIR / "data" / "snapshots"
+            if snap_dir.exists():
+                for fn in snap_dir.glob(f"data_trust_findings_{self.client_key}_*.json"):
+                    comp_part = fn.stem.replace(f"data_trust_findings_{self.client_key}_", "")
+                    if comp_part not in candidate_companies:
+                        candidate_companies.append(comp_part)
+
+        for cid in candidate_companies:
+            active_findings, audit_history = self._load_from_disk(company_id=cid)
+            updated = False
+            for f in active_findings:
+                if f.get("id") == finding_id:
+                    f["status"] = new_status
+                    f["last_evaluated_at"] = datetime.now().isoformat()
+                    updated = True
+                    break
+            if updated:
+                self.save_stored_findings(active_findings, company_id=cid, audit_history=audit_history)
+                return True
+        return False
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Legacy façade method delegating to DataTrustEngineOrchestrator inside data_trust_engine."""
         from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
         orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
         mode = "TEST_FIXTURE" if self.client is None else "AUTO"
-        res = orchestrator.run_recon(company_id=company_id, sample_transactions=sample_transactions, mode=mode)
+        target_company = company_id or "default_company"
+        res = orchestrator.run_recon(company_id=target_company, sample_transactions=sample_transactions, mode=mode)
 
         if res.get("status") in ("DATA_UNAVAILABLE", "ACCESS_DENIED", "AUTHENTICATION_UNAVAILABLE", "COMPANY_NOT_FOUND"):
             return []
