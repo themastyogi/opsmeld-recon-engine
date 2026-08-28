@@ -2431,7 +2431,15 @@
         const compId = company_id || (document.getElementById('dt-company-select') ? document.getElementById('dt-company-select').value : '');
         
         fetch(`/api/data-trust/run-recon?company_id=${encodeURIComponent(compId)}`, { method: 'POST' })
-            .then(res => res.json())
+            .then(res => {
+                return res.text().then(text => {
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        throw new Error(`Server returned HTTP ${res.status}: ${text.substring(0, 100)}`);
+                    }
+                });
+            })
             .then(data => {
                 renderPlatformStateBanner(data.status || 'SUCCESS', data.message || 'Reconciliation completed', data.run_id);
                 loadDataTrustFindings();

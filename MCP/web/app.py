@@ -69,14 +69,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         return load_client_config().client_key
 
     def _require_auth(self) -> Optional[Dict[str, Any]]:
-        """Enforces session authentication for protected API endpoints. Auto-provisions session if unauthenticated."""
+        """Enforces session authentication for protected API endpoints."""
         token = self._get_session_token()
         auth_mgr = get_auth_manager()
         session_info = auth_mgr.get_session_info(token)
         if not session_info:
-            client_key = self._get_client_key(urllib.parse.urlparse(self.path))
-            token = auth_mgr.create_session("admin@opsmeld.com", client_key=client_key)
-            session_info = auth_mgr.get_session_info(token)
+            self._set_headers("application/json", 401)
+            self._write_response(json.dumps({"error": "Unauthorized: Active session token required"}).encode("utf-8"))
+            return None
         return session_info
 
     def _is_authenticated(self) -> bool:
@@ -427,10 +427,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 res = {"error": "Invalid credentials. Please check your provisioned email and password."}
                 self._set_headers("application/json", 401)
                 self._write_response(json.dumps(res).encode("utf-8"))
-        parsed_url = urllib.parse.urlparse(self.path)
-        path = parsed_url.path
+            return
 
-        if path == "/api/settings":
+        elif path == "/api/settings":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
             post_data = urllib.parse.parse_qs(body)
@@ -584,8 +583,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(res).encode("utf-8"))
 
         else:
-            self._set_headers("text/plain", 400)
-            self.wfile.write(b"400 Bad Request")
+            self._set_headers("application/json", 400)
+            self._write_response(json.dumps({"error": "Bad Request: Endpoint not found", "status": "DATA_REQUEST_INVALID"}).encode("utf-8"))
 
 
 from http.server import ThreadingHTTPServer

@@ -235,7 +235,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
         handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
         handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
-        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+        handler._write_response = OpsmeldWebHandler._write_response.__get__(handler, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
              patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies", return_value=[]):
@@ -283,6 +283,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         handler_auth.do_POST = OpsmeldWebHandler.do_POST.__get__(handler_auth, OpsmeldWebHandler)
         handler_auth._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_auth, OpsmeldWebHandler)
         handler_auth._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_auth, OpsmeldWebHandler)
+        handler_auth._write_response = OpsmeldWebHandler._write_response.__get__(handler_auth, OpsmeldWebHandler)
 
         expected_payload = {
             "run_id": "DT-20260826-POST",
