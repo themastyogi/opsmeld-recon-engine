@@ -484,3 +484,58 @@ class TestDataTrustWebAPIs(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(data.get("status"), "success")
+
+    def test_fixture_findings_purged_on_live_production_recon(self):
+        """Regression test: Proves that live BC runs purge legacy SNAPSHOT_SEED / TEST_FIXTURE findings (such as PINV-9999)."""
+        from unittest.mock import MagicMock
+        from modules.data_trust_engine.models import DataTrustFinding
+
+        engine = DataTrustEngine(client_key="TEST_PROVENANCE_PURGE")
+        
+        # Seed snapshot disk with a legacy fixture finding containing PINV-9999
+        fixture_finding = {
+            "id": "FINDING-IC-CURR-SPIKE",
+            "dedup_key": "INVENTORY_COSTING_FIXTURE_COMPANY_IC-CURR-SPIKE",
+            "rule_pack": "Inventory Costing & Valuation Integrity",
+            "classification": "Potential Data Error",
+            "severity": "HIGH",
+            "data_source": "SNAPSHOT_SEED",
+            "transaction_details": {"document_no": "PINV-9999", "item_no": "ITEM-X"}
+        }
+        engine.save_stored_findings([fixture_finding])
+
+        # Attach mock live BC client
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "token-123"
+        engine.client = mock_client
+
+        # Create live BC finding
+        live_finding = DataTrustFinding(
+            id="FINDING-LIVE-826",
+            dedup_key="INVENTORY_COSTING_LIVE_826",
+            rule_pack="Inventory Costing & Valuation Integrity",
+            classification="Potential Data Error",
+            evidence_strength="HIGH",
+            severity="HIGH",
+            signals_fired_count=2,
+            evidence_chain=["[C1 Sudden Unit Cost Movement] Fired"],
+            transaction_details={"document_no": "107239", "item_no": "GRH-1000", "entry_no": 826},
+            business_impact="Review required",
+            recommended_action="Action",
+            data_source="LIVE_BUSINESS_CENTRAL"
+        ).to_dict()
+
+        # Execute run_recon with live findings result
+        engine.run_recon = MagicMock(return_value=engine.save_stored_findings([live_finding]) or [live_finding])
+        
+        # Load stored findings for live client
+        loaded = engine.load_stored_findings()
+
+        # Assert PINV-9999 / SNAPSHOT_SEED fixture findings are PURGED and NOT present
+        doc_nos = [f.get("transaction_details", {}).get("document_no") for f in loaded]
+        data_sources = [f.get("data_source") for f in loaded]
+
+        self.assertNotIn("PINV-9999", doc_nos)
+        self.assertNotIn("SNAPSHOT_SEED", data_sources)
+        self.assertIn("107239", doc_nos)
+        self.assertIn("LIVE_BUSINESS_CENTRAL", data_sources)

@@ -98,6 +98,16 @@ class DataTrustEngine:
 
     def load_stored_findings(self) -> List[Dict[str, Any]]:
         findings = self._load_from_disk()
+        if self.client:
+            # When live BC client is attached, exclude legacy fixture findings
+            live_findings = [
+                f for f in findings
+                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
+                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
+            ]
+            if not live_findings:
+                return self.run_recon()
+            return live_findings
         if not findings:
             return self.run_recon()
         return findings
@@ -143,6 +153,19 @@ class DataTrustEngine:
 
         # Idempotent deduplication & status merging against existing stored findings
         existing_findings_raw = self._load_from_disk()
+        
+        # Is newly evaluated run from live BC data?
+        is_live_run = any(f.get("data_source") == "LIVE_BUSINESS_CENTRAL" for f in newly_eval_findings) or (res.get("run_summary", {}).get("data_source") == "LIVE_BUSINESS_CENTRAL")
+
+        # In live runs, filter out legacy fixture/snapshot findings so fixture data never pollutes live production UI
+        if is_live_run:
+            existing_findings_raw = [
+                f for f in existing_findings_raw
+                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
+                and "FIXTURE" not in str(f.get("dedup_key", "")).upper()
+                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
+            ]
+
         existing_map = {f.get("dedup_key"): f for f in existing_findings_raw if f.get("dedup_key")}
 
         merged_findings: List[Dict[str, Any]] = []
@@ -183,6 +206,9 @@ class DataTrustEngine:
 
         for d_key, existing in existing_map.items():
             if not any(f.get("dedup_key") == d_key for f in merged_findings):
+                # When running live, reject any fixture findings
+                if is_live_run and existing.get("data_source") in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE"):
+                    continue
                 merged_findings.append(existing)
 
         self.save_stored_findings(merged_findings)
