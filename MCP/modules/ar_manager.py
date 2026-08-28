@@ -107,14 +107,7 @@ class ARManagerReport:
             
             balance = float(c["balance_due"])
             
-            # Ensure standard credit limit for CRONUS accounts if missing
-            credit_limit = float(c["credit_limit"])
-            if credit_limit <= 0:
-                if c_number == "30000": credit_limit = 20000.0
-                elif c_number == "50000": credit_limit = 10000.0
-                elif c_number == "40000": credit_limit = 5000.0
-                elif c_number == "20000": credit_limit = 3000.0
-                else: credit_limit = 10000.0
+            credit_limit = max(0.0, float(c.get("credit_limit", 0.0)))
             c["credit_limit"] = credit_limit
             
             # Excess Credit Exposure = max(0, balance - credit_limit)

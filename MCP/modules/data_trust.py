@@ -74,8 +74,9 @@ class DataTrustEngine:
         self.client_key = client_key or load_client_config().client_key
         self.config_mgr = DataTrustConfigManager(self.client_key)
 
-    def get_findings_file_path(self) -> Path:
-        p = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}.json"
+    def get_findings_file_path(self, company_id: Optional[str] = None) -> Path:
+        sanitized_comp = re.sub(r'[^a-zA-Z0-9_-]', '_', str(company_id)) if company_id else "default_company"
+        p = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}_{sanitized_comp}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
@@ -86,54 +87,71 @@ class DataTrustEngine:
         txs, _ = acquirer.acquire_transactions()
         return txs
 
-    def _load_from_disk(self) -> List[Dict[str, Any]]:
-        p = self.get_findings_file_path()
+    def _load_from_disk(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        p = self.get_findings_file_path(company_id=company_id)
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data.get("active_findings", []), data.get("_audit_history", [])
+                    elif isinstance(data, list):
+                        return data, []
             except Exception:
                 pass
-        return []
+        return [], []
 
-    def load_stored_findings(self) -> List[Dict[str, Any]]:
-        findings = self._load_from_disk()
+    def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        active_findings, _ = self._load_from_disk(company_id=company_id)
         # Only enforce live provenance isolation when an active live BC token is authenticated
         if self.client and self.client.get_access_token():
             live_findings = [
-                f for f in findings
+                f for f in active_findings
                 if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
             ]
             if not live_findings:
-                return self.run_recon()
+                return self.run_recon(company_id=company_id)
             return live_findings
-        if not findings:
-            return self.run_recon()
-        return findings
+        if not active_findings:
+            return self.run_recon(company_id=company_id)
+        return active_findings
 
-    def save_stored_findings(self, findings: List[Dict[str, Any]]) -> bool:
-        p = self.get_findings_file_path()
+    def save_stored_findings(
+        self,
+        findings: List[Dict[str, Any]],
+        company_id: Optional[str] = None,
+        audit_history: Optional[List[Dict[str, Any]]] = None
+    ) -> bool:
+        p = self.get_findings_file_path(company_id=company_id)
+        payload = {
+            "client_key": self.client_key,
+            "company_id": company_id or "default_company",
+            "data_source": "LIVE_BUSINESS_CENTRAL" if (self.client and self.client.get_access_token()) else "TEST_FIXTURE",
+            "last_reconciled_at": datetime.now().isoformat(),
+            "active_findings": findings,
+            "_audit_history": audit_history or []
+        }
         try:
             with open(p, "w", encoding="utf-8") as f:
-                json.dump(findings, f, indent=2)
+                json.dump(payload, f, indent=2)
             return True
         except Exception:
             return False
 
-    def update_finding_status(self, finding_id: str, new_status: str) -> bool:
+    def update_finding_status(self, finding_id: str, new_status: str, company_id: Optional[str] = None) -> bool:
         valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
         if new_status not in valid_statuses:
             return False
-        findings = self.load_stored_findings()
+        active_findings, audit_history = self._load_from_disk(company_id=company_id)
         updated = False
-        for f in findings:
+        for f in active_findings:
             if f.get("id") == finding_id:
                 f["status"] = new_status
                 f["last_evaluated_at"] = datetime.now().isoformat()
                 updated = True
                 break
         if updated:
-            self.save_stored_findings(findings)
+            self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history)
         return updated
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -147,69 +165,71 @@ class DataTrustEngine:
             return []
 
         newly_eval_findings = res.get("findings", [])
-        if sample_transactions is not None and not newly_eval_findings:
-            return []
+        resolved_company_id = res.get("run_summary", {}).get("company_id") or company_id or "default_company"
 
-        # Idempotent deduplication & status merging against existing stored findings
-        existing_findings_raw = self._load_from_disk()
-        
-        # Is newly evaluated run from live BC data?
-        is_live_run = any(f.get("data_source") == "LIVE_BUSINESS_CENTRAL" for f in newly_eval_findings) or (res.get("run_summary", {}).get("data_source") == "LIVE_BUSINESS_CENTRAL")
+        # Load existing company-scoped disk snapshot to preserve historical audit evaluations
+        existing_findings_raw, existing_audit_history = self._load_from_disk(company_id=resolved_company_id)
 
-        # In live runs, filter out legacy fixture findings exclusively by provenance
-        if is_live_run:
-            existing_findings_raw = [
-                f for f in existing_findings_raw
-                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
-            ]
-
-        existing_map = {f.get("dedup_key"): f for f in existing_findings_raw if f.get("dedup_key")}
-
-        merged_findings: List[Dict[str, Any]] = []
+        # Build current run audit record to append to non-destructive _audit_history
         now_iso = datetime.now().isoformat()
-        STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "INSUFFICIENT": 0}
+        audit_record = {
+            "run_id": res.get("run_summary", {}).get("run_id"),
+            "evaluated_at": now_iso,
+            "status": res.get("status"),
+            "data_source": res.get("run_summary", {}).get("data_source"),
+            "findings_count": len(newly_eval_findings),
+            "findings_ids": [f.get("id") for f in newly_eval_findings]
+        }
+        updated_audit_history = existing_audit_history + [audit_record]
 
-        for new_f in newly_eval_findings:
-            d_key = new_f.get("dedup_key")
-            if d_key in existing_map:
-                existing = existing_map[d_key]
-                old_strength = existing.get("evidence_strength", "INSUFFICIENT")
-                old_signals_cnt = existing.get("signals_fired_count", 0)
-                old_status = existing.get("status", "Open")
+        # In sample_transactions or fixture mode, perform idempotent deduplication & status merging
+        if sample_transactions is not None or self.client is None:
+            existing_map = {f.get("dedup_key"): f for f in existing_findings_raw if f.get("dedup_key")}
+            merged_findings: List[Dict[str, Any]] = []
+            STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "INSUFFICIENT": 0}
 
-                new_rank = STRENGTH_RANK.get(new_f.get("evidence_strength"), 0)
-                old_rank = STRENGTH_RANK.get(old_strength, 0)
+            for new_f in newly_eval_findings:
+                d_key = new_f.get("dedup_key")
+                if d_key in existing_map:
+                    existing = existing_map[d_key]
+                    old_strength = existing.get("evidence_strength", "INSUFFICIENT")
+                    old_signals_cnt = existing.get("signals_fired_count", 0)
+                    old_status = existing.get("status", "Open")
 
-                is_escalated = (new_rank > old_rank) or (new_f.get("signals_fired_count", 0) > old_signals_cnt)
+                    new_rank = STRENGTH_RANK.get(new_f.get("evidence_strength"), 0)
+                    old_rank = STRENGTH_RANK.get(old_strength, 0)
+                    is_escalated = (new_rank > old_rank) or (new_f.get("signals_fired_count", 0) > old_signals_cnt)
 
-                existing["last_evaluated_at"] = now_iso
-                existing["evidence_strength"] = new_f.get("evidence_strength")
-                existing["severity"] = new_f.get("severity")
-                existing["signals_fired_count"] = new_f.get("signals_fired_count")
-                existing["transaction_details"] = new_f.get("transaction_details")
-                existing["data_source"] = new_f.get("data_source")
+                    existing["last_evaluated_at"] = now_iso
+                    existing["evidence_strength"] = new_f.get("evidence_strength")
+                    existing["severity"] = new_f.get("severity")
+                    existing["signals_fired_count"] = new_f.get("signals_fired_count")
+                    existing["transaction_details"] = new_f.get("transaction_details")
+                    existing["data_source"] = new_f.get("data_source")
 
-                if is_escalated:
-                    escalation_note = f"⚡ Re-opened for Review: Evidence Strength escalated from {old_strength} ({old_signals_cnt} signals) to {new_f.get('evidence_strength')} ({new_f.get('signals_fired_count')} signals) on re-evaluation."
-                    existing["evidence_chain"] = [escalation_note] + new_f.get("evidence_chain", [])
-                    if old_status in ["False Positive", "Ignored", "Confirmed"]:
-                        existing["status"] = "Open"
+                    if is_escalated:
+                        escalation_note = f"⚡ Re-opened for Review: Evidence Strength escalated from {old_strength} ({old_signals_cnt} signals) to {new_f.get('evidence_strength')} ({new_f.get('signals_fired_count')} signals) on re-evaluation."
+                        existing["evidence_chain"] = [escalation_note] + new_f.get("evidence_chain", [])
+                        if old_status in ["False Positive", "Ignored", "Confirmed"]:
+                            existing["status"] = "Open"
+                    else:
+                        existing["evidence_chain"] = new_f.get("evidence_chain", [])
+
+                    merged_findings.append(existing)
                 else:
-                    existing["evidence_chain"] = new_f.get("evidence_chain", [])
+                    merged_findings.append(new_f)
 
-                merged_findings.append(existing)
-            else:
-                merged_findings.append(new_f)
+            for d_key, existing in existing_map.items():
+                if not any(f.get("dedup_key") == d_key for f in merged_findings):
+                    merged_findings.append(existing)
 
-        for d_key, existing in existing_map.items():
-            if not any(f.get("dedup_key") == d_key for f in merged_findings):
-                # When running live, reject any fixture findings
-                if is_live_run and existing.get("data_source") in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE"):
-                    continue
-                merged_findings.append(existing)
+            active_findings_to_save = merged_findings
+        else:
+            # On a live reconciliation run, replace active findings with current run findings (or [] for State 2 clean state)
+            active_findings_to_save = newly_eval_findings
 
-        self.save_stored_findings(merged_findings)
-        return merged_findings
+        self.save_stored_findings(active_findings_to_save, company_id=resolved_company_id, audit_history=updated_audit_history)
+        return active_findings_to_save
 
     def generate_synthetic_or_live_findings(self) -> List[Dict[str, Any]]:
         return self.run_recon()

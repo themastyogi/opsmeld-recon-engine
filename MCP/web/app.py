@@ -173,7 +173,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             report = ARManagerReport(client, rules)
             detail = report.get_procedure_detail(tier, customer_no=customer_no)
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(detail).encode("utf-8"))
+            self._write_response(json.dumps(detail).encode("utf-8"))
 
         elif path == "/api/ar-manager/control-tower":
             client_key = self._get_client_key(parsed_url)
@@ -183,7 +183,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             report = ARManagerReport(client, rules)
             ct_data = report.get_control_tower_data()
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(ct_data).encode("utf-8"))
+            self._write_response(json.dumps(ct_data).encode("utf-8"))
 
         elif path == "/api/ar-manager/collections":
             query_params = urllib.parse.parse_qs(parsed_url.query)
@@ -283,11 +283,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config)
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
-            self._set_headers("application/json")
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            status_code = res.get("http_status") or (403 if res.get("status") == "ACCESS_DENIED" else 200)
+            self._set_headers("application/json", status_code)
+            self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
+            company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
             classification = query_params.get("classification", [None])[0]
             evidence_strength = query_params.get("evidence_strength", [None])[0]
             rule_pack = query_params.get("rule_pack", [None])[0]
@@ -299,8 +301,21 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
+
+            # Anti-BOLA/IDOR Guard: Validate company authorization BEFORE loading snapshot or reading storage
+            if company_id and client and client.get_access_token():
+                mgr = CompanyAccessManager()
+                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+                if not is_auth and details.get("http_status") == 403:
+                    self._set_headers("application/json", 403)
+                    self._write_response(json.dumps({
+                        "error": "Forbidden: Company GUID unauthorized for current session",
+                        "status": "ACCESS_DENIED"
+                    }).encode("utf-8"))
+                    return
+
             engine = DataTrustEngine(client, client_key=client_key)
-            all_findings = engine.load_stored_findings()
+            all_findings = engine.load_stored_findings(company_id=company_id)
 
             filtered = []
             for f in all_findings:
@@ -336,18 +351,32 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/finding-detail":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             finding_id = query_params.get("id", [None])[0]
+            company_id = query_params.get("company_id", [None])[0]
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
+
+            # Anti-BOLA/IDOR Guard for finding-detail
+            if company_id and client and client.get_access_token():
+                mgr = CompanyAccessManager()
+                is_auth, st_name, details = mgr.validate_company_access(client, requested_company=company_id)
+                if not is_auth and details.get("http_status") == 403:
+                    self._set_headers("application/json", 403)
+                    self._write_response(json.dumps({
+                        "error": "Forbidden: Company GUID unauthorized for current session",
+                        "status": "ACCESS_DENIED"
+                    }).encode("utf-8"))
+                    return
+
             engine = DataTrustEngine(client, client_key=client_key)
-            all_findings = engine.load_stored_findings()
+            all_findings = engine.load_stored_findings(company_id=company_id)
             target = next((f for f in all_findings if f.get("id") == finding_id), None)
             if target:
                 self._set_headers("application/json")
-                self.wfile.write(json.dumps(target).encode("utf-8"))
+                self._write_response(json.dumps(target).encode("utf-8"))
             else:
                 self._set_headers("application/json", 404)
-                self.wfile.write(json.dumps({"error": f"Finding '{finding_id}' not found"}).encode("utf-8"))
+                self._write_response(json.dumps({"error": f"Finding '{finding_id}' not found"}).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
             session_info = self._require_auth()

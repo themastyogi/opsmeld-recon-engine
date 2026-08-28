@@ -245,9 +245,9 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
     """Tests DataTrustEngine execution, status workflow transitions, and persistence."""
 
     def setUp(self):
+        snap_dir = Path(__file__).resolve().parent.parent / "data" / "snapshots"
         for key in ["test_workflow_tenant", "test_dedup_tenant", "test_escalation_tenant"]:
-            p = Path(f"data/snapshots/data_trust_findings_{key}.json")
-            if p.exists():
+            for p in snap_dir.glob(f"data_trust_findings_{key}*.json"):
                 try:
                     p.unlink()
                 except Exception:

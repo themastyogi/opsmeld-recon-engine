@@ -300,6 +300,71 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             response_bytes = handler_auth.wfile.getvalue()
             self.assertIn(b'"run_id": "DT-20260826-POST"', response_bytes)
 
+    def test_unauthorized_company_guid_returns_http_403(self):
+        """BOLA/IDOR Security Guard: Requesting an unauthorized company GUID returns HTTP 403 Forbidden without reading storage."""
+        self.mock_client._execute_bc_rest.return_value = {
+            "value": [{"id": "GUID-COMP-A", "name": "COMPANY_A", "displayName": "Company A"}]
+        }
+        mgr = CompanyAccessManager()
+        is_auth, st_name, details = mgr.validate_company_access(self.mock_client, requested_company="UNAUTHORIZED-GUID-999")
+
+        self.assertFalse(is_auth)
+        self.assertEqual(st_name, DataTrustState.ACCESS_DENIED)
+        self.assertEqual(details["http_status"], 403)
+
+    def test_company_a_and_company_b_snapshot_isolation(self):
+        """Multi-Company Storage Isolation: Company A snapshot findings are isolated from Company B."""
+        from modules.data_trust import DataTrustEngine
+        engine = DataTrustEngine(client_key="TEST_ISOLATION_CLIENT")
+
+        # Save Company A findings
+        comp_a_finding = [{"id": "F-COMP-A", "data_source": "LIVE_BUSINESS_CENTRAL"}]
+        engine.save_stored_findings(comp_a_finding, company_id="GUID-COMP-A")
+
+        # Save Company B findings
+        comp_b_finding = [{"id": "F-COMP-B", "data_source": "LIVE_BUSINESS_CENTRAL"}]
+        engine.save_stored_findings(comp_b_finding, company_id="GUID-COMP-B")
+
+        # Load stored findings for Company A
+        loaded_a, _ = engine._load_from_disk(company_id="GUID-COMP-A")
+        loaded_b, _ = engine._load_from_disk(company_id="GUID-COMP-B")
+
+        self.assertEqual(len(loaded_a), 1)
+        self.assertEqual(loaded_a[0]["id"], "F-COMP-A")
+        self.assertEqual(len(loaded_b), 1)
+        self.assertEqual(loaded_b[0]["id"], "F-COMP-B")
+
+    def test_bc_connected_empty_data_replaces_active_findings_preserves_audit_history(self):
+        """State 2 Non-Destructive Storage: BC connected with 0 data replaces active findings with [] while preserving _audit_history."""
+        from modules.data_trust import DataTrustEngine
+        engine = DataTrustEngine(client_key="TEST_STATE2_AUDIT")
+
+        # Save initial historical evaluation
+        initial_finding = [{"id": "F-HIST-001", "data_source": "LIVE_BUSINESS_CENTRAL"}]
+        initial_history = [{"run_id": "RUN-001", "findings_count": 1}]
+        engine.save_stored_findings(initial_finding, company_id="GUID-STATE2", audit_history=initial_history)
+
+        # Execute live recon mock returning State 2 (0 findings)
+        mock_orch_res = {
+            "status": "SUCCESS",
+            "findings": [],
+            "run_summary": {"run_id": "RUN-002", "data_source": "LIVE_BUSINESS_CENTRAL", "company_id": "GUID-STATE2"}
+        }
+
+        from unittest.mock import patch
+        with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon", return_value=mock_orch_res):
+            active_after_run = engine.run_recon(company_id="GUID-STATE2")
+
+        # Assert active findings is cleanly 0
+        self.assertEqual(len(active_after_run), 0)
+
+        # Assert historical evaluations remain preserved in _audit_history
+        _, audit_history = engine._load_from_disk(company_id="GUID-STATE2")
+        self.assertEqual(len(audit_history), 2)
+        self.assertEqual(audit_history[0]["run_id"], "RUN-001")
+        self.assertEqual(audit_history[1]["run_id"], "RUN-002")
+
 
 if __name__ == "__main__":
     unittest.main()
+
