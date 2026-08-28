@@ -404,7 +404,7 @@ class DataAcquirer:
             "posting_date": "2026-08-25",
             "document_date": "2026-08-25",
             "valuation_date": "2026-08-25",
-            "document_no": "PINV-9999",
+            "document_no": "DOC-TEST-INV-1099",
             "document_type": "Purchase Invoice",
             "entry_type": "Purchase",
             "quantity": 10.0,

@@ -77,6 +77,13 @@ class DataTrustEngine:
     def get_findings_file_path(self, company_id: Optional[str] = None) -> Path:
         sanitized_comp = re.sub(r'[^a-zA-Z0-9_-]', '_', str(company_id)) if company_id else "default_company"
         p = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}_{sanitized_comp}.json"
+        if not p.exists() and not company_id:
+            p_fixture = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}_FIXTURE_COMPANY.json"
+            if p_fixture.exists():
+                return p_fixture
+            p_legacy = BASE_DIR / "data" / "snapshots" / f"data_trust_findings_{self.client_key}.json"
+            if p_legacy.exists():
+                return p_legacy
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
@@ -103,7 +110,7 @@ class DataTrustEngine:
 
     def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         active_findings, _ = self._load_from_disk(company_id=company_id)
-        # Only enforce live provenance isolation when an active live BC token is authenticated
+        # Live Production Mode: When authenticated to live BC, strictly purge all fixture/snapshot findings
         if self.client and self.client.get_access_token():
             live_findings = [
                 f for f in active_findings
@@ -112,6 +119,8 @@ class DataTrustEngine:
             if not live_findings:
                 return self.run_recon(company_id=company_id)
             return live_findings
+
+        # In offline/unauthenticated test mode, return active_findings (or trigger run_recon if empty)
         if not active_findings:
             return self.run_recon(company_id=company_id)
         return active_findings

@@ -315,7 +315,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     return
 
             engine = DataTrustEngine(client, client_key=client_key)
-            all_findings = engine.load_stored_findings(company_id=company_id)
+            raw_findings = engine.load_stored_findings(company_id=company_id)
+            all_findings = [
+                f for f in raw_findings
+                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
+                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
+            ]
 
             filtered = []
             for f in all_findings:
