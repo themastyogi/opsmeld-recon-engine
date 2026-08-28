@@ -865,7 +865,117 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertIsNotNone(finding_a)
         self.assertTrue(any(s["signal_code"] == "C1" and s["fired"] for s in finding_a.signals))
 
+    def test_end_to_end_scenario_a_and_b_numeric_assertions(self):
+        """
+        Asserts complete numeric output for Scenario A (Vendor spike + stable peers) and Scenario B (Vendor spike + broad market shift).
+        Asserts: baseline -> deviation -> peer shift -> attenuation -> classification -> evidence strength.
+        """
+        cfg = self.config_mgr._default_config()
+
+        # Target Transaction: Vendor 1, Item X, Cost = 145.0
+        tx_target = {
+            "id": "TX-SCENARIO", "company_id": "COMP_SCENARIO", "tenant_id": "TEN_SCENARIO",
+            "item_no": "ITEM-X", "vendor_no": "VEND-1", "location_code": "LOC-A", "variant_code": "VAR-1",
+            "cost_per_unit": 145.0, "cost_amount_actual": 145.0, "quantity": 1.0,
+            "posting_date": "2026-08-25", "currency_code": "INR"
+        }
+
+        # Target Vendor Baseline: 20 qualifying historical observations at 100.0
+        vendor_history = [
+            {
+                "id": f"H-V1-{i}", "company_id": "COMP_SCENARIO", "tenant_id": "TEN_SCENARIO",
+                "item_no": "ITEM-X", "vendor_no": "VEND-1", "location_code": "LOC-A", "variant_code": "VAR-1",
+                "cost_per_unit": 100.0, "cost_amount_actual": 100.0, "quantity": 1.0,
+                "posting_date": f"2026-01-{i:02d}", "currency_code": "INR"
+            }
+            for i in range(1, 21)
+        ]
+
+        # Scenario A Peers: 20 historical observations at 100.0 + 5 recent observations at 100.0 (Peer shift = 0.0%)
+        peers_hist_a = [
+            {
+                "id": f"P-HIST-A-{i}", "company_id": "COMP_SCENARIO", "tenant_id": "TEN_SCENARIO",
+                "item_no": "ITEM-X", "vendor_no": "VEND-PEER", "location_code": "LOC-A", "variant_code": "VAR-1",
+                "cost_per_unit": 100.0, "cost_amount_actual": 100.0, "quantity": 1.0,
+                "posting_date": f"2026-01-{i:02d}", "currency_code": "INR"
+            }
+            for i in range(1, 21)
+        ]
+        peers_rec_a = [
+            {
+                "id": "P-REC-A-1", "company_id": "COMP_SCENARIO", "tenant_id": "TEN_SCENARIO",
+                "item_no": "ITEM-X", "vendor_no": "VEND-PEER", "location_code": "LOC-A", "variant_code": "VAR-1",
+                "cost_per_unit": 100.0, "cost_amount_actual": 100.0, "quantity": 1.0,
+                "posting_date": f"2026-08-{d:02d}", "currency_code": "INR"
+            }
+            for d in [10, 12, 14, 16, 18]
+        ]
+        history_a = vendor_history + peers_hist_a + peers_rec_a
+
+        # ---------------------------------------------------------------------
+        # Scenario A Assertions: Stable Peers -> UNATTENUATED, HIGH Evidence Strength
+        # ---------------------------------------------------------------------
+        res_a = self.resolver.resolve_baseline(tx_target, history_a, cfg)
+        self.assertEqual(res_a["primary"]["level"], "VENDOR_ITEM")
+        self.assertEqual(res_a["primary"]["median"], 100.0)
+        self.assertEqual(res_a["peer"]["historical_peer_median"], 100.0)
+        self.assertEqual(res_a["peer"]["recent_peer_median"], 100.0)
+        self.assertEqual(res_a["peer"]["peer_shift_percent"], 0.0)
+        self.assertEqual(res_a["peer"]["peer_attenuation_status"], "UNATTENUATED")
+
+        finding_a = self.rule.evaluate_candidate(tx_target, history_a, cfg)
+        self.assertIsNotNone(finding_a)
+
+        # Signal & Deviation Assertions
+        c1_signal_a = next(s for s in finding_a.signals if s["signal_code"] == "C1")
+        self.assertTrue(c1_signal_a["fired"])
+        dev_pct_a = ((145.0 - 100.0) / 100.0) * 100.0
+        self.assertEqual(dev_pct_a, 45.0)
+
+        # Attenuation, Classification & Evidence Strength Assertions
+        self.assertEqual(finding_a.classification, "Potential Data Error")
+        self.assertEqual(finding_a.evidence_strength, "HIGH")
+        self.assertFalse(any("[Peer Attenuation]" in e for e in finding_a.evidence_chain))
+
+        # ---------------------------------------------------------------------
+        # Scenario B Peers: 20 historical observations at 100.0 + 5 recent observations at 125.0 (Peer shift = +25.0%)
+        # ---------------------------------------------------------------------
+        peers_rec_b = [
+            {
+                "id": f"P-REC-B-{d}", "company_id": "COMP_SCENARIO", "tenant_id": "TEN_SCENARIO",
+                "item_no": "ITEM-X", "vendor_no": "VEND-PEER", "location_code": "LOC-A", "variant_code": "VAR-1",
+                "cost_per_unit": 125.0, "cost_amount_actual": 125.0, "quantity": 1.0,
+                "posting_date": f"2026-08-{d:02d}", "currency_code": "INR"
+            }
+            for d in [10, 12, 14, 16, 18]
+        ]
+        history_b = vendor_history + peers_hist_a + peers_rec_b
+
+        # ---------------------------------------------------------------------
+        # Scenario B Assertions: Broad Market Movement -> ATTENUATED, MEDIUM Evidence Strength
+        # ---------------------------------------------------------------------
+        res_b = self.resolver.resolve_baseline(tx_target, history_b, cfg)
+        self.assertEqual(res_b["primary"]["level"], "VENDOR_ITEM")
+        self.assertEqual(res_b["primary"]["median"], 100.0)
+        self.assertEqual(res_b["peer"]["historical_peer_median"], 100.0)
+        self.assertEqual(res_b["peer"]["recent_peer_median"], 125.0)
+        self.assertEqual(res_b["peer"]["peer_shift_percent"], 25.0)
+        self.assertEqual(res_b["peer"]["peer_attenuation_status"], "ATTENUATED")
+
+        finding_b = self.rule.evaluate_candidate(tx_target, history_b, cfg)
+        self.assertIsNotNone(finding_b)
+
+        # Signal Assertions
+        c1_signal_b = next(s for s in finding_b.signals if s["signal_code"] == "C1")
+        self.assertTrue(c1_signal_b["fired"])
+
+        # Attenuation, Classification & Evidence Strength Assertions
+        self.assertEqual(finding_b.classification, "Potential Data Error")
+        self.assertEqual(finding_b.evidence_strength, "MEDIUM")  # Attenuated from HIGH to MEDIUM due to broad peer market shift (+25%)
+        self.assertTrue(any("[Peer Attenuation]" in e for e in finding_b.evidence_chain))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
