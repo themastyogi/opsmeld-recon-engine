@@ -75,7 +75,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         session_info = auth_mgr.get_session_info(token)
         if not session_info:
             self._set_headers("application/json", 401)
-            self.wfile.write(json.dumps({"error": "Unauthorized: Active session token required"}).encode("utf-8"))
+            self._write_response(json.dumps({"error": "Unauthorized: Active session token required"}).encode("utf-8"))
             return None
         return session_info
 
@@ -102,7 +102,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 html = render_dashboard_html(config.name, {})
             
             self._set_headers()
-            self.wfile.write(html.encode("utf-8"))
+            self._write_response(html.encode("utf-8"))
 
         elif path == "/settings":
             client_key = self._get_client_key(parsed_url)
@@ -117,7 +117,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }
             html = render_settings_html(client_dict, rules.raw_rules)
             self._set_headers()
-            self.wfile.write(html.encode("utf-8"))
+            self._write_response(html.encode("utf-8"))
 
         elif path == "/reports/ar-manager":
             client_key = self._get_client_key(parsed_url)
@@ -131,7 +131,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             tiered = [report.tier_customer(c) for c in customers]
             html = report.render_html(tiered, config.name, error_msg=error_msg)
             self._set_headers()
-            self.wfile.write(html.encode("utf-8"))
+            self._write_response(html.encode("utf-8"))
 
         elif path == "/api/ar-manager/data":
             client_key = self._get_client_key(parsed_url)
@@ -203,13 +203,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             report = ARManagerReport(client, rules)
             collections_data = report.get_collections_workload_page(page=page, page_size=page_size)
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(collections_data).encode("utf-8"))
+            self._write_response(json.dumps(collections_data).encode("utf-8"))
 
         elif path == "/api/debug/bc":
             import os
             if os.environ.get("ALLOW_DEBUG_ENDPOINT", "").lower() != "true":
                 self._set_headers("application/json", 403)
-                self.wfile.write(json.dumps({"error": "Forbidden: Debug endpoint disabled on client preview instance."}).encode("utf-8"))
+                self._write_response(json.dumps({"error": "Forbidden: Debug endpoint disabled on client preview instance."}).encode("utf-8"))
                 return
 
             client_key = self._get_client_key(parsed_url)
@@ -229,7 +229,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "customers_response": custs
             }
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(debug_info).encode("utf-8"))
+            self._write_response(json.dumps(debug_info).encode("utf-8"))
 
         elif path == "/api/auth/login":
             client_key = self._get_client_key(parsed_url)
@@ -238,12 +238,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             flow = client.start_device_flow()
             CURRENT_DEVICE_FLOW = flow
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(flow).encode("utf-8"))
+            self._write_response(json.dumps(flow).encode("utf-8"))
 
         elif path == "/api/auth/poll":
             if not CURRENT_DEVICE_FLOW:
                 self._set_headers("application/json")
-                self.wfile.write(json.dumps({"status": "error", "message": "No active device flow"}).encode("utf-8"))
+                self._write_response(json.dumps({"status": "error", "message": "No active device flow"}).encode("utf-8"))
             else:
                 client_key = self._get_client_key(parsed_url)
                 config = load_client_config(client_key)
@@ -252,12 +252,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 if result and result.get("status") == "success":
                     CURRENT_DEVICE_FLOW = None
                 self._set_headers("application/json")
-                self.wfile.write(json.dumps(result).encode("utf-8"))
+                self._write_response(json.dumps(result).encode("utf-8"))
 
         elif path == "/api/auth/session_status":
             is_auth = self._is_authenticated()
             self._set_headers("application/json")
-            self.wfile.write(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
+            self._write_response(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
 
         # Route-level security boundary: _require_auth() enforced before company discovery or orchestrator creation
         elif path == "/api/data-trust/authorized-companies":
@@ -270,7 +270,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             mgr = CompanyAccessManager()
             discovered = mgr.get_discovered_companies(client)
             self._set_headers("application/json")
-            self.wfile.write(json.dumps({"companies": discovered}).encode("utf-8"))
+            self._write_response(json.dumps({"companies": discovered}).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
             session_info = self._require_auth()
@@ -392,7 +392,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             cfg_mgr = DataTrustConfigManager(config.client_key)
             dt_config = cfg_mgr.load_config()
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(dt_config).encode("utf-8"))
+            self._write_response(json.dumps(dt_config).encode("utf-8"))
 
         elif path == "/api/data-trust/config-history":
             client_key = self._get_client_key(parsed_url)
@@ -400,7 +400,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             cfg_mgr = DataTrustConfigManager(config.client_key)
             history = cfg_mgr.load_audit_trail()
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(history).encode("utf-8"))
+            self._write_response(json.dumps(history).encode("utf-8"))
 
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
@@ -422,11 +422,11 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if token:
                 res = {"status": "success", "token": token, "username": username}
                 self._set_headers("application/json", 200, cookie=token)
-                self.wfile.write(json.dumps(res).encode("utf-8"))
+                self._write_response(json.dumps(res).encode("utf-8"))
             else:
                 res = {"error": "Invalid credentials. Please check your provisioned email and password."}
                 self._set_headers("application/json", 401)
-                self.wfile.write(json.dumps(res).encode("utf-8"))
+                self._write_response(json.dumps(res).encode("utf-8"))
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
@@ -475,7 +475,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }
             html = render_settings_html(client_dict, rules.raw_rules, message="Configuration saved successfully!")
             self._set_headers()
-            self.wfile.write(html.encode("utf-8"))
+            self._write_response(html.encode("utf-8"))
 
         elif path == "/api/ar-manager/stage-fix":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -499,7 +499,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             html = html.replace("<h1>", notice_html + "<h1>")
 
             self._set_headers()
-            self.wfile.write(html.encode("utf-8"))
+            self._write_response(html.encode("utf-8"))
 
         elif path == "/api/data-trust/update-status":
             session_info = self._require_auth()
@@ -527,7 +527,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             else:
                 res = {"status": "error", "message": f"Could not update status for finding '{finding_id}'"}
                 self._set_headers("application/json", 400)
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
             session_info = self._require_auth()
@@ -556,7 +556,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             else:
                 res = {"status": "error", "message": "Failed to save Data Trust configuration", "errors": errors}
                 self._set_headers("application/json", 400)
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
             session_info = self._require_auth()
@@ -581,7 +581,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
             self._set_headers("application/json")
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self._write_response(json.dumps(res).encode("utf-8"))
 
         else:
             self._set_headers("text/plain", 400)
