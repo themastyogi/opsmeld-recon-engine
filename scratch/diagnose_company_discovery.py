@@ -100,7 +100,7 @@ def run_diagnostic():
     for c in companies:
         comp_id = c.get("id")
         comp_name = c.get("name")
-        probe = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?=1")
+        probe = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=1")
         if isinstance(probe, dict) and (probe.get("is_error") or "error" in probe):
             status = probe.get("http_status", "?")
             err = probe.get("error", "Unknown error")
