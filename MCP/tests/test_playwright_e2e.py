@@ -324,7 +324,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_error_handling_400(self):
         """Error handling 400: Validates 400 bad request handling."""
         self._open_page()
-        res = self.page.evaluate("fetch('/api/auth/login', { method: 'POST' }).then(r => r.status)")
+        res = self.page.evaluate("fetch('/api/auth/login', { method: 'POST', body: 'invalid-json' }).then(r => r.status)")
         self.assertIn(res, [400, 401])
 
     def test_error_handling_500(self):

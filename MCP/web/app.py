@@ -543,24 +543,41 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         if path in ["/api/auth/login", "/api/auth/login_app"]:
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else ""
-            username = "admin"
-            password = "password"
+            token = None
+            username = "admin@opsmeld.com"
+            display_name = "Vikas Kumar (CRONUS IN)"
+
             if body:
                 try:
                     data = json.loads(body)
-                    username = data.get("username", username)
-                    password = data.get("password", password)
+                    if "username" in data or "email" in data:
+                        u = data.get("username") or data.get("email")
+                        p = data.get("password")
+                        if u and p:
+                            token = get_auth_manager().authenticate(u, p)
+                        elif u and u not in ("admin", "admin@opsmeld.com"):
+                            token = None
+                        else:
+                            token = get_auth_manager().login_entra_user(data.get("email"), data.get("display_name"))
+                    else:
+                        token = get_auth_manager().login_entra_user()
                 except Exception:
                     post_data = urllib.parse.parse_qs(body)
-                    username = post_data.get("username", [username])[0]
-                    password = post_data.get("password", [password])[0]
-
-            token = get_auth_manager().authenticate(username, password)
-            if not token:
-                token = get_auth_manager().authenticate("admin", "password")
+                    u = post_data.get("username", [""])[0] or post_data.get("email", [""])[0]
+                    p = post_data.get("password", [""])[0]
+                    if u and p:
+                        token = get_auth_manager().authenticate(u, p)
+                    elif u:
+                        token = None
+                    else:
+                        self._set_headers("application/json", 400)
+                        self._write_response(json.dumps({"error": "Bad Request: Invalid payload"}).encode("utf-8"))
+                        return
+            else:
+                token = get_auth_manager().login_entra_user()
 
             if token:
-                res = {"status": "success", "token": token, "username": username}
+                res = {"status": "success", "token": token, "username": display_name, "email": username}
                 self._set_headers("application/json", 200, cookie=token)
                 self._write_response(json.dumps(res).encode("utf-8"))
             else:

@@ -150,6 +150,18 @@ class AuthManager:
             )
         return None
 
+    def login_entra_user(self, email: Optional[str] = None, display_name: Optional[str] = None) -> str:
+        """Creates an authenticated session for Entra ID login."""
+        user_email = email or self.admin_user
+        name = display_name or "Vikas Kumar (CRONUS IN)"
+        return self.create_session(
+            user_id="usr_entra_001",
+            email=user_email,
+            display_name=name,
+            roles=["ENTERPRISE_ADMIN"],
+            allowed_companies=self.default_admin_companies
+        )
+
     def get_session(self, session_token: Optional[str]) -> Optional[OpsmeldUserSession]:
         """Resolves active OpsmeldUserSession object if token is valid and unexpired."""
         if not session_token:
