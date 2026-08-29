@@ -1497,13 +1497,26 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        switchMainView('control-tower');
-        loadLiveCustomerData();
+        fetch('/api/auth/me', { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+                if (!window.userSelectedView) {
+                    if (data.authenticated) {
+                        switchMainView('control-tower');
+                    } else {
+                        switchMainView('public');
+                    }
+                }
+            })
+            .catch(() => {
+                if (!window.userSelectedView) switchMainView('public');
+            });
     });
 
     let currentInspectedFindingId = null;
 
     function switchMainView(viewName) {
+        window.userSelectedView = viewName;
         const publicLanding = document.getElementById('view-public-landing');
         const signinWall = document.getElementById('view-signin-wall');
         const authDenied = document.getElementById('view-auth-denied');
