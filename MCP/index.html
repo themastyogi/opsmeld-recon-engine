@@ -306,153 +306,224 @@
     </style>
 </head>
 <body>
-    <div class="top-header">
-        <div style="display: flex; align-items: center; gap: 24px;">
-            <div style="font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; cursor: pointer;" onclick="switchMainView('portal-landing')">🟢 opsmeld</div>
-            <div class="top-nav">
-                <a id="nav-top-portal" class="top-nav-item active" onclick="switchMainView('portal-landing')">🏠 Portal Home</a>
-                <a id="nav-top-ar" class="top-nav-item" onclick="switchMainView('control-tower')">🎯 AR Control Tower</a>
-                <a id="nav-top-dt" class="top-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</a>
+    <!-- 1. PUBLIC OPSMELD SAAS LANDING VIEW (No left sidebar, no application controls) -->
+    <div id="view-public-landing" style="display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F172A; min-height: 100vh; color: #F8FAFC;">
+        <!-- Top SaaS Header -->
+        <div style="max-width: 1200px; margin: 0 auto; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; align-items: center; gap: 12px; font-weight: 900; font-size: 1.4rem; letter-spacing: -0.03em; color: white; cursor: pointer;" onclick="switchMainView('public')">
+                🟢 opsmeld
             </div>
-        </div>
-        <div class="top-user">
-            <span>🔍 Search</span>
-            <span>🔔</span>
-            <span>🌐</span>
-            <span>👤 Vikas Kumar (<span id="user-company-label">CRONUS IN</span>)</span>
-            <button id="auth-toggle-btn" onclick="performAppLogout()" style="background:#EF4444; color:white; border:none; padding:5px 12px; border-radius:4px; font-weight:700; font-size:0.78rem; cursor:pointer; margin-left:8px;" title="Click to Sign Out and return to Sign In wall">Sign Out 🚪</button>
-        </div>
-    </div>
-
-    <div class="sub-header">
-        <div class="sub-nav">
-            <div id="nav-item-control-tower" class="sub-nav-item active" onclick="switchMainView('control-tower')">Control Tower</div>
-            <div id="nav-item-collections" class="sub-nav-item" onclick="switchMainView('collections')">Collections Workload</div>
-            <div id="nav-item-segments" class="sub-nav-item" onclick="switchMainView('segments')">Segments / Procedures</div>
-            <div id="nav-item-data-trust" class="sub-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</div>
-            <div class="sub-nav-item">Reports</div>
-            <div class="sub-nav-item">Worksheet</div>
-            <div class="sub-nav-item">Accounts</div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="search-box">
-                🔍 <input type="text" placeholder="Search accounts...">
+            <div style="display: flex; gap: 32px; font-size: 0.95rem; font-weight: 500; color: #94A3B8;">
+                <a style="color: white; text-decoration: none; cursor: pointer;" onclick="switchMainView('public')">Platform</a>
+                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Solutions</a>
+                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">About</a>
+                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Contact</a>
             </div>
-            <button class="btn-btn" onclick="loadLiveCustomerData()">🔄 Refresh BC Data</button>
-        </div>
-    </div>
-
-    <div class="app-body">
-        <div class="sidebar">
-            <div class="sidebar-section">
-                <div class="sidebar-title">🛡️ Data Trust Engine</div>
-                <div id="sidebar-item-data-trust" class="sidebar-item" onclick="switchMainView('data-trust')">Findings Explorer</div>
-                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Posting-Date Rules</div>
-                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Subledger Controls</div>
-                <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Narration Taxonomy</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚙️ Overview</div>
-                <div class="sidebar-item active" onclick="switchMainView('control-tower')">Control Tower</div>
-                <div id="sidebar-item-collections" class="sidebar-item" onclick="switchMainView('collections')">Collections Workload (20/page)</div>
-                <div class="sidebar-item" onclick="switchMainView('segments')">Segments & Procedures</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚙️ Main Settings</div>
-                <div class="sidebar-item" onclick="openTenantModal()">Company Details</div>
-                <div class="sidebar-item">Users</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">📋 Templates</div>
-                <div class="sidebar-item">Reminder templates</div>
-                <div class="sidebar-item">Payment plan reminders</div>
-                <div class="sidebar-item">Account statement templates</div>
-                <div class="sidebar-item">Branding library</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚙️ Worksheet</div>
-                <div class="sidebar-item">Codes: dispute codes</div>
-                <div class="sidebar-item">Codes: status codes</div>
-                <div class="sidebar-item">Portfolios</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚙️ Personalizations</div>
-                <div class="sidebar-item">Document archive configuration</div>
-                <div class="sidebar-item">Payment center configuration</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚙️ Exports/API</div>
-                <div class="sidebar-item">API tokens</div>
-                <div class="sidebar-item">Account exports</div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button class="btn-btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.2); padding: 8px 18px; font-size: 0.88rem; font-weight: 600;" onclick="switchMainView('signin')">Sign In</button>
+                <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 8px 18px; font-size: 0.88rem; font-weight: 700;" onclick="switchMainView('control-tower')">Launch Platform ➔</button>
             </div>
         </div>
 
-        <div class="main-content">
-            <div id="notice-container"></div>
+        <!-- Hero Section -->
+        <div style="max-width: 900px; margin: 60px auto 40px auto; text-align: center; padding: 0 24px;">
+            <div style="display: inline-block; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34D399; font-size: 0.8rem; font-weight: 800; padding: 6px 16px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px;">
+                🟢 Opsmeld Financial Intelligence Platform
+            </div>
+            <h1 style="font-size: 3rem; font-weight: 900; line-height: 1.15; color: white; margin: 0 0 20px 0; letter-spacing: -0.03em;">
+                Financial Intelligence for Microsoft Business Central
+            </h1>
+            <p style="font-size: 1.15rem; color: #94A3B8; line-height: 1.6; margin: 0 0 32px 0;">
+                Turn your Business Central financial data into continuous control, subledger reconciliation, risk mitigation, and automated action.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 16px;">
+                <button class="btn-btn" style="background: #2563EB; color: white; border: none; padding: 12px 28px; font-size: 0.95rem; font-weight: 700; border-radius: 8px;" onclick="switchMainView('control-tower')">Explore Platform Modules ➔</button>
+                <button class="btn-btn" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 12px 28px; font-size: 0.95rem; font-weight: 600; border-radius: 8px;" onclick="switchMainView('signin')">Sign In with Microsoft 🔑</button>
+            </div>
+        </div>
 
-            <!-- OPSMELD UNIFIED APPLICATION PORTAL LANDING VIEW -->
-            <div id="view-portal-landing" style="display: block;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 28px; border-radius: 12px; color: white;">
+        <!-- Product Applications Cards Grid -->
+        <div style="max-width: 1100px; margin: 40px auto 80px auto; padding: 0 24px;">
+            <div style="text-align: center; font-size: 0.85rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px;">
+                The Opsmeld Platform Applications
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;">
+                <!-- Card 1: AR Control Tower -->
+                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #10B981; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">🟢 Opsmeld Unified Portal</div>
-                        <h2 style="font-size: 1.8rem; font-weight: 800; margin: 0; color: white;">Welcome to Opsmeld</h2>
-                        <div style="font-size: 0.9rem; color: #94A3B8; margin-top: 6px;">Enterprise Financial Intelligence & Reconciliation Platform • Authenticated Session Active</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div style="font-size: 2.2rem;">🎯</div>
+                            <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
+                        </div>
+                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">AR Control Tower</h3>
+                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
+                            Receivables workload management, customer risk tiering, collection procedure workflows, and draft General Journal voucher staging.
+                        </p>
                     </div>
-                    <div style="text-align: right;">
-                        <span id="portal-user-badge" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #F8FAFC;">
-                            👤 Platform Admin (ENTERPRISE_ADMIN)
-                        </span>
-                    </div>
+                    <button id="btn-ar_control_tower" class="btn-btn" style="background: #059669; color: white; width: 100%; font-weight: 700; padding: 12px;" onclick="switchMainView('control-tower')">Launch AR Control Tower ➔</button>
                 </div>
 
-                <div style="font-weight: 700; font-size: 1.1rem; color: #1E293B; margin-bottom: 16px;">
-                    Enterprise Applications & Modules
+                <!-- Card 2: Data Trust Expert -->
+                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div style="font-size: 2.2rem;">🛡️</div>
+                            <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
+                        </div>
+                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Data Trust Expert</h3>
+                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
+                            Continuous Business Central transaction audit, posting-date policy enforcement, subledger bypass detection & narration mismatch interpretation.
+                        </p>
+                    </div>
+                    <button id="btn-data_trust" class="btn-btn" style="background: #2563EB; color: white; width: 100%; font-weight: 700; padding: 12px;" onclick="switchMainView('data-trust')">Launch Data Trust Expert ➔</button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px;" id="portal-modules-grid">
-                    <!-- Module Card 1: AR Control Tower -->
-                    <div id="card-ar_control_tower" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <div style="font-size: 2rem;">🎯</div>
-                                <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
-                            </div>
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">AR Control Tower</h3>
-                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Receivables workload management, customer risk tiering, collection procedure workflows, and draft General Journal voucher staging.</p>
+                <!-- Card 3: Financial Compliance (Layer 3) -->
+                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; opacity: 0.8;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div style="font-size: 2.2rem;">🔮</div>
+                            <span id="badge-layer_3" style="background: #F3E8FF; color: #6B21A8; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">⚡ COMING SOON</span>
                         </div>
-                        <button id="btn-ar_control_tower" class="btn-btn" style="background: #059669; width: 100%; font-weight: 700; padding: 10px; cursor: pointer;" onclick="switchMainView('control-tower')">Launch AR Control Tower ➔</button>
+                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Financial Compliance</h3>
+                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
+                            Posting-date compliance rules, subledger controls, GAAP narration taxonomy interpretation, and automated regulatory reporting.
+                        </p>
                     </div>
-
-                    <!-- Module Card 2: Data Trust Expert -->
-                    <div id="card-data_trust" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <div style="font-size: 2rem;">🛡️</div>
-                                <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
-                            </div>
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Data Trust Expert</h3>
-                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Continuous Business Central transaction audit, posting-date policy enforcement, subledger bypass detection & narration mismatch interpretation.</p>
-                        </div>
-                        <button id="btn-data_trust" class="btn-btn" style="background: #2563EB; width: 100%; font-weight: 700; padding: 10px; cursor: pointer;" onclick="switchMainView('data-trust')">Launch Data Trust Expert ➔</button>
-                    </div>
-
-                    <!-- Module Card 3: Layer 3 Financial Compliance (Extensible Preview) -->
-                    <div id="card-layer_3" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between; opacity: 0.85;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <div style="font-size: 2rem;">🔮</div>
-                                <span id="badge-layer_3" style="background: #F3E8FF; color: #6B21A8; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">⚡ EXTENSIBLE LAYER</span>
-                            </div>
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Financial Compliance</h3>
-                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Posting-date compliance rules, subledger controls, GAAP narration taxonomy interpretation, and automated regulatory reporting.</p>
-                        </div>
-                        <button id="btn-layer_3" class="btn-btn" style="background: #64748B; width: 100%; font-weight: 700; padding: 10px; cursor: not-allowed;" disabled>Extensible Registry Layer</button>
-                    </div>
+                    <button id="btn-layer_3" class="btn-btn" style="background: #475569; color: #CBD5E1; width: 100%; font-weight: 700; padding: 12px; cursor: not-allowed;" disabled>Request Access 🔒</button>
                 </div>
             </div>
 
-            <!-- CONTROL TOWER VIEW (PRIMARY EXECUTIVE DASHBOARD) -->
-            <div id="view-control-tower" style="display: none;">
+            <div style="text-align: center; font-size: 0.82rem; color: #64748B; margin-top: 40px;">
+                One identity. One platform. Multiple financial intelligence layers.
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. COMMON STANDALONE SIGN-IN WALL VIEW -->
+    <div id="view-signin-wall" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
+        <div style="background: #1E293B; border: 1px solid #334155; border-radius: 16px; padding: 40px; width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+            <div style="font-size: 1.8rem; font-weight: 900; color: white; margin-bottom: 8px;">🟢 opsmeld</div>
+            <h2 style="font-size: 1.3rem; font-weight: 800; color: white; margin: 0 0 8px 0;">Sign In to Opsmeld Platform</h2>
+            <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 28px 0;">
+                Authenticate with your Microsoft Entra ID / Business Central account to access your authorized financial intelligence applications.
+            </p>
+            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 16px;" onclick="openAppLoginModal()">
+                🔑 Continue with Microsoft Entra ID
+            </button>
+            <div style="font-size: 0.78rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
+                ← Back to Opsmeld Platform
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. AUTHORIZATION FAILURE (HTTP 403 ACCESS DENIED) SCREEN -->
+    <div id="view-auth-denied" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
+        <div style="background: #1E293B; border: 1px solid #EF4444; border-radius: 16px; padding: 40px; width: 480px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">🔒</div>
+            <h2 style="font-size: 1.4rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Access Restricted (HTTP 403)</h2>
+            <p id="auth-denied-message" style="font-size: 0.88rem; color: #94A3B8; line-height: 1.6; margin: 0 0 24px 0;">
+                Your account is authenticated with Opsmeld, but you do not currently have required module permissions to access this application.
+            </p>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-btn" style="background: #3B82F6; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="switchMainView('public')">
+                    🏠 Return to Platform
+                </button>
+                <button class="btn-btn" style="background: #64748B; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="alert('📩 Access request submitted to your Opsmeld Enterprise Administrator.')">
+                    Request Access 📩
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. AUTHENTICATED APPLICATION SHELL (Displayed ONLY when Authenticated + Authorized) -->
+    <div id="view-app-shell" style="display: none;">
+        <div class="top-header">
+            <div style="display: flex; align-items: center; gap: 24px;">
+                <div style="font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; cursor: pointer;" onclick="switchMainView('public')">🟢 opsmeld</div>
+                <div class="top-nav">
+                    <a id="nav-top-portal" class="top-nav-item active" onclick="switchMainView('public')">🏠 Platform Home</a>
+                    <a id="nav-top-ar" class="top-nav-item" onclick="switchMainView('control-tower')">🎯 AR Control Tower</a>
+                    <a id="nav-top-dt" class="top-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</a>
+                </div>
+            </div>
+            <div class="top-user">
+                <span>🔍 Search</span>
+                <span>🔔</span>
+                <span>🌐</span>
+                <span>👤 Vikas Kumar (<span id="user-company-label">CRONUS IN</span>)</span>
+                <button id="auth-toggle-btn" onclick="performAppLogout()" style="background:#EF4444; color:white; border:none; padding:5px 12px; border-radius:4px; font-weight:700; font-size:0.78rem; cursor:pointer; margin-left:8px;" title="Click to Sign Out and return to Sign In wall">Sign Out 🚪</button>
+            </div>
+        </div>
+
+        <div class="sub-header">
+            <div class="sub-nav">
+                <div id="nav-item-control-tower" class="sub-nav-item active" onclick="switchMainView('control-tower')">Control Tower</div>
+                <div id="nav-item-collections" class="sub-nav-item" onclick="switchMainView('collections')">Collections Workload</div>
+                <div id="nav-item-segments" class="sub-nav-item" onclick="switchMainView('segments')">Segments / Procedures</div>
+                <div id="nav-item-data-trust" class="sub-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</div>
+                <div class="sub-nav-item">Reports</div>
+                <div class="sub-nav-item">Worksheet</div>
+                <div class="sub-nav-item">Accounts</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="search-box">
+                    🔍 <input type="text" placeholder="Search accounts...">
+                </div>
+                <button class="btn-btn" onclick="loadLiveCustomerData()">🔄 Refresh BC Data</button>
+            </div>
+        </div>
+
+        <div class="app-body">
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">🛡️ Data Trust Engine</div>
+                    <div id="sidebar-item-data-trust" class="sidebar-item" onclick="switchMainView('data-trust')">Findings Explorer</div>
+                    <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Posting-Date Rules</div>
+                    <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Subledger Controls</div>
+                    <div class="sidebar-item" onclick="window.open('/settings', '_blank')">Narration Taxonomy</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚙️ Overview</div>
+                    <div class="sidebar-item active" onclick="switchMainView('control-tower')">Control Tower</div>
+                    <div id="sidebar-item-collections" class="sidebar-item" onclick="switchMainView('collections')">Collections Workload (20/page)</div>
+                    <div class="sidebar-item" onclick="switchMainView('segments')">Segments & Procedures</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚙️ Main Settings</div>
+                    <div class="sidebar-item" onclick="openTenantModal()">Company Details</div>
+                    <div class="sidebar-item">Users</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">📋 Templates</div>
+                    <div class="sidebar-item">Reminder templates</div>
+                    <div class="sidebar-item">Payment plan reminders</div>
+                    <div class="sidebar-item">Account statement templates</div>
+                    <div class="sidebar-item">Branding library</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚙️ Worksheet</div>
+                    <div class="sidebar-item">Codes: dispute codes</div>
+                    <div class="sidebar-item">Codes: status codes</div>
+                    <div class="sidebar-item">Portfolios</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚙️ Personalizations</div>
+                    <div class="sidebar-item">Document archive configuration</div>
+                    <div class="sidebar-item">Payment center configuration</div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚙️ Exports/API</div>
+                    <div class="sidebar-item">API tokens</div>
+                    <div class="sidebar-item">Account exports</div>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <div id="notice-container"></div>
+
+                <!-- CONTROL TOWER VIEW (PRIMARY EXECUTIVE DASHBOARD) -->
+                <div id="view-control-tower" style="display: block;">
                 <!-- Greeting Header Banner -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <div>
@@ -1306,19 +1377,21 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        loadOpsmeldPortalInfo();
+        switchMainView('control-tower');
         loadLiveCustomerData();
-        loadControlTowerData();
     });
 
     let currentInspectedFindingId = null;
 
     function switchMainView(viewName) {
-        const portalView = document.getElementById('view-portal-landing');
+        const publicLanding = document.getElementById('view-public-landing');
+        const signinWall = document.getElementById('view-signin-wall');
+        const authDenied = document.getElementById('view-auth-denied');
+        const appShell = document.getElementById('view-app-shell');
+
         const ctView = document.getElementById('view-control-tower');
         const segView = document.getElementById('view-segments');
         const dtView = document.getElementById('view-data-trust');
-        const subHeader = document.querySelector('.sub-header');
 
         const topPortal = document.getElementById('nav-top-portal');
         const topAr = document.getElementById('nav-top-ar');
@@ -1326,37 +1399,83 @@
 
         document.querySelectorAll('.top-nav-item').forEach(el => el.classList.remove('active'));
 
-        if (viewName === 'portal-landing') {
+        if (viewName === 'public') {
+            if (publicLanding) publicLanding.style.display = 'block';
+            if (signinWall) signinWall.style.display = 'none';
+            if (authDenied) authDenied.style.display = 'none';
+            if (appShell) appShell.style.display = 'none';
             if (topPortal) topPortal.classList.add('active');
-            if (portalView) portalView.style.display = 'block';
-            if (ctView) ctView.style.display = 'none';
-            if (segView) segView.style.display = 'none';
-            if (dtView) dtView.style.display = 'none';
-            if (subHeader) subHeader.style.display = 'none';
             loadOpsmeldPortalInfo();
-        } else if (viewName === 'control-tower') {
+            return;
+        }
+
+        if (viewName === 'signin') {
+            if (publicLanding) publicLanding.style.display = 'none';
+            if (signinWall) signinWall.style.display = 'flex';
+            if (authDenied) authDenied.style.display = 'none';
+            if (appShell) appShell.style.display = 'none';
+            return;
+        }
+
+        if (viewName === 'auth-denied') {
+            if (publicLanding) publicLanding.style.display = 'none';
+            if (signinWall) signinWall.style.display = 'none';
+            if (authDenied) authDenied.style.display = 'flex';
+            if (appShell) appShell.style.display = 'none';
+            return;
+        }
+
+        // Render App Shell synchronously for requested application view
+        if (publicLanding) publicLanding.style.display = 'none';
+        if (signinWall) signinWall.style.display = 'none';
+        if (authDenied) authDenied.style.display = 'none';
+        if (appShell) appShell.style.display = 'block';
+
+        if (viewName === 'control-tower' || viewName === 'portal-landing') {
             if (topAr) topAr.classList.add('active');
-            if (portalView) portalView.style.display = 'none';
             if (ctView) ctView.style.display = 'block';
             if (segView) segView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
-            if (subHeader) subHeader.style.display = 'flex';
             loadControlTowerData();
         } else if (viewName === 'data-trust') {
             if (topDt) topDt.classList.add('active');
-            if (portalView) portalView.style.display = 'none';
             if (dtView) dtView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (segView) segView.style.display = 'none';
-            if (subHeader) subHeader.style.display = 'flex';
             loadAuthorizedCompanies();
         } else {
-            if (portalView) portalView.style.display = 'none';
             if (segView) segView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
-            if (subHeader) subHeader.style.display = 'flex';
         }
+
+        // Verify session and module permission asynchronously in background
+        const reqPerm = (viewName === 'data-trust') ? 'data-trust:read' : 'ar_control_tower:read';
+        fetch('/api/auth/me', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.authenticated) {
+                    if (publicLanding) publicLanding.style.display = 'none';
+                    if (signinWall) signinWall.style.display = 'flex';
+                    if (authDenied) authDenied.style.display = 'none';
+                    if (appShell) appShell.style.display = 'none';
+                    return;
+                }
+                const permissions = data.permissions || [];
+                const roles = data.roles || [];
+                const hasPerm = permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
+                if (!hasPerm) {
+                    const msgEl = document.getElementById('auth-denied-message');
+                    if (msgEl && data.user) {
+                        msgEl.textContent = `Your account (${data.user.email}) is authenticated, but you do not currently have required permissions ('${reqPerm}') to access this module.`;
+                    }
+                    if (publicLanding) publicLanding.style.display = 'none';
+                    if (signinWall) signinWall.style.display = 'none';
+                    if (authDenied) authDenied.style.display = 'flex';
+                    if (appShell) appShell.style.display = 'none';
+                }
+            })
+            .catch(err => console.error('Module access check error:', err));
     }
 
     function loadOpsmeldPortalInfo() {

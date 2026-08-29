@@ -43,15 +43,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _get_session_token(self) -> Optional[str]:
-        """Extracts session token from Cookie header or Authorization header."""
+        """Extracts session token from Authorization header or Cookie header."""
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            val = auth_header[7:].strip()
+            if val:
+                return val
         cookie_header = self.headers.get("Cookie", "")
         if "session=" in cookie_header:
             for part in cookie_header.split(";"):
                 if part.strip().startswith("session="):
-                    return part.strip().split("=")[1]
-        auth_header = self.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            return auth_header[7:].strip()
+                    val = part.strip().split("=")[1]
+                    if val:
+                        return val
         return None
 
     def _get_client_key(self, parsed_url) -> str:
@@ -73,8 +77,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
     def _require_auth(
         self,
         required_permission: Optional[str] = None,
-        company_id: Optional[str] = None,
-        require_company: bool = False
+        company_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Enforces two-dimensional authorization security boundary:
@@ -103,7 +106,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             return None
 
         # Check Dimension 2: Explicit Company Entitlement
-        if require_company or company_id is not None:
+        if company_id is not None:
             if not company_id or not GUID_REGEX.match(company_id):
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({
@@ -373,8 +376,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/run-recon":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
-            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id, require_company=True)
+            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id)
             if not session_info:
+                return
+            if not company_id or not GUID_REGEX.match(company_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
                 return
 
             client_key = self._get_client_key(parsed_url)
@@ -402,8 +412,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
-            session_info = self._require_auth(required_permission="data_trust:read", company_id=company_id, require_company=True)
+            session_info = self._require_auth(required_permission="data_trust:read", company_id=company_id)
             if not session_info:
+                return
+            if not company_id or not GUID_REGEX.match(company_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
                 return
 
             client_key = self._get_client_key(parsed_url)
@@ -634,8 +651,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
 
-            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id, require_company=True)
+            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id)
             if not session_info:
+                return
+            if not company_id or not GUID_REGEX.match(company_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
                 return
 
             client_key = self._get_client_key(parsed_url)
