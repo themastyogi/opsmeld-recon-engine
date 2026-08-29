@@ -340,6 +340,28 @@ class MultitenantDataStore:
         self.access_requests[req_id] = req
         return req
 
+    def persist(self, filepath: Optional[str] = None):
+        """Persists current multitenant data store to JSON file."""
+        import json, os
+        target = filepath or os.path.join(os.path.dirname(__file__), "..", "data", "multitenant_store.json")
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            data = {
+                "organizations": [o.to_dict() for o in self.organizations.values()],
+                "subscriptions": [s.to_dict() for s in self.subscriptions.values()],
+                "org_modules": {k: list(v) for k, v in self.org_modules.items()},
+                "users": [u.to_dict() for u in self.users.values()],
+                "user_org": self.user_org,
+                "user_roles": {k: list(v) for k, v in self.user_roles.items()},
+                "user_company_acls": {k: list(v) for k, v in self.user_company_acls.items()},
+                "registrations": [r.to_dict() for r in self.registrations.values()],
+                "access_requests": [req.to_dict() for req in self.access_requests.values()]
+            }
+            with open(target, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
+
 
 _GLOBAL_DATASTORE = MultitenantDataStore()
 

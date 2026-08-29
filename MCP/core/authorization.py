@@ -52,6 +52,10 @@ class CentralAuthorizationEngine:
         if getattr(session, "is_expired", lambda: False)():
             return False, DenialReason.UNAUTHENTICATED
 
+        if not getattr(session, "provisioned", True):
+            logger.warning(f"Authorization Denied: User '{session.user_id}' account is not provisioned.")
+            return False, DenialReason.UNAUTHENTICATED
+
         datastore = get_datastore()
         org_id = getattr(session, "organization_id", None)
         if not org_id:
@@ -59,9 +63,8 @@ class CentralAuthorizationEngine:
             return False, DenialReason.ORGANIZATION_SUSPENDED
 
         # Gate 2: Is organization active?
-        org = datastore.get_organization(org_id)
-        if not org or org.status != OrganizationStatus.ACTIVE:
-            logger.warning(f"Authorization Denied: Organization '{org_id}' is not ACTIVE (status={org.status if org else 'NONE'})")
+        if not datastore.is_organization_active(org_id):
+            logger.warning(f"Authorization Denied: Organization '{org_id}' is not ACTIVE/TRIAL")
             return False, DenialReason.ORGANIZATION_SUSPENDED
 
         # Gate 3: Is module subscribed for organization?

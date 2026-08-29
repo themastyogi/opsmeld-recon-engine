@@ -26,6 +26,7 @@ class OpsmeldUserSession:
         organization_id: Optional[str] = None,
         permissions: Optional[Set[str]] = None,
         allowed_companies: Optional[Set[str]] = None,
+        provisioned: bool = True,
         created_at: Optional[float] = None,
         expires_at: Optional[float] = None
     ):
@@ -38,6 +39,7 @@ class OpsmeldUserSession:
         self.permissions = set(permissions) if permissions is not None else RBACResolver.resolve_permissions(self.roles)
         # Fail closed: allowed_companies is strictly an explicit Set[str]. None or empty fails closed.
         self.allowed_companies = set(allowed_companies) if allowed_companies is not None else set()
+        self.provisioned = provisioned
         self.created_at = created_at or time.time()
         self.expires_at = expires_at or (self.created_at + SESSION_TTL_SECONDS)
 
@@ -63,12 +65,15 @@ class OpsmeldUserSession:
         org_name = org.name if org else None
         org_status = org.status if org else None
         return {
+            "authenticated": True,
             "token": self.token,
             "user": {
                 "id": self.user_id,
                 "email": self.email,
                 "display_name": self.display_name
             },
+            "provisioned": self.provisioned,
+            "status": "ACTIVE" if self.provisioned else "ACCOUNT_NOT_PROVISIONED",
             "organization": {
                 "id": self.organization_id,
                 "name": org_name,
@@ -127,10 +132,11 @@ class AuthManager:
         email: str,
         display_name: str,
         roles: List[str],
-        organization_id: str = "org_abc_001",
+        organization_id: Optional[str] = "org_abc_001",
         allowed_companies: Optional[Set[str]] = None,
         direct_permissions: Optional[List[str]] = None,
-        permissions: Optional[Set[str]] = None
+        permissions: Optional[Set[str]] = None,
+        provisioned: bool = True
     ) -> str:
         """Creates an authenticated session token with explicit multitenant organization and company entitlements."""
         token = secrets.token_hex(32)
@@ -143,7 +149,8 @@ class AuthManager:
             organization_id=organization_id,
             roles=roles,
             permissions=resolved_perms,
-            allowed_companies=allowed_companies
+            allowed_companies=allowed_companies,
+            provisioned=provisioned
         )
         _ACTIVE_SESSIONS[token] = session
         if token in _REVOKED_TOKENS:
@@ -162,14 +169,15 @@ class AuthManager:
                 display_name="Platform Admin",
                 organization_id="org_abc_001",
                 roles=["ENTERPRISE_ADMIN"],
-                allowed_companies=self.default_admin_companies
+                allowed_companies=self.default_admin_companies,
+                provisioned=True
             )
         return None
 
     def login_entra_user(self, email: Optional[str] = None, display_name: Optional[str] = None, entra_oid: Optional[str] = None) -> str:
         """
         Resolves Entra Identity (email/oid) -> User -> OrganizationUser -> Organization.
-        Creates an authenticated Opsmeld user session.
+        If user is not provisioned, creates an unprovisioned session (provisioned=False).
         """
         user_email = email or self.admin_user
         name = display_name or "Vikas Kumar (CRONUS IN)"
@@ -190,16 +198,20 @@ class AuthManager:
                 organization_id=org.organization_id,
                 roles=roles,
                 permissions=user_perms,
-                allowed_companies=user_companies
+                allowed_companies=user_companies,
+                provisioned=True
             )
 
+        # Unassigned / Unprovisioned Entra User -> Fails closed to unprovisioned session
         return self.create_session(
-            user_id="usr_admin_001",
+            user_id=f"usr_entra_{int(time.time())}",
             email=user_email,
             display_name=name,
-            organization_id="org_abc_001",
-            roles=["ENTERPRISE_ADMIN"],
-            allowed_companies=self.default_admin_companies
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False
         )
 
     def get_session(self, session_token: Optional[str]) -> Optional[OpsmeldUserSession]:

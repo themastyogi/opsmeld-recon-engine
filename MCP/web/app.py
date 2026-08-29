@@ -340,18 +340,20 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             if not session:
                 self._write_response(json.dumps({"authenticated": False}).encode("utf-8"))
-            else:
+            elif not getattr(session, "provisioned", True):
                 self._write_response(json.dumps({
                     "authenticated": True,
+                    "provisioned": False,
+                    "status": "ACCOUNT_NOT_PROVISIONED",
                     "user": {
                         "id": session.user_id,
                         "email": session.email,
                         "display_name": session.display_name
                     },
-                    "roles": sorted(session.roles),
-                    "permissions": sorted(list(session.permissions)),
-                    "allowed_companies": sorted(list(session.allowed_companies))
+                    "organization": None
                 }).encode("utf-8"))
+            else:
+                self._write_response(json.dumps(session.to_dict()).encode("utf-8"))
 
         elif path == "/api/auth/logout":
             token = self._get_session_token()

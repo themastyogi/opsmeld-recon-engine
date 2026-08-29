@@ -556,6 +556,28 @@
         </div>
     </div>
 
+    <!-- 3B. UNPROVISIONED IDENTITY SCREEN (ACCOUNT_NOT_PROVISIONED) -->
+    <div id="view-account-not-provisioned" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
+        <div style="background: #1E293B; border: 1px solid #F59E0B; border-radius: 16px; padding: 40px; width: 520px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">🏢</div>
+            <h2 style="font-size: 1.4rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Welcome to Opsmeld</h2>
+            <p style="font-size: 0.9rem; color: #94A3B8; line-height: 1.6; margin: 0 0 24px 0;">
+                Your Microsoft Entra identity is authenticated, but your Opsmeld account has not yet been associated with an active customer organization.
+            </p>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <button class="btn-btn" style="background: #10B981; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="openRegisterModal()">
+                    🚀 Register Your Organization
+                </button>
+                <button class="btn-btn" style="background: #3B82F6; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="alert('📩 Request Access submitted. Contact your organization administrator.')">
+                    Request Access 📩
+                </button>
+            </div>
+            <div style="font-size: 0.8rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
+                ← Return to Public Landing Page
+            </div>
+        </div>
+    </div>
+
     <!-- 4. AUTHENTICATED APPLICATION SHELL (Displayed ONLY when Authenticated + Authorized) -->
     <div id="view-app-shell" style="display: none;">
         <div class="top-header">
@@ -1563,12 +1585,24 @@
         const topAr = document.getElementById('nav-top-ar');
         const topDt = document.getElementById('nav-top-dt');
 
+        const notProvisioned = document.getElementById('view-account-not-provisioned');
+
         document.querySelectorAll('.top-nav-item').forEach(el => el.classList.remove('active'));
+
+        if (viewName === 'account-not-provisioned') {
+            if (publicLanding) publicLanding.style.display = 'none';
+            if (signinWall) signinWall.style.display = 'none';
+            if (authDenied) authDenied.style.display = 'none';
+            if (notProvisioned) notProvisioned.style.display = 'flex';
+            if (appShell) appShell.style.display = 'none';
+            return;
+        }
 
         if (viewName === 'public') {
             if (publicLanding) publicLanding.style.display = 'block';
             if (signinWall) signinWall.style.display = 'none';
             if (authDenied) authDenied.style.display = 'none';
+            if (notProvisioned) notProvisioned.style.display = 'none';
             if (appShell) appShell.style.display = 'none';
             if (topPortal) topPortal.classList.add('active');
             loadOpsmeldPortalInfo();
@@ -1622,6 +1656,10 @@
             .then(data => {
                 if (!data.authenticated) {
                     switchMainView('public');
+                    return;
+                }
+                if (data.provisioned === false || data.status === 'ACCOUNT_NOT_PROVISIONED') {
+                    switchMainView('account-not-provisioned');
                     return;
                 }
                 const permissions = data.permissions || [];
