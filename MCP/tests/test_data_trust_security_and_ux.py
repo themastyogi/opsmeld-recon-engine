@@ -18,6 +18,23 @@ from modules.data_trust_engine.acquisition import CompanyResolver
 class TestDataTrustSecurityAndUX(unittest.TestCase):
 
     def setUp(self):
+        from core.auth import get_auth_manager
+        auth_mgr = get_auth_manager()
+        valid_companies = {
+            "GUID-COMP-01", "GUID-COMP-02", "GUID-COMP-03",
+            "GUID-COMP-A", "GUID-COMP-B", "GUID-COMP-C",
+            "ac6b97ba-bc8f-f111-832d-7c1e5233db45",
+            "c37ac1c0-bc8f-f111-832d-7c1e5233db45",
+            "c4e0106b-159e-f111-8072-7ced8d9f80ff",
+            "11111111-2222-3333-4444-555555555555"
+        }
+        self.valid_session_token = auth_mgr.create_session(
+            user_id="usr_test_001",
+            email="admin@opsmeld.com",
+            display_name="Test Admin",
+            roles=["ENTERPRISE_ADMIN"],
+            allowed_companies=valid_companies
+        )
         self.auth_mgr = CompanyAccessManager()
         self.mock_client = MagicMock()
         self.mock_client.config.tenant_id = "TENANT_101"
@@ -226,10 +243,10 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         import io
 
         handler = MagicMock(spec=OpsmeldWebHandler)
-        handler.headers = {"Authorization": "Bearer VALID_SESSION_TOKEN"}
+        handler.headers = {"Authorization": "Bearer self.valid_session_token"}
         handler.wfile = io.BytesIO()
         handler.path = "/api/data-trust/authorized-companies"
-        handler._get_session_token.return_value = "VALID_SESSION_TOKEN"
+        handler._get_session_token.return_value = self.valid_session_token
         handler._get_client_key.return_value = "default_client"
 
         handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
@@ -275,11 +292,11 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
 
         # Case 2: Authenticated POST -> Modular DataTrustEngineOrchestrator called
         handler_auth = MagicMock(spec=OpsmeldWebHandler)
-        handler_auth.headers = {"Authorization": "Bearer VALID_SESSION_TOKEN", "Content-Length": "25"}
+        handler_auth.headers = {"Authorization": "Bearer self.valid_session_token", "Content-Length": "25"}
         handler_auth.rfile = io.BytesIO(b'{"company_id": "CRONUS"}')
         handler_auth.wfile = io.BytesIO()
         handler_auth.path = "/api/data-trust/run-recon"
-        handler_auth._get_session_token.return_value = "VALID_SESSION_TOKEN"
+        handler_auth._get_session_token.return_value = self.valid_session_token
         handler_auth._get_client_key.return_value = "default_client"
 
         handler_auth.do_POST = OpsmeldWebHandler.do_POST.__get__(handler_auth, OpsmeldWebHandler)
@@ -318,7 +335,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         # 1. /findings with tampered unauthorized valid GUID
         h_findings = MagicMock(spec=OpsmeldWebHandler)
         h_findings.path = f"/api/data-trust/findings?company_id={unauth_guid}"
-        h_findings._get_session_token.return_value = "VALID_TOKEN"
+        h_findings._get_session_token.return_value = self.valid_session_token
         h_findings._get_client_key.return_value = "default_client"
         h_findings.wfile = io.BytesIO()
         h_findings.do_GET = OpsmeldWebHandler.do_GET.__get__(h_findings, OpsmeldWebHandler)
@@ -337,7 +354,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_recon.headers = {"Content-Length": "0"}
         h_recon.rfile = io.BytesIO(b"")
         h_recon.wfile = io.BytesIO()
-        h_recon._get_session_token.return_value = "VALID_TOKEN"
+        h_recon._get_session_token.return_value = self.valid_session_token
         h_recon._get_client_key.return_value = "default_client"
         h_recon.do_POST = OpsmeldWebHandler.do_POST.__get__(h_recon, OpsmeldWebHandler)
         h_recon._require_auth = OpsmeldWebHandler._require_auth.__get__(h_recon, OpsmeldWebHandler)
@@ -352,7 +369,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         # 3. /finding-detail with tampered unauthorized valid GUID
         h_detail = MagicMock(spec=OpsmeldWebHandler)
         h_detail.path = f"/api/data-trust/finding-detail?id=DT-001&company_id={unauth_guid}"
-        h_detail._get_session_token.return_value = "VALID_TOKEN"
+        h_detail._get_session_token.return_value = self.valid_session_token
         h_detail._get_client_key.return_value = "default_client"
         h_detail.wfile = io.BytesIO()
         h_detail.do_GET = OpsmeldWebHandler.do_GET.__get__(h_detail, OpsmeldWebHandler)
@@ -372,7 +389,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_update.headers = {"Content-Length": str(len(payload_bytes))}
         h_update.rfile = io.BytesIO(payload_bytes)
         h_update.wfile = io.BytesIO()
-        h_update._get_session_token.return_value = "VALID_TOKEN"
+        h_update._get_session_token.return_value = self.valid_session_token
         h_update._get_client_key.return_value = "default_client"
         h_update.do_POST = OpsmeldWebHandler.do_POST.__get__(h_update, OpsmeldWebHandler)
         h_update._require_auth = OpsmeldWebHandler._require_auth.__get__(h_update, OpsmeldWebHandler)
@@ -399,7 +416,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_update.headers = {"Content-Length": str(len(payload_bytes))}
         h_update.rfile = io.BytesIO(payload_bytes)
         h_update.wfile = io.BytesIO()
-        h_update._get_session_token.return_value = "VALID_TOKEN"
+        h_update._get_session_token.return_value = self.valid_session_token
         h_update._get_client_key.return_value = "TEST_404_MUTATION"
         h_update.do_POST = OpsmeldWebHandler.do_POST.__get__(h_update, OpsmeldWebHandler)
         h_update._require_auth = OpsmeldWebHandler._require_auth.__get__(h_update, OpsmeldWebHandler)
@@ -453,7 +470,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             handler.headers = {}
             handler.rfile = io.BytesIO(b'{"finding_id": "DT-001", "status": "Under Review"}')
             handler.wfile = io.BytesIO()
-            handler._get_session_token.return_value = "VALID_TOKEN"
+            handler._get_session_token.return_value = self.valid_session_token
             handler._get_client_key.return_value = "TEST_MISSING_COMP"
             handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
             handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
@@ -634,10 +651,10 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         import io
 
         handler = MagicMock(spec=OpsmeldWebHandler)
-        handler.headers = {"Authorization": "Bearer VALID_TOKEN"}
+        handler.headers = {"Authorization": f"Bearer {self.valid_session_token}"}
         handler.wfile = io.BytesIO()
         handler.path = "/api/data-trust/findings?company_id=CRONUS%20IN"
-        handler._get_session_token.return_value = "VALID_TOKEN"
+        handler._get_session_token.return_value = self.valid_session_token
         handler._get_client_key.return_value = "default_client"
 
         handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)

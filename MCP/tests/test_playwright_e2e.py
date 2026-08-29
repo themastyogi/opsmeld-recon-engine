@@ -13,6 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
 from web.app import OpsmeldWebHandler
+from core.auth import get_auth_manager
 
 
 class TestOpsmeldPlaywrightE2E(unittest.TestCase):
@@ -37,9 +38,24 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
 
     def setUp(self):
         self.context: BrowserContext = self.browser.new_context()
+        auth_mgr = get_auth_manager()
+        admin_companies = getattr(auth_mgr, "default_admin_companies", set())
+        token = auth_mgr.create_session(
+            user_id="usr_admin_001",
+            email="admin@opsmeld.com",
+            display_name="Vikas Kumar (CRONUS IN)",
+            roles=["ENTERPRISE_ADMIN"],
+            allowed_companies=admin_companies.union({
+                "GUID-COMP-01", "GUID-COMP-02", "GUID-COMP-03",
+                "GUID-COMP-A", "GUID-COMP-B", "GUID-COMP-C",
+                "ac6b97ba-bc8f-f111-832d-7c1e5233db45",
+                "c37ac1c0-bc8f-f111-832d-7c1e5233db45",
+                "c4e0106b-159e-f111-8072-7ced8d9f80ff"
+            })
+        )
         self.context.add_cookies([{
             "name": "session",
-            "value": "VALID_ADMIN_TOKEN",
+            "value": token,
             "domain": "127.0.0.1",
             "path": "/"
         }])
@@ -54,7 +70,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         for _ in range(5):
             try:
                 self.page.goto(self.base_url)
-                self.page.wait_for_load_state("networkidle")
+                self.page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
                 return
             except Exception:
                 time.sleep(0.5)
