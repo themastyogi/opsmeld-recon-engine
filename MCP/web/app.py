@@ -211,7 +211,18 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(res).encode("utf-8"))
             return
 
-        elif path == "/api/admin/organizations":
+        elif path == "/api/admin/registrations":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or "ENTERPRISE_ADMIN" not in session.roles:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Platform Admin required"}).encode("utf-8"))
+                return
+            ds = get_datastore()
+            regs = [r.to_dict() for r in ds.registrations.values()]
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({"status": "success", "registrations": regs}).encode("utf-8"))
+            return
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
             if not session or "ENTERPRISE_ADMIN" not in session.roles:
@@ -643,6 +654,53 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 res = {"error": "Invalid credentials. Please check your provisioned email and password."}
                 self._set_headers("application/json", 401)
                 self._write_response(json.dumps(res).encode("utf-8"))
+            return
+
+        elif path == "/api/onboarding/register":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            data = json.loads(body)
+            org_name = data.get("organization_name", "Acme Corporation")
+            req_name = data.get("requester_name", "User")
+            email = data.get("business_email", "user@acme.com")
+            modules = data.get("requested_modules", ["ar_control_tower", "data_trust"])
+
+            ds = get_datastore()
+            reg = ds.create_registration(org_name, req_name, email, modules)
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({
+                "status": "success",
+                "message": "Registration submitted successfully. Pending Opsmeld Admin approval.",
+                "registration": reg.to_dict()
+            }).encode("utf-8"))
+            return
+
+        elif path == "/api/admin/registrations/approve":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or "ENTERPRISE_ADMIN" not in session.roles:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Platform Admin required"}).encode("utf-8"))
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            data = json.loads(body)
+            reg_id = data.get("registration_id")
+
+            ds = get_datastore()
+            org = ds.approve_registration(reg_id, session.user_id)
+            if not org:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Invalid or non-pending registration ID"}).encode("utf-8"))
+                return
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({
+                "status": "success",
+                "message": f"Organization '{org.name}' approved and activated.",
+                "organization": org.to_dict()
+            }).encode("utf-8"))
             return
 
         elif path == "/api/admin/organizations/status":

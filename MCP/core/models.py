@@ -1,23 +1,99 @@
 """
-Opsmeld Multitenant Core Models - Hierarchy & Entitlement Entities
-Defines the canonical multi-tenant data structures:
-Opsmeld Platform -> Customer Organization -> Subscription -> Module -> Customer User -> Role -> Permission -> BC Company
+Opsmeld Multitenant Core Models - Hierarchy & Entitlement Entities (v1.2)
+Defines multi-tenant data structures, organization lifecycle state machine, registrations, and access requests:
+Opsmeld Platform -> Registration / Prospect -> Approval -> Customer Organization -> Subscription -> Module -> User -> Role -> Permission -> BC Company
 """
 
 import time
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional, Any, Tuple
 
 
 class OrganizationStatus:
-    ACTIVE = "ACTIVE"
-    SUSPENDED = "SUSPENDED"
+    PROSPECT = "PROSPECT"
+    REGISTRATION_PENDING = "REGISTRATION_PENDING"
+    REJECTED = "REJECTED"
     TRIAL = "TRIAL"
-    EXPIRED = "EXPIRED"
-
-
-class ModuleStatus:
     ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
+    EXPIRED = "EXPIRED"
+    SUSPENDED = "SUSPENDED"
+
+
+class RegistrationStatus:
+    REGISTRATION_PENDING = "REGISTRATION_PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class AccessRequestStatus:
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class OrganizationRegistration:
+    def __init__(
+        self,
+        registration_id: str,
+        organization_name: str,
+        requester_name: str,
+        business_email: str,
+        requested_modules: List[str],
+        status: str = RegistrationStatus.REGISTRATION_PENDING,
+        created_at: Optional[float] = None
+    ):
+        self.registration_id = registration_id
+        self.organization_name = organization_name
+        self.requester_name = requester_name
+        self.business_email = business_email
+        self.requested_modules = requested_modules or ["ar_control_tower", "data_trust"]
+        self.status = status
+        self.created_at = created_at or time.time()
+        self.reviewed_at: Optional[float] = None
+        self.reviewed_by: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "registration_id": self.registration_id,
+            "organization_name": self.organization_name,
+            "requester_name": self.requester_name,
+            "business_email": self.business_email,
+            "requested_modules": self.requested_modules,
+            "status": self.status,
+            "created_at": self.created_at,
+            "reviewed_at": self.reviewed_at,
+            "reviewed_by": self.reviewed_by
+        }
+
+
+class AccessRequest:
+    def __init__(
+        self,
+        request_id: str,
+        organization_id: str,
+        user_id: str,
+        email: str,
+        display_name: str,
+        status: str = AccessRequestStatus.PENDING,
+        created_at: Optional[float] = None
+    ):
+        self.request_id = request_id
+        self.organization_id = organization_id
+        self.user_id = user_id
+        self.email = email
+        self.display_name = display_name
+        self.status = status
+        self.created_at = created_at or time.time()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "organization_id": self.organization_id,
+            "user_id": self.user_id,
+            "email": self.email,
+            "display_name": self.display_name,
+            "status": self.status,
+            "created_at": self.created_at
+        }
 
 
 class Organization:
@@ -91,7 +167,7 @@ class OrganizationCompany:
 class MultitenantDataStore:
     """
     In-memory / Persistent Multitenant Data Store for Opsmeld Platform.
-    Stores Organizations, Subscriptions, Module Subscriptions, Roles, Users, and Company ACLs.
+    Stores Organizations, Subscriptions, Module Subscriptions, Roles, Users, Company ACLs, Registrations & Access Requests.
     """
     def __init__(self):
         self.organizations: Dict[str, Organization] = {}
@@ -104,6 +180,9 @@ class MultitenantDataStore:
         self.org_roles: Dict[str, Dict[str, Set[str]]] = {}  # org_id -> {role_id -> set of permissions}
         self.org_companies: Dict[str, List[OrganizationCompany]] = {}  # org_id -> list of OrganizationCompany
         self.user_company_acls: Dict[str, Set[str]] = {}  # (user_id, org_id) -> set of bc_company_guids
+
+        self.registrations: Dict[str, OrganizationRegistration] = {}
+        self.access_requests: Dict[str, AccessRequest] = {}
 
         self._seed_default_tenants()
 
@@ -166,7 +245,7 @@ class MultitenantDataStore:
 
     def is_organization_active(self, org_id: str) -> bool:
         org = self.get_organization(org_id)
-        return org is not None and org.status == OrganizationStatus.ACTIVE
+        return org is not None and org.status in (OrganizationStatus.ACTIVE, OrganizationStatus.TRIAL)
 
     def is_module_subscribed(self, org_id: str, module_id: str) -> bool:
         if not self.is_organization_active(org_id):
@@ -208,6 +287,58 @@ class MultitenantDataStore:
             return None
 
         return matched_user, org
+
+    def create_registration(self, organization_name: str, requester_name: str, business_email: str, requested_modules: List[str]) -> OrganizationRegistration:
+        reg_id = f"reg_{len(self.registrations) + 101}"
+        reg = OrganizationRegistration(reg_id, organization_name, requester_name, business_email, requested_modules)
+        self.registrations[reg_id] = reg
+        return reg
+
+    def approve_registration(self, registration_id: str, reviewer_user_id: str) -> Optional[Organization]:
+        reg = self.registrations.get(registration_id)
+        if not reg or reg.status != RegistrationStatus.REGISTRATION_PENDING:
+            return None
+
+        reg.status = RegistrationStatus.APPROVED
+        reg.reviewed_at = time.time()
+        reg.reviewed_by = reviewer_user_id
+
+        # Provision new Organization (TRIAL mode)
+        org_id = f"org_{len(self.organizations) + 101}"
+        org = Organization(org_id, reg.organization_name, OrganizationStatus.TRIAL)
+        self.organizations[org_id] = org
+
+        # Provision Subscription & Subscribed Modules
+        self.subscriptions[org_id] = Subscription(f"sub_{org_id}", org_id, "Trial")
+        self.org_modules[org_id] = set(reg.requested_modules)
+
+        # Provision Registering Customer Admin User
+        user_id = f"usr_{len(self.users) + 101}"
+        user = User(user_id, f"oid_{user_id}", reg.business_email, reg.requester_name)
+        self.users[user_id] = user
+        self.org_users[org_id] = {user_id}
+        self.user_org[user_id] = org_id
+
+        # Roles for new Organization
+        self.org_roles[org_id] = {
+            "CUSTOMER_ADMIN": {
+                "ar_control_tower:read", "ar_control_tower:write",
+                "data_trust:read", "data_trust:write",
+                "layer_3:read", "layer_3:write",
+                "org:users:manage", "org:roles:manage", "org:companies:manage"
+            }
+        }
+        self.user_roles[f"{user_id}:{org_id}"] = {"CUSTOMER_ADMIN"}
+        self.org_companies[org_id] = []
+        self.user_company_acls[f"{user_id}:{org_id}"] = set()
+
+        return org
+
+    def create_access_request(self, organization_id: str, user_id: str, email: str, display_name: str) -> AccessRequest:
+        req_id = f"req_{len(self.access_requests) + 101}"
+        req = AccessRequest(req_id, organization_id, user_id, email, display_name)
+        self.access_requests[req_id] = req
+        return req
 
 
 _GLOBAL_DATASTORE = MultitenantDataStore()

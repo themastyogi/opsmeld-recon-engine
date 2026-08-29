@@ -324,7 +324,7 @@
             </div>
             <div style="display: flex; gap: 16px; align-items: center;">
                 <button class="btn-btn" style="background: transparent; color: white; border: none; padding: 8px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer;" onclick="switchMainView('signin')">Sign In</button>
-                <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 10px 22px; font-size: 0.9rem; font-weight: 700; border-radius: 6px; cursor: pointer;" onclick="alert('📩 Request Access workflow initiated. Contact your Opsmeld Enterprise Administrator.')">Request Access</button>
+                <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 10px 22px; font-size: 0.9rem; font-weight: 700; border-radius: 6px; cursor: pointer;" onclick="openRegisterModal()">Get Started 🚀</button>
             </div>
         </div>
 
@@ -1500,6 +1500,37 @@
     function getAuthHeaders() {
         const token = localStorage.getItem('opsmeld_token');
         return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    function openRegisterModal() {
+        const modal = document.getElementById('modal-register-company');
+        if (modal) modal.style.display = 'flex';
+        else alert('🚀 Register Your Organization\n\nEnter Company Name and Work Email to initiate onboarding.');
+    }
+
+    function submitCompanyRegistration(event) {
+        if (event) event.preventDefault();
+        const orgName = document.getElementById('reg-org-name')?.value || 'Acme Corp';
+        const reqName = document.getElementById('reg-user-name')?.value || 'Admin User';
+        const email = document.getElementById('reg-email')?.value || 'admin@acme.com';
+
+        fetch('/api/onboarding/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                organization_name: orgName,
+                requester_name: reqName,
+                business_email: email,
+                requested_modules: ['ar_control_tower', 'data_trust']
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            alert(`🎉 Registration Submitted!\n\n${data.message}`);
+            const modal = document.getElementById('modal-register-company');
+            if (modal) modal.style.display = 'none';
+        })
+        .catch(err => alert('Registration failed: ' + err));
     }
 
     document.addEventListener('DOMContentLoaded', () => {
