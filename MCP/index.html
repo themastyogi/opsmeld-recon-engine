@@ -1496,16 +1496,28 @@
     </div>
 
     <script>
+    function getAuthHeaders() {
+        const token = localStorage.getItem('opsmeld_token');
+        return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        switchMainView('public');
-        fetch('/api/auth/me', { credentials: 'same-origin' })
+        fetch('/api/auth/me', { headers: getAuthHeaders(), credentials: 'same-origin' })
             .then(res => res.json())
             .then(data => {
-                if (data.authenticated && window.userSelectedView === 'public') {
-                    switchMainView('control-tower');
+                if (data.authenticated) {
+                    if (!window.userSelectedView || window.userSelectedView === 'public') {
+                        switchMainView('control-tower');
+                    }
+                } else {
+                    if (!window.userSelectedView) {
+                        switchMainView('public');
+                    }
                 }
             })
-            .catch(() => {});
+            .catch(() => {
+                if (!window.userSelectedView) switchMainView('public');
+            });
     });
 
     let currentInspectedFindingId = null;
@@ -1579,7 +1591,7 @@
 
         // Verify session and module permission asynchronously in background
         const reqPerm = (viewName === 'data-trust') ? 'data-trust:read' : 'ar_control_tower:read';
-        fetch('/api/auth/me', { credentials: 'same-origin' })
+        fetch('/api/auth/me', { headers: getAuthHeaders(), credentials: 'same-origin' })
             .then(r => r.json())
             .then(data => {
                 if (!data.authenticated) {
@@ -2965,15 +2977,50 @@
         if (modal) modal.style.display = 'none';
     }
 
+    function openAppLoginModal() {
+        fetch('/api/auth/login', { method: 'POST', headers: getAuthHeaders(), credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('opsmeld_token', data.token);
+                }
+                if (data.verification_uri && data.user_code) {
+                    const linkEl = document.getElementById('login-link');
+                    const codeEl = document.getElementById('login-user-code');
+                    const modal = document.getElementById('login-modal');
+                    if (linkEl) {
+                        linkEl.href = data.verification_uri;
+                        linkEl.innerText = data.verification_uri;
+                    }
+                    if (codeEl) codeEl.innerText = data.user_code;
+                    if (modal) modal.style.display = 'flex';
+                    window.open(data.verification_uri, '_blank');
+                } else {
+                    switchMainView('control-tower');
+                }
+            })
+            .catch(err => {
+                console.error('Auth login error:', err);
+                switchMainView('control-tower');
+            });
+    }
+
+    function closeLoginModal() {
+        const modal = document.getElementById('login-modal');
+        if (modal) modal.style.display = 'none';
+        switchMainView('control-tower');
+    }
+
     function performAppLogout() {
-        const modal = document.getElementById('opsmeld-app-login-modal');
-        if (modal) modal.style.display = 'flex';
+        localStorage.removeItem('opsmeld_token');
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+            .then(() => switchMainView('signin'))
+            .catch(() => switchMainView('signin'));
     }
 
     function performAppLogin(e) {
         if (e) e.preventDefault();
-        const modal = document.getElementById('opsmeld-app-login-modal');
-        if (modal) modal.style.display = 'none';
+        switchMainView('control-tower');
     }
 
     // Call loadAuthorizedCompanies on window load

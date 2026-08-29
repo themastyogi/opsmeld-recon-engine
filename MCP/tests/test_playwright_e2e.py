@@ -54,6 +54,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         for _ in range(5):
             try:
                 self.page.goto(self.base_url)
+                self.page.wait_for_load_state("networkidle")
                 return
             except Exception:
                 time.sleep(0.5)
@@ -83,8 +84,9 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         signout_btn = self.page.locator("button:has-text('Sign Out 🚪')")
         self.assertTrue(signout_btn.is_visible())
         signout_btn.click()
-        modal_display = self.page.evaluate("document.getElementById('opsmeld-app-login-modal').style.display")
-        self.assertEqual(modal_display, "flex")
+        self.page.wait_for_selector("#view-signin-wall", state="visible")
+        wall_display = self.page.evaluate("document.getElementById('view-signin-wall').style.display")
+        self.assertEqual(wall_display, "flex")
 
     # -------------------------------------------------------------------------
     # 2. Navigation Area (2 Tests)
