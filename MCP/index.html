@@ -1524,6 +1524,26 @@
         return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
+    function openAppLoginModal() {
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'admin@opsmeld.com', display_name: 'Vikas Kumar (CRONUS IN)' }),
+            credentials: 'same-origin'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.token) {
+                localStorage.setItem('opsmeld_token', data.token);
+            }
+            switchMainView('portal-home');
+        })
+        .catch(err => {
+            console.error('Login error:', err);
+            switchMainView('portal-home');
+        });
+    }
+
     function openRegisterModal() {
         const modal = document.getElementById('modal-register-company');
         if (modal) modal.style.display = 'flex';
