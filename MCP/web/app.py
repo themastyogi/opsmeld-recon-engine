@@ -1,5 +1,6 @@
 from modules.data_trust_engine.authorization import CompanyAccessManager
 from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
+from modules.data_trust_engine.acquisition import GUID_REGEX
 """
 Opsmeld Reconciliation Engine - Web Console App Handler
 Lightweight HTTP web app and routing server supporting report generation and fix staging APIs.
@@ -283,14 +284,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
-            if not company_id:
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing mandatory company_id parameter",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
-                return
-            if company_id in ("default_company", "unspecified_company"):
+            if not company_id or not GUID_REGEX.match(company_id):
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({
                     "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
@@ -321,26 +315,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/findings":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
-            if not company_id:
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing mandatory company_id parameter",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
-                return
-
-            classification = query_params.get("classification", [None])[0]
-            evidence_strength = query_params.get("evidence_strength", [None])[0]
-            rule_pack = query_params.get("rule_pack", [None])[0]
-            severity = query_params.get("severity", [None])[0]
-            status = query_params.get("status", [None])[0]
-            search = query_params.get("search", [None])[0]
-            include_insufficient = query_params.get("include_insufficient", ["false"])[0].lower() == "true"
-
-            # P0: Synthetic placeholder names must never reach the BC client
-            if company_id in ("default_company", "unspecified_company"):
+            if not company_id or not GUID_REGEX.match(company_id):
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({
                     "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
@@ -403,13 +383,16 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/finding-detail":
+            session_info = self._require_auth()
+            if not session_info:
+                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             finding_id = query_params.get("id", [None])[0]
             company_id = query_params.get("company_id", [None])[0]
-            if not company_id:
+            if not company_id or not GUID_REGEX.match(company_id):
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({
-                    "error": "Missing mandatory company_id parameter",
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
                     "status": "CONFIGURATION_MISSING"
                 }).encode("utf-8"))
                 return
@@ -575,16 +558,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 post_data = urllib.parse.parse_qs(body)
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
-            if not company_id:
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing mandatory company_id parameter",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
-                return
-
-            # P0: Synthetic placeholder names must never reach the BC client
-            if company_id in ("default_company", "unspecified_company"):
+            if not company_id or not GUID_REGEX.match(company_id):
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({
                     "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",

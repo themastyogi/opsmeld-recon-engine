@@ -136,7 +136,8 @@ class DataTrustEngine:
         p = self.get_findings_file_path(company_id=target_comp)
         # P0: Never derive LIVE_BUSINESS_CENTRAL from token existence.
         # Provenance must come exclusively from successful authoritative BC acquisition.
-        eff_ds = data_source or "TEST_FIXTURE"
+        # Default to DATA_UNAVAILABLE if data_source is omitted. Never default production to TEST_FIXTURE.
+        eff_ds = data_source or "DATA_UNAVAILABLE"
         payload = {
             "client_key": self.client_key,
             "company_id": target_comp,

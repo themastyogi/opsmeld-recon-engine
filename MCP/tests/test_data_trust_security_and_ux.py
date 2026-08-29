@@ -310,12 +310,14 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         import io
 
         self.mock_client._execute_bc_rest.side_effect = lambda ep: {
-            "value": [{"id": "GUID-COMPANY-A", "name": "COMPANY_A", "displayName": "Company A"}]
+            "value": [{"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "COMPANY_A", "displayName": "Company A"}]
         } if ep == "companies" else {"is_error": True, "http_status": 403, "error": {"code": "Authorization_RequestDenied"}}
 
-        # 1. /findings with tampered company_id=GUID-COMPANY-B
+        unauth_guid = "7c191a32-1192-ef11-9f93-000d3a568b20"
+
+        # 1. /findings with tampered unauthorized valid GUID
         h_findings = MagicMock(spec=OpsmeldWebHandler)
-        h_findings.path = "/api/data-trust/findings?company_id=GUID-COMPANY-B"
+        h_findings.path = f"/api/data-trust/findings?company_id={unauth_guid}"
         h_findings._get_session_token.return_value = "VALID_TOKEN"
         h_findings._get_client_key.return_value = "default_client"
         h_findings.wfile = io.BytesIO()
@@ -329,9 +331,9 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             h_findings.do_GET()
             self.assertIn(b"ACCESS_DENIED", h_findings.wfile.getvalue())
 
-        # 2. /run-recon with tampered company_id=GUID-COMPANY-B
+        # 2. /run-recon with tampered unauthorized valid GUID
         h_recon = MagicMock(spec=OpsmeldWebHandler)
-        h_recon.path = "/api/data-trust/run-recon?company_id=GUID-COMPANY-B"
+        h_recon.path = f"/api/data-trust/run-recon?company_id={unauth_guid}"
         h_recon.headers = {"Content-Length": "0"}
         h_recon.rfile = io.BytesIO(b"")
         h_recon.wfile = io.BytesIO()
@@ -347,9 +349,9 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             h_recon.do_POST()
             self.assertIn(b"ACCESS_DENIED", h_recon.wfile.getvalue())
 
-        # 3. /finding-detail with tampered company_id=GUID-COMPANY-B
+        # 3. /finding-detail with tampered unauthorized valid GUID
         h_detail = MagicMock(spec=OpsmeldWebHandler)
-        h_detail.path = "/api/data-trust/finding-detail?id=DT-001&company_id=GUID-COMPANY-B"
+        h_detail.path = f"/api/data-trust/finding-detail?id=DT-001&company_id={unauth_guid}"
         h_detail._get_session_token.return_value = "VALID_TOKEN"
         h_detail._get_client_key.return_value = "default_client"
         h_detail.wfile = io.BytesIO()
@@ -363,10 +365,10 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             h_detail.do_GET()
             self.assertIn(b"ACCESS_DENIED", h_detail.wfile.getvalue())
 
-        # 4. /update-status with tampered company_id=GUID-COMPANY-B
+        # 4. /update-status with tampered unauthorized valid GUID
         h_update = MagicMock(spec=OpsmeldWebHandler)
         h_update.path = "/api/data-trust/update-status"
-        payload_bytes = b'{"finding_id": "DT-001", "status": "Under Review", "company_id": "GUID-COMPANY-B"}'
+        payload_bytes = f'{{"finding_id": "DT-001", "status": "Under Review", "company_id": "{unauth_guid}"}}'.encode("utf-8")
         h_update.headers = {"Content-Length": str(len(payload_bytes))}
         h_update.rfile = io.BytesIO(payload_bytes)
         h_update.wfile = io.BytesIO()
@@ -390,9 +392,10 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         from unittest.mock import patch, MagicMock
         import io
 
+        valid_guid = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
         h_update = MagicMock(spec=OpsmeldWebHandler)
         h_update.path = "/api/data-trust/update-status"
-        payload_bytes = b'{"finding_id": "does-not-exist", "status": "Under Review", "company_id": "GUID-COMP-VALID"}'
+        payload_bytes = f'{{"finding_id": "does-not-exist", "status": "Under Review", "company_id": "{valid_guid}"}}'.encode("utf-8")
         h_update.headers = {"Content-Length": str(len(payload_bytes))}
         h_update.rfile = io.BytesIO(payload_bytes)
         h_update.wfile = io.BytesIO()
@@ -404,13 +407,13 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         h_update._write_response = OpsmeldWebHandler._write_response.__get__(h_update, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("modules.data_trust_engine.authorization.CompanyAccessManager.validate_company_access", return_value=(True, DataTrustState.SUCCESS, {"company_id": "GUID-COMP-VALID"})):
+             patch("modules.data_trust_engine.authorization.CompanyAccessManager.validate_company_access", return_value=(True, DataTrustState.SUCCESS, {"company_id": valid_guid})):
             h_update.do_POST()
             self.assertIn(b"NOT_FOUND", h_update.wfile.getvalue())
 
         # Verify disk persistence: ensure "does-not-exist" was NEVER created or persisted
         engine = DataTrustEngine(client_key="TEST_404_MUTATION")
-        findings, *_ = engine._load_from_disk(company_id="GUID-COMP-VALID")
+        findings, *_ = engine._load_from_disk(company_id=valid_guid)
         self.assertFalse(any(f.get("id") == "does-not-exist" for f in findings))
 
     def test_bc_connected_zero_records_honest_empty_state(self):
@@ -600,6 +603,79 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         # Verify no synthetic companies injected
         for c in discovered:
             self.assertNotIn(c["id"], ("default_company", "unspecified_company", "FIXTURE_COMPANY"))
+
+    def test_findings_and_finding_detail_require_http_auth(self):
+        """P0 Security Test: Unauthenticated GET /findings and /finding-detail return HTTP 401."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+        import io
+
+        for endpoint in ["/api/data-trust/findings?company_id=ac6b97ba-bc8f-f111-832d-7c1e5233db45", "/api/data-trust/finding-detail?id=F-1&company_id=ac6b97ba-bc8f-f111-832d-7c1e5233db45"]:
+            handler = MagicMock(spec=OpsmeldWebHandler)
+            handler.headers = {}
+            handler.wfile = io.BytesIO()
+            handler.path = endpoint
+            handler._get_session_token.return_value = None
+            handler._get_client_key.return_value = "default_client"
+
+            handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
+            handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+            handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+
+            with patch("modules.data_trust.DataTrustEngine.load_stored_findings") as mock_load:
+                handler.do_GET()
+                handler.send_response.assert_called_with(401)
+                self.assertEqual(mock_load.call_count, 0, f"Expected 0 load calls after 401 on {endpoint}")
+
+    def test_company_name_supplied_instead_of_guid_returns_400(self):
+        """P0 Contract Test: Supplying company name (CRONUS IN) instead of GUID returns HTTP 400 CONFIGURATION_MISSING across endpoints."""
+        from web.app import OpsmeldWebHandler
+        from unittest.mock import patch, MagicMock
+        import io
+
+        handler = MagicMock(spec=OpsmeldWebHandler)
+        handler.headers = {"Authorization": "Bearer VALID_TOKEN"}
+        handler.wfile = io.BytesIO()
+        handler.path = "/api/data-trust/findings?company_id=CRONUS%20IN"
+        handler._get_session_token.return_value = "VALID_TOKEN"
+        handler._get_client_key.return_value = "default_client"
+
+        handler.do_GET = OpsmeldWebHandler.do_GET.__get__(handler, OpsmeldWebHandler)
+        handler._require_auth = OpsmeldWebHandler._require_auth.__get__(handler, OpsmeldWebHandler)
+        handler._set_headers = OpsmeldWebHandler._set_headers.__get__(handler, OpsmeldWebHandler)
+        handler._write_response = OpsmeldWebHandler._write_response.__get__(handler, OpsmeldWebHandler)
+
+        with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
+             patch("modules.data_trust_engine.authorization.CompanyAccessManager.validate_company_access") as mock_val:
+            handler.do_GET()
+            handler.send_response.assert_called_with(400)
+            self.assertEqual(mock_val.call_count, 0, "Non-GUID company_id MUST NOT invoke company validation")
+
+    def test_save_stored_findings_requires_explicit_live_provenance(self):
+        """P0 Security Test: save_stored_findings() without explicit live provenance defaults to DATA_UNAVAILABLE and cannot create a falsely-live snapshot."""
+        from modules.data_trust import DataTrustEngine
+        from unittest.mock import MagicMock
+        import tempfile, json
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            engine = DataTrustEngine(mcp_client=None, client_key="TEST_PROVENANCE_HARNESS")
+            
+            def mock_file_path(company_id=None):
+                return Path(tmp_dir) / f"findings_{company_id}.json"
+
+            engine.get_findings_file_path = mock_file_path
+
+            # Omit data_source -> must default to DATA_UNAVAILABLE, NOT TEST_FIXTURE or LIVE_BUSINESS_CENTRAL
+            engine.save_stored_findings([{"id": "F-1"}], company_id="ac6b97ba-bc8f-f111-832d-7c1e5233db45")
+            
+            p = mock_file_path("ac6b97ba-bc8f-f111-832d-7c1e5233db45")
+            with open(p, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+
+            self.assertEqual(saved.get("data_source"), "DATA_UNAVAILABLE", "Omitted data_source must default to DATA_UNAVAILABLE")
+            self.assertNotEqual(saved.get("data_source"), "TEST_FIXTURE")
+            self.assertNotEqual(saved.get("data_source"), "LIVE_BUSINESS_CENTRAL")
 
 
 if __name__ == "__main__":
