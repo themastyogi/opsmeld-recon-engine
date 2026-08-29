@@ -32,7 +32,51 @@ def run_diagnostic():
     print(f"Access Token Acquired: {bool(token)}")
 
     if not token:
-        print("ERROR: Access token could not be acquired. Check session or device code flow.")
+        print("\n===== MSAL AUTHENTICATION & TOKEN CACHE DIAGNOSTIC =====")
+        try:
+            import msal
+            print("MSAL module imported: OK")
+            cache = msal.SerializableTokenCache()
+            if cache_path.exists():
+                print(f"Token Cache File Size: {cache_path.stat().st_size} bytes")
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    raw_data = f.read()
+                    cache.deserialize(raw_data)
+                    app = msal.PublicClientApplication(
+                        client_id=cfg.app_client_id,
+                        authority=f"https://login.microsoftonline.com/{cfg.tenant_id}",
+                        token_cache=cache,
+                    )
+                    accounts = app.get_accounts()
+                    print(f"Accounts found in token cache: {len(accounts)}")
+                    for i, acc in enumerate(accounts):
+                        print(f"  Account [{i}]: username={acc.get('username')}")
+
+                    if accounts:
+                        res_default = app.acquire_token_silent(cfg.scopes, account=accounts[0])
+                        if res_default and "access_token" in res_default:
+                            print("  acquire_token_silent(cfg.scopes): SUCCESS")
+                        else:
+                            err_name = res_default.get('error') if res_default else 'None'
+                            err_desc = res_default.get('error_description') if res_default else 'No result'
+                            print(f"  acquire_token_silent(cfg.scopes): FAILED -> {err_name}: {err_desc}")
+
+                        res_user = app.acquire_token_silent(["https://api.businesscentral.dynamics.com/user_impersonation"], account=accounts[0])
+                        if res_user and "access_token" in res_user:
+                            print("  acquire_token_silent(user_impersonation): SUCCESS")
+                        else:
+                            err_name = res_user.get('error') if res_user else 'None'
+                            err_desc = res_user.get('error_description') if res_user else 'No result'
+                            print(f"  acquire_token_silent(user_impersonation): FAILED -> {err_name}: {err_desc}")
+            else:
+                print("Token cache file does NOT exist at path.")
+
+            client_secret = getattr(cfg, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
+            print(f"Client Secret configured: {bool(client_secret)}")
+        except Exception as ex:
+            print(f"MSAL Diagnostic Exception: {ex}")
+
+        print("\nERROR: Access token could not be acquired. Check session or device code flow.")
         return
 
     raw = client._execute_bc_rest("companies")
