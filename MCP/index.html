@@ -306,97 +306,217 @@
     </style>
 </head>
 <body>
-    <!-- 1. PUBLIC OPSMELD SAAS LANDING VIEW (No left sidebar, no application controls) -->
-    <div id="view-public-landing" style="display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F172A; min-height: 100vh; color: #F8FAFC;">
-        <!-- Top SaaS Header -->
-        <div style="max-width: 1200px; margin: 0 auto; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
-            <div style="display: flex; align-items: center; gap: 12px; font-weight: 900; font-size: 1.4rem; letter-spacing: -0.03em; color: white; cursor: pointer;" onclick="switchMainView('public')">
-                🟢 opsmeld
+    <!-- 1. PUBLIC OPSMELD SAAS LANDING VIEW (Standalone SaaS Marketing Portal matching Mockup) -->
+    <div id="view-public-landing" style="display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0A0F1D; min-height: 100vh; color: #F8FAFC;">
+        <!-- Top SaaS Navigation Header -->
+        <div style="max-width: 1240px; margin: 0 auto; padding: 22px 32px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.07);">
+            <div style="display: flex; align-items: center; gap: 40px;">
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.45rem; letter-spacing: -0.03em; color: white; cursor: pointer;" onclick="switchMainView('public')">
+                    <span style="color: #10B981; font-size: 1.25rem;">●</span> opsmeld
+                </div>
+                <div style="display: flex; gap: 28px; font-size: 0.92rem; font-weight: 500; color: #94A3B8;">
+                    <a style="color: white; text-decoration: none; cursor: pointer;" onclick="switchMainView('public')">Platform</a>
+                    <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Solutions ▾</a>
+                    <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Resources ▾</a>
+                    <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">About Us</a>
+                    <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Pricing</a>
+                </div>
             </div>
-            <div style="display: flex; gap: 32px; font-size: 0.95rem; font-weight: 500; color: #94A3B8;">
-                <a style="color: white; text-decoration: none; cursor: pointer;" onclick="switchMainView('public')">Platform</a>
-                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Solutions</a>
-                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">About</a>
-                <a style="color: #94A3B8; text-decoration: none; cursor: pointer;">Contact</a>
-            </div>
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <button class="btn-btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.2); padding: 8px 18px; font-size: 0.88rem; font-weight: 600;" onclick="switchMainView('signin')">Sign In</button>
-                <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 8px 18px; font-size: 0.88rem; font-weight: 700;" onclick="switchMainView('control-tower')">Launch Platform ➔</button>
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <button class="btn-btn" style="background: transparent; color: white; border: none; padding: 8px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer;" onclick="switchMainView('signin')">Sign In</button>
+                <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 10px 22px; font-size: 0.9rem; font-weight: 700; border-radius: 6px; cursor: pointer;" onclick="alert('📩 Request Access workflow initiated. Contact your Opsmeld Enterprise Administrator.')">Request Access</button>
             </div>
         </div>
 
-        <!-- Hero Section -->
-        <div style="max-width: 900px; margin: 60px auto 40px auto; text-align: center; padding: 0 24px;">
-            <div style="display: inline-block; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34D399; font-size: 0.8rem; font-weight: 800; padding: 6px 16px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px;">
-                🟢 Opsmeld Financial Intelligence Platform
+        <!-- Hero Section (Two-Column Layout matching Mockup) -->
+        <div style="max-width: 1240px; margin: 50px auto 70px auto; padding: 0 32px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center;">
+            <!-- Left Column: Copy & CTAs -->
+            <div>
+                <h1 style="font-size: 3.2rem; font-weight: 900; line-height: 1.15; color: white; margin: 0 0 24px 0; letter-spacing: -0.03em;">
+                    Financial intelligence<br>for <span style="color: #10B981;">Business Central</span>
+                </h1>
+                <p style="font-size: 1.12rem; color: #94A3B8; line-height: 1.65; margin: 0 0 36px 0; max-width: 560px;">
+                    Opsmeld unifies receivables management, financial data assurance and compliance intelligence in one secure platform.
+                </p>
+                <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 32px;">
+                    <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 14px 30px; font-size: 1rem; font-weight: 700; border-radius: 8px; cursor: pointer;" onclick="switchMainView('control-tower')">Explore the Platform →</button>
+                    <button class="btn-btn" style="background: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 14px 26px; font-size: 0.95rem; font-weight: 600; border-radius: 8px; cursor: pointer;" onclick="alert('▶ Opsmeld Product Demo video streaming...')">▶ Watch Demo</button>
+                </div>
+                <div style="display: flex; gap: 24px; font-size: 0.82rem; color: #94A3B8; font-weight: 600;">
+                    <span><span style="color: #10B981;">✓</span> Built for Microsoft Business Central</span>
+                    <span><span style="color: #10B981;">✓</span> Enterprise-Grade Security</span>
+                    <span><span style="color: #10B981;">✓</span> Continuous Intelligence</span>
+                </div>
             </div>
-            <h1 style="font-size: 3rem; font-weight: 900; line-height: 1.15; color: white; margin: 0 0 20px 0; letter-spacing: -0.03em;">
-                Financial Intelligence for Microsoft Business Central
-            </h1>
-            <p style="font-size: 1.15rem; color: #94A3B8; line-height: 1.6; margin: 0 0 32px 0;">
-                Turn your Business Central financial data into continuous control, subledger reconciliation, risk mitigation, and automated action.
-            </p>
-            <div style="display: flex; justify-content: center; gap: 16px;">
-                <button class="btn-btn" style="background: #2563EB; color: white; border: none; padding: 12px 28px; font-size: 0.95rem; font-weight: 700; border-radius: 8px;" onclick="switchMainView('control-tower')">Explore Platform Modules ➔</button>
-                <button class="btn-btn" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 12px 28px; font-size: 0.95rem; font-weight: 600; border-radius: 8px;" onclick="switchMainView('signin')">Sign In with Microsoft 🔑</button>
+
+            <!-- Right Column: Marketing Dashboard Preview Card (Mockup Visual) -->
+            <div style="background: #131B2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: #94A3B8;">
+                        <span style="color: #10B981;">●</span> Opsmeld Platform
+                    </div>
+                    <span style="background: rgba(16,185,129,0.15); color: #34D399; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 12px;">LIVE MONITORING</span>
+                </div>
+
+                <!-- 4 Marketing Metric Tiles -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;">
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.68rem; color: #64748B; font-weight: 600;">Open Receivables</div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: white; margin: 4px 0;">$4.8M</div>
+                        <div style="font-size: 0.65rem; color: #EF4444; font-weight: 700;">↓ 8.2% vs last mo</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.68rem; color: #64748B; font-weight: 600;">Collections Workload</div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: white; margin: 4px 0;">128</div>
+                        <div style="font-size: 0.65rem; color: #10B981; font-weight: 700;">↑ 12% vs last mo</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.68rem; color: #64748B; font-weight: 600;">Data Trust Alerts</div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: white; margin: 4px 0;">24</div>
+                        <div style="font-size: 0.65rem; color: #F59E0B; font-weight: 700;">⚡ 5 new alerts</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.68rem; color: #64748B; font-weight: 600;">Compliance Score</div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: white; margin: 4px 0;">98%</div>
+                        <div style="font-size: 0.65rem; color: #10B981; font-weight: 700;">↑ 2% improvement</div>
+                    </div>
+                </div>
+
+                <!-- Inner Panels: Risk Overview & Recent Alerts -->
+                <div style="display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px;">
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 12px; border-radius: 10px;">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #CBD5E1; margin-bottom: 8px;">Risk Overview</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.72rem; color: #94A3B8;">
+                            <div style="display: flex; justify-content: space-between;"><span>🟢 Low Risk</span><strong style="color: white;">72%</strong></div>
+                            <div style="display: flex; justify-content: space-between;"><span>🟡 Medium Risk</span><strong style="color: white;">18%</strong></div>
+                            <div style="display: flex; justify-content: space-between;"><span>🔴 High Risk</span><strong style="color: white;">10%</strong></div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 12px; border-radius: 10px;">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #CBD5E1; margin-bottom: 8px;">Recent Alerts</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.7rem; color: #94A3B8;">
+                            <div style="display: flex; justify-content: space-between;"><span>🚨 Posting-date policy violation</span><span style="color: #64748B;">2m ago</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>⚠️ Subledger bypass detected</span><span style="color: #64748B;">15m ago</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>🔍 Narration mismatch</span><span style="color: #64748B;">1h ago</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Product Applications Cards Grid -->
-        <div style="max-width: 1100px; margin: 40px auto 80px auto; padding: 0 24px;">
-            <div style="text-align: center; font-size: 0.85rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px;">
-                The Opsmeld Platform Applications
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;">
-                <!-- Card 1: AR Control Tower -->
-                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                            <div style="font-size: 2.2rem;">🎯</div>
-                            <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
-                        </div>
-                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">AR Control Tower</h3>
-                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
-                            Receivables workload management, customer risk tiering, collection procedure workflows, and draft General Journal voucher staging.
-                        </p>
-                    </div>
-                    <button id="btn-ar_control_tower" class="btn-btn" style="background: #059669; color: white; width: 100%; font-weight: 700; padding: 12px;" onclick="switchMainView('control-tower')">Launch AR Control Tower ➔</button>
+        <!-- Product Selection Section (Matching Mockup Middle Grid) -->
+        <div style="max-width: 1240px; margin: 0 auto 90px auto; padding: 0 32px;">
+            <div style="text-align: center; margin-bottom: 48px;">
+                <div style="font-size: 0.78rem; font-weight: 800; color: #10B981; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px;">
+                    THE OPSMELD PLATFORM
                 </div>
-
-                <!-- Card 2: Data Trust Expert -->
-                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                            <div style="font-size: 2.2rem;">🛡️</div>
-                            <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
-                        </div>
-                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Data Trust Expert</h3>
-                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
-                            Continuous Business Central transaction audit, posting-date policy enforcement, subledger bypass detection & narration mismatch interpretation.
-                        </p>
-                    </div>
-                    <button id="btn-data_trust" class="btn-btn" style="background: #2563EB; color: white; width: 100%; font-weight: 700; padding: 12px;" onclick="switchMainView('data-trust')">Launch Data Trust Expert ➔</button>
-                </div>
-
-                <!-- Card 3: Financial Compliance (Layer 3) -->
-                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; opacity: 0.8;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                            <div style="font-size: 2.2rem;">🔮</div>
-                            <span id="badge-layer_3" style="background: #F3E8FF; color: #6B21A8; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">⚡ COMING SOON</span>
-                        </div>
-                        <h3 style="font-size: 1.25rem; font-weight: 800; color: white; margin: 0 0 10px 0;">Financial Compliance</h3>
-                        <p style="font-size: 0.88rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0;">
-                            Posting-date compliance rules, subledger controls, GAAP narration taxonomy interpretation, and automated regulatory reporting.
-                        </p>
-                    </div>
-                    <button id="btn-layer_3" class="btn-btn" style="background: #475569; color: #CBD5E1; width: 100%; font-weight: 700; padding: 12px; cursor: not-allowed;" disabled>Request Access 🔒</button>
-                </div>
+                <h2 style="font-size: 2.2rem; font-weight: 900; color: white; margin: 0 0 12px 0; letter-spacing: -0.02em;">
+                    One platform. Multiple intelligence layers.
+                </h2>
+                <p style="font-size: 1rem; color: #94A3B8; max-width: 650px; margin: 0 auto; line-height: 1.6;">
+                    Choose the solutions you need. All powered by a unified data foundation and secured by enterprise-grade identity and access management.
+                </p>
             </div>
 
-            <div style="text-align: center; font-size: 0.82rem; color: #64748B; margin-top: 40px;">
-                One identity. One platform. Multiple financial intelligence layers.
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;">
+                <!-- Product Card 1: AR Control Tower -->
+                <div style="background: white; border-radius: 16px; padding: 32px; color: #0F172A; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
+                    <div>
+                        <div style="width: 52px; height: 52px; background: #D1FAE5; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin-bottom: 20px;">
+                            🎯
+                        </div>
+                        <h3 style="font-size: 1.35rem; font-weight: 900; color: #0F172A; margin: 0 0 4px 0;">AR Control Tower</h3>
+                        <div style="font-size: 0.88rem; font-weight: 700; color: #059669; margin-bottom: 14px;">Receivables & Cash Recovery</div>
+                        <p style="font-size: 0.88rem; color: #475569; line-height: 1.6; margin: 0 0 28px 0;">
+                            Prioritize collections, identify customer risk, manage collection workflows and accelerate cash recovery.
+                        </p>
+                    </div>
+                    <button class="btn-btn" style="background: transparent; color: #059669; border: none; padding: 0; font-size: 0.95rem; font-weight: 800; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="switchMainView('control-tower')">
+                        Explore AR Control Tower →
+                    </button>
+                </div>
+
+                <!-- Product Card 2: Data Trust Expert -->
+                <div style="background: white; border-radius: 16px; padding: 32px; color: #0F172A; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
+                    <div>
+                        <div style="width: 52px; height: 52px; background: #DBEAFE; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin-bottom: 20px;">
+                            🛡️
+                        </div>
+                        <h3 style="font-size: 1.35rem; font-weight: 900; color: #0F172A; margin: 0 0 4px 0;">Data Trust Expert</h3>
+                        <div style="font-size: 0.88rem; font-weight: 700; color: #2563EB; margin-bottom: 14px;">Financial Data Assurance</div>
+                        <p style="font-size: 0.88rem; color: #475569; line-height: 1.6; margin: 0 0 28px 0;">
+                            Detect posting-date issues, subledger bypasses, transaction anomalies and data integrity risks in real time.
+                        </p>
+                    </div>
+                    <button class="btn-btn" style="background: transparent; color: #2563EB; border: none; padding: 0; font-size: 0.95rem; font-weight: 800; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="switchMainView('data-trust')">
+                        Explore Data Trust Expert →
+                    </button>
+                </div>
+
+                <!-- Product Card 3: Financial Compliance -->
+                <div style="background: white; border-radius: 16px; padding: 32px; color: #0F172A; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
+                    <div>
+                        <div style="width: 52px; height: 52px; background: #F3E8FF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin-bottom: 20px;">
+                            🏛️
+                        </div>
+                        <h3 style="font-size: 1.35rem; font-weight: 900; color: #0F172A; margin: 0 0 4px 0;">Financial Compliance</h3>
+                        <div style="font-size: 0.88rem; font-weight: 700; color: #7C3AED; margin-bottom: 14px;">Compliance Intelligence</div>
+                        <p style="font-size: 0.88rem; color: #475569; line-height: 1.6; margin: 0 0 28px 0;">
+                            Posting-date compliance, subledger controls, GAAP narration interpretation and automated regulatory reporting.
+                        </p>
+                    </div>
+                    <div>
+                        <span style="background: #F3E8FF; color: #6B21A8; font-size: 0.8rem; font-weight: 800; padding: 8px 16px; border-radius: 20px; display: inline-block;">
+                            Coming Soon
+                        </span>
+                    </div>
+                </div>
             </div>
+
+            <!-- Bottom Platform Highlights Bar (Matching Mockup Bottom Row) -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 24px 32px; margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
+                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                    <div style="font-size: 1.4rem;">⬡</div>
+                    <div>
+                        <div style="font-size: 0.88rem; font-weight: 800; color: white; margin-bottom: 4px;">Unified Platform</div>
+                        <div style="font-size: 0.78rem; color: #94A3B8; line-height: 1.4;">One identity. One experience. All your financial intelligence.</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                    <div style="font-size: 1.4rem;">🛡️</div>
+                    <div>
+                        <div style="font-size: 0.88rem; font-weight: 800; color: white; margin-bottom: 4px;">Secure by Design</div>
+                        <div style="font-size: 0.78rem; color: #94A3B8; line-height: 1.4;">Enterprise security with Microsoft Entra ID and role-based access.</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                    <div style="font-size: 1.4rem;">🔄</div>
+                    <div>
+                        <div style="font-size: 0.88rem; font-weight: 800; color: white; margin-bottom: 4px;">Always Up-to-Date</div>
+                        <div style="font-size: 0.78rem; color: #94A3B8; line-height: 1.4;">Continuous monitoring and intelligence you can trust.</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                    <div style="font-size: 1.4rem;">🏛️</div>
+                    <div>
+                        <div style="font-size: 0.88rem; font-weight: 800; color: white; margin-bottom: 4px;">Built for Scale</div>
+                        <div style="font-size: 0.78rem; color: #94A3B8; line-height: 1.4;">From mid-market to enterprise, we grow with you.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="max-width: 1240px; margin: 0 auto; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.82rem; color: #64748B;">
+            <div style="display: flex; align-items: center; gap: 24px;">
+                <span style="color: white; font-weight: 900; font-size: 1.1rem;"><span style="color: #10B981;">●</span> opsmeld</span>
+                <a>Platform</a>
+                <a>Solutions</a>
+                <a>Resources</a>
+                <a>About Us</a>
+                <a>Support</a>
+            </div>
+            <div>© 2026 Opsmeld. All rights reserved.</div>
         </div>
     </div>
 
