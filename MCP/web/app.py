@@ -14,6 +14,7 @@ import urllib.parse
 from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
 from core.auth import get_auth_manager
+from core.rbac import RBACResolver, get_module_registry
 from modules.ar_manager import ARManagerReport
 from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
@@ -69,16 +70,57 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return session_info["client_key"]
         return load_client_config().client_key
 
-    def _require_auth(self) -> Optional[Dict[str, Any]]:
-        """Enforces session authentication for protected API endpoints."""
+    def _require_auth(
+        self,
+        required_permission: Optional[str] = None,
+        company_id: Optional[str] = None,
+        require_company: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Enforces two-dimensional authorization security boundary:
+        1. Authentication Check: Active Opsmeld session token required (HTTP 401).
+        2. Dimension 1 Check: Required module permission (HTTP 403 Forbidden).
+        3. Dimension 2 Check: Explicit company entitlement (HTTP 403 Access Denied / 400 Configuration Missing).
+        """
         token = self._get_session_token()
         auth_mgr = get_auth_manager()
-        session_info = auth_mgr.get_session_info(token)
-        if not session_info:
+        session = auth_mgr.get_session(token)
+        if not session:
             self._set_headers("application/json", 401)
-            self._write_response(json.dumps({"error": "Unauthorized: Active session token required"}).encode("utf-8"))
+            self._write_response(json.dumps({
+                "error": "Unauthorized: Active Opsmeld session token required",
+                "status": "AUTHENTICATION_UNAVAILABLE"
+            }).encode("utf-8"))
             return None
-        return session_info
+
+        # Check Dimension 1: Module Permission
+        if required_permission and not session.has_permission(required_permission):
+            self._set_headers("application/json", 403)
+            self._write_response(json.dumps({
+                "error": f"Forbidden: User lacks required module permission '{required_permission}'",
+                "status": "ACCESS_DENIED"
+            }).encode("utf-8"))
+            return None
+
+        # Check Dimension 2: Explicit Company Entitlement
+        if require_company or company_id is not None:
+            if not company_id or not GUID_REGEX.match(company_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return None
+
+            if not session.is_company_allowed(company_id):
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": f"Access Denied: User is not authorized to access company '{company_id}'",
+                    "status": "ACCESS_DENIED"
+                }).encode("utf-8"))
+                return None
+
+        return session.to_dict()
 
     def _is_authenticated(self) -> bool:
         """Returns True if request has a valid session token or is local preview mode."""
@@ -135,6 +177,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(html.encode("utf-8"))
 
         elif path == "/api/ar-manager/data":
+            session_info = self._require_auth(required_permission="ar_control_tower:read")
+            if not session_info:
+                return
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             rules = load_engine_rules()
@@ -163,6 +208,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(data).encode("utf-8"))
 
         elif path == "/api/ar-manager/procedure-detail":
+            session_info = self._require_auth(required_permission="ar_control_tower:read")
+            if not session_info:
+                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             tier = query_params.get("tier", ["high"])[0]
             customer_no_list = query_params.get("customer_no", [None])
@@ -177,6 +225,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(detail).encode("utf-8"))
 
         elif path == "/api/ar-manager/control-tower":
+            session_info = self._require_auth(required_permission="ar_control_tower:read")
+            if not session_info:
+                return
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             rules = load_engine_rules()
@@ -187,6 +238,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(ct_data).encode("utf-8"))
 
         elif path == "/api/ar-manager/collections":
+            session_info = self._require_auth(required_permission="ar_control_tower:read")
+            if not session_info:
+                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             try:
                 page = int(query_params.get("page", ["1"])[0])
@@ -205,6 +259,44 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             collections_data = report.get_collections_workload_page(page=page, page_size=page_size)
             self._set_headers("application/json")
             self._write_response(json.dumps(collections_data).encode("utf-8"))
+
+        elif path == "/api/auth/me":
+            token = self._get_session_token()
+            auth_mgr = get_auth_manager()
+            session = auth_mgr.get_session(token)
+            self._set_headers("application/json")
+            if not session:
+                self._write_response(json.dumps({"authenticated": False}).encode("utf-8"))
+            else:
+                self._write_response(json.dumps({
+                    "authenticated": True,
+                    "user": {
+                        "id": session.user_id,
+                        "email": session.email,
+                        "display_name": session.display_name
+                    },
+                    "roles": sorted(session.roles),
+                    "permissions": sorted(list(session.permissions)),
+                    "allowed_companies": sorted(list(session.allowed_companies))
+                }).encode("utf-8"))
+
+        elif path == "/api/auth/logout":
+            token = self._get_session_token()
+            if token:
+                get_auth_manager().revoke_session(token)
+            self._set_headers("application/json", 200, cookie="")
+            self._write_response(json.dumps({"status": "success", "message": "Logged out successfully"}).encode("utf-8"))
+
+        elif path == "/api/portal/modules":
+            session_info = self._require_auth()
+            if not session_info:
+                return
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            user_perms = session.permissions if session else set()
+            modules_status = RBACResolver.get_module_status_for_user(user_perms)
+            self._set_headers("application/json")
+            self._write_response(json.dumps({"modules": modules_status}).encode("utf-8"))
 
         elif path == "/api/debug/bc":
             import os
@@ -262,7 +354,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
         # Route-level security boundary: _require_auth() enforced before company discovery or orchestrator creation
         elif path == "/api/data-trust/authorized-companies":
-            session_info = self._require_auth()
+            session_info = self._require_auth(required_permission="data_trust:read")
             if not session_info:
                 return
             client_key = self._get_client_key(parsed_url)
@@ -279,17 +371,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
-            session_info = self._require_auth()
-            if not session_info:
-                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
-            if not company_id or not GUID_REGEX.match(company_id):
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
+            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id, require_company=True)
+            if not session_info:
                 return
 
             client_key = self._get_client_key(parsed_url)
@@ -315,17 +400,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps(res).encode("utf-8"))
 
         elif path == "/api/data-trust/findings":
-            session_info = self._require_auth()
-            if not session_info:
-                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
-            if not company_id or not GUID_REGEX.match(company_id):
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
+            session_info = self._require_auth(required_permission="data_trust:read", company_id=company_id, require_company=True)
+            if not session_info:
                 return
 
             client_key = self._get_client_key(parsed_url)
@@ -541,9 +619,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(html.encode("utf-8"))
 
         elif path == "/api/data-trust/update-status":
-            session_info = self._require_auth()
-            if not session_info:
-                return
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
             content_length = int(self.headers.get("Content-Length", 0))
@@ -558,12 +633,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 post_data = urllib.parse.parse_qs(body)
                 finding_id = post_data.get("finding_id", [""])[0]
                 new_status = post_data.get("status", [""])[0]
-            if not company_id or not GUID_REGEX.match(company_id):
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({
-                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
-                    "status": "CONFIGURATION_MISSING"
-                }).encode("utf-8"))
+
+            session_info = self._require_auth(required_permission="data_trust:write", company_id=company_id, require_company=True)
+            if not session_info:
                 return
 
             client_key = self._get_client_key(parsed_url)

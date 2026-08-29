@@ -308,15 +308,11 @@
 <body>
     <div class="top-header">
         <div style="display: flex; align-items: center; gap: 24px;">
-            <div style="font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em;">🟢 opsmeld</div>
+            <div style="font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; cursor: pointer;" onclick="switchMainView('portal-landing')">🟢 opsmeld</div>
             <div class="top-nav">
-                <a class="top-nav-item">Invoicing</a>
-                <a class="top-nav-item">Payments</a>
-                <a class="top-nav-item">Cash App</a>
-                <a class="top-nav-item active">Collections</a>
-                <a class="top-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust</a>
-                <a class="top-nav-item">Credit</a>
-                <a class="top-nav-item">Disputes</a>
+                <a id="nav-top-portal" class="top-nav-item active" onclick="switchMainView('portal-landing')">🏠 Portal Home</a>
+                <a id="nav-top-ar" class="top-nav-item" onclick="switchMainView('control-tower')">🎯 AR Control Tower</a>
+                <a id="nav-top-dt" class="top-nav-item" onclick="switchMainView('data-trust')">🛡️ Data Trust Expert</a>
             </div>
         </div>
         <div class="top-user">
@@ -394,8 +390,69 @@
         <div class="main-content">
             <div id="notice-container"></div>
 
+            <!-- OPSMELD UNIFIED APPLICATION PORTAL LANDING VIEW -->
+            <div id="view-portal-landing" style="display: block;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 28px; border-radius: 12px; color: white;">
+                    <div>
+                        <div style="font-size: 0.8rem; font-weight: 700; color: #10B981; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">🟢 Opsmeld Unified Portal</div>
+                        <h2 style="font-size: 1.8rem; font-weight: 800; margin: 0; color: white;">Welcome to Opsmeld</h2>
+                        <div style="font-size: 0.9rem; color: #94A3B8; margin-top: 6px;">Enterprise Financial Intelligence & Reconciliation Platform • Authenticated Session Active</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span id="portal-user-badge" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #F8FAFC;">
+                            👤 Platform Admin (ENTERPRISE_ADMIN)
+                        </span>
+                    </div>
+                </div>
+
+                <div style="font-weight: 700; font-size: 1.1rem; color: #1E293B; margin-bottom: 16px;">
+                    Enterprise Applications & Modules
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px;" id="portal-modules-grid">
+                    <!-- Module Card 1: AR Control Tower -->
+                    <div id="card-ar_control_tower" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div style="font-size: 2rem;">🎯</div>
+                                <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">✓ ENABLED</span>
+                            </div>
+                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">AR Control Tower</h3>
+                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Receivables workload management, customer risk tiering, collection procedure workflows, and draft General Journal voucher staging.</p>
+                        </div>
+                        <button id="btn-ar_control_tower" class="btn-btn" style="background: #059669; width: 100%; font-weight: 700; padding: 10px; cursor: pointer;" onclick="switchMainView('control-tower')">Launch AR Control Tower ➔</button>
+                    </div>
+
+                    <!-- Module Card 2: Data Trust Expert -->
+                    <div id="card-data_trust" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div style="font-size: 2rem;">🛡️</div>
+                                <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">✓ ENABLED</span>
+                            </div>
+                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Data Trust Expert</h3>
+                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Continuous Business Central transaction audit, posting-date policy enforcement, subledger bypass detection & narration mismatch interpretation.</p>
+                        </div>
+                        <button id="btn-data_trust" class="btn-btn" style="background: #2563EB; width: 100%; font-weight: 700; padding: 10px; cursor: pointer;" onclick="switchMainView('data-trust')">Launch Data Trust Expert ➔</button>
+                    </div>
+
+                    <!-- Module Card 3: Layer 3 Financial Compliance (Extensible Preview) -->
+                    <div id="card-layer_3" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; justify-content: space-between; opacity: 0.85;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div style="font-size: 2rem;">🔮</div>
+                                <span id="badge-layer_3" style="background: #F3E8FF; color: #6B21A8; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">⚡ EXTENSIBLE LAYER</span>
+                            </div>
+                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Financial Compliance</h3>
+                            <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Posting-date compliance rules, subledger controls, GAAP narration taxonomy interpretation, and automated regulatory reporting.</p>
+                        </div>
+                        <button id="btn-layer_3" class="btn-btn" style="background: #64748B; width: 100%; font-weight: 700; padding: 10px; cursor: not-allowed;" disabled>Extensible Registry Layer</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- CONTROL TOWER VIEW (PRIMARY EXECUTIVE DASHBOARD) -->
-            <div id="view-control-tower" style="display: block;">
+            <div id="view-control-tower" style="display: none;">
                 <!-- Greeting Header Banner -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <div>
@@ -1249,6 +1306,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        loadOpsmeldPortalInfo();
         loadLiveCustomerData();
         loadControlTowerData();
     });
@@ -1256,45 +1314,91 @@
     let currentInspectedFindingId = null;
 
     function switchMainView(viewName) {
-        const ctNav = document.getElementById('nav-item-control-tower');
-        const segNav = document.getElementById('nav-item-segments');
-        const dtNav = document.getElementById('nav-item-data-trust');
-        const sbDt = document.getElementById('sidebar-item-data-trust');
-
+        const portalView = document.getElementById('view-portal-landing');
         const ctView = document.getElementById('view-control-tower');
         const segView = document.getElementById('view-segments');
         const dtView = document.getElementById('view-data-trust');
 
-        if (viewName === 'control-tower') {
-            if (ctNav) ctNav.classList.add('active');
-            if (segNav) segNav.classList.remove('active');
-            if (dtNav) dtNav.classList.remove('active');
-            if (sbDt) sbDt.classList.remove('active');
+        const topPortal = document.getElementById('nav-top-portal');
+        const topAr = document.getElementById('nav-top-ar');
+        const topDt = document.getElementById('nav-top-dt');
 
+        document.querySelectorAll('.top-nav-item').forEach(el => el.classList.remove('active'));
+
+        if (viewName === 'portal-landing') {
+            if (topPortal) topPortal.classList.add('active');
+            if (portalView) portalView.style.display = 'block';
+            if (ctView) ctView.style.display = 'none';
+            if (segView) segView.style.display = 'none';
+            if (dtView) dtView.style.display = 'none';
+            loadOpsmeldPortalInfo();
+        } else if (viewName === 'control-tower') {
+            if (topAr) topAr.classList.add('active');
+            if (portalView) portalView.style.display = 'none';
             if (ctView) ctView.style.display = 'block';
             if (segView) segView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
             loadControlTowerData();
         } else if (viewName === 'data-trust') {
-            if (dtNav) dtNav.classList.add('active');
-            if (ctNav) ctNav.classList.remove('active');
-            if (segNav) segNav.classList.remove('active');
-            if (sbDt) sbDt.classList.add('active');
-
+            if (topDt) topDt.classList.add('active');
+            if (portalView) portalView.style.display = 'none';
             if (dtView) dtView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (segView) segView.style.display = 'none';
-            loadDataTrustFindings();
+            loadAuthorizedCompanies();
         } else {
-            if (segNav) segNav.classList.add('active');
-            if (ctNav) ctNav.classList.remove('active');
-            if (dtNav) dtNav.classList.remove('active');
-            if (sbDt) sbDt.classList.remove('active');
-
+            if (portalView) portalView.style.display = 'none';
             if (segView) segView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
         }
+    }
+
+    function loadOpsmeldPortalInfo() {
+        fetch('/api/auth/me', { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.authenticated && data.user) {
+                    const badge = document.getElementById('portal-user-badge');
+                    if (badge) {
+                        badge.textContent = `👤 ${data.user.display_name} (${(data.roles || []).join(', ') || 'USER'})`;
+                    }
+                    const greetingTitle = document.getElementById('user-greeting-title');
+                    if (greetingTitle) {
+                        greetingTitle.textContent = `Good day, ${data.user.display_name} 👋`;
+                    }
+                }
+            })
+            .catch(err => console.error('Error fetching auth me info:', err));
+
+        fetch('/api/portal/modules', { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.modules) {
+                    data.modules.forEach(mod => {
+                        const badge = document.getElementById('badge-' + mod.id);
+                        const btn = document.getElementById('btn-' + mod.id);
+                        if (badge && btn) {
+                            if (mod.enabled) {
+                                badge.textContent = '✓ ENABLED';
+                                badge.style.background = '#D1FAE5';
+                                badge.style.color = '#047857';
+                                btn.disabled = false;
+                                btn.style.opacity = '1';
+                                btn.style.cursor = 'pointer';
+                            } else {
+                                badge.textContent = '🔒 ACCESS RESTRICTED';
+                                badge.style.background = '#FEE2E2';
+                                badge.style.color = '#DC2626';
+                                btn.disabled = true;
+                                btn.style.opacity = '0.5';
+                                btn.style.cursor = 'not-allowed';
+                            }
+                        }
+                    });
+                }
+            })
+            .catch(err => console.error('Error fetching portal modules:', err));
     }
 
     function loadDataTrustFindings() {
