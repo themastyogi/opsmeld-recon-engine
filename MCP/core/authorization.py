@@ -53,7 +53,10 @@ class CentralAuthorizationEngine:
             return False, DenialReason.UNAUTHENTICATED
 
         datastore = get_datastore()
-        org_id = getattr(session, "organization_id", "org_abc_001")
+        org_id = getattr(session, "organization_id", None)
+        if not org_id:
+            logger.warning(f"Authorization Denied: User '{session.user_id}' is not assigned to an organization.")
+            return False, DenialReason.ORGANIZATION_SUSPENDED
 
         # Gate 2: Is organization active?
         org = datastore.get_organization(org_id)

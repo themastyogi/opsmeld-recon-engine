@@ -23,7 +23,7 @@ class OpsmeldUserSession:
         email: str,
         display_name: str,
         roles: List[str],
-        organization_id: str = "org_abc_001",
+        organization_id: Optional[str] = None,
         permissions: Optional[Set[str]] = None,
         allowed_companies: Optional[Set[str]] = None,
         created_at: Optional[float] = None,
@@ -59,9 +59,9 @@ class OpsmeldUserSession:
     def to_dict(self) -> Dict[str, Any]:
         from core.models import get_datastore
         ds = get_datastore()
-        org = ds.get_organization(self.organization_id)
-        org_name = org.name if org else "ABC Manufacturing"
-        org_status = org.status if org else "ACTIVE"
+        org = ds.get_organization(self.organization_id) if self.organization_id else None
+        org_name = org.name if org else None
+        org_status = org.status if org else None
         return {
             "token": self.token,
             "user": {
@@ -73,7 +73,7 @@ class OpsmeldUserSession:
                 "id": self.organization_id,
                 "name": org_name,
                 "status": org_status
-            },
+            } if self.organization_id else None,
             "roles": sorted(self.roles),
             "permissions": sorted(list(self.permissions)),
             "allowed_companies": sorted(list(self.allowed_companies)),
@@ -127,19 +127,22 @@ class AuthManager:
         email: str,
         display_name: str,
         roles: List[str],
+        organization_id: str = "org_abc_001",
         allowed_companies: Optional[Set[str]] = None,
-        direct_permissions: Optional[List[str]] = None
+        direct_permissions: Optional[List[str]] = None,
+        permissions: Optional[Set[str]] = None
     ) -> str:
-        """Creates an authenticated session token with explicit RBAC permissions and company entitlements."""
+        """Creates an authenticated session token with explicit multitenant organization and company entitlements."""
         token = secrets.token_hex(32)
-        permissions = RBACResolver.resolve_permissions(roles, direct_permissions=direct_permissions)
+        resolved_perms = permissions if permissions is not None else RBACResolver.resolve_permissions(roles, direct_permissions=direct_permissions)
         session = OpsmeldUserSession(
             token=token,
             user_id=user_id,
             email=email,
             display_name=display_name,
+            organization_id=organization_id,
             roles=roles,
-            permissions=permissions,
+            permissions=resolved_perms,
             allowed_companies=allowed_companies
         )
         _ACTIVE_SESSIONS[token] = session
@@ -157,21 +160,41 @@ class AuthManager:
                 user_id="usr_admin_001",
                 email=self.admin_user,
                 display_name="Platform Admin",
+                organization_id="org_abc_001",
                 roles=["ENTERPRISE_ADMIN"],
                 allowed_companies=self.default_admin_companies
             )
         return None
 
-    def login_entra_user(self, email: Optional[str] = None, display_name: Optional[str] = None) -> str:
-        """Creates an authenticated session for Entra ID login."""
+    def login_entra_user(self, email: Optional[str] = None, display_name: Optional[str] = None, entra_oid: Optional[str] = None) -> Optional[str]:
+        """
+        Resolves Entra Identity (email/oid) -> User -> OrganizationUser -> Organization.
+        If user is not assigned to an active Organization, fails closed and returns None.
+        """
         user_email = email or self.admin_user
         name = display_name or "Vikas Kumar (CRONUS IN)"
+
+        from core.models import get_datastore
+        ds = get_datastore()
+        resolved = ds.resolve_user_organization(user_email, entra_oid=entra_oid)
+
+        if not resolved:
+            logger.warning(f"Entra Login Failed: User '{user_email}' is not assigned to an active Customer Organization.")
+            return None
+
+        user, org = resolved
+        user_perms = ds.get_user_permissions(user.user_id, org.organization_id)
+        user_companies = ds.get_user_allowed_companies(user.user_id, org.organization_id)
+        roles = sorted(list(ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())))
+
         return self.create_session(
-            user_id="usr_entra_001",
-            email=user_email,
-            display_name=name,
-            roles=["ENTERPRISE_ADMIN"],
-            allowed_companies=self.default_admin_companies
+            user_id=user.user_id,
+            email=user.email,
+            display_name=user.display_name or name,
+            organization_id=org.organization_id,
+            roles=roles,
+            permissions=user_perms,
+            allowed_companies=user_companies
         )
 
     def get_session(self, session_token: Optional[str]) -> Optional[OpsmeldUserSession]:

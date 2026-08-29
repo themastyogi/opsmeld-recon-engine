@@ -185,6 +185,30 @@ class MultitenantDataStore:
     def get_user_allowed_companies(self, user_id: str, org_id: str) -> Set[str]:
         return self.user_company_acls.get(f"{user_id}:{org_id}", set())
 
+    def resolve_user_organization(self, email: str, entra_oid: Optional[str] = None) -> Optional[Tuple[User, Organization]]:
+        """
+        Resolves Entra OID / email -> User -> OrganizationUser -> Organization.
+        Returns (User, Organization) or None if user is not assigned to an organization.
+        """
+        email_clean = (email or "").strip().lower()
+        matched_user = None
+        for u in self.users.values():
+            if u.email.strip().lower() == email_clean or (entra_oid and u.entra_oid == entra_oid):
+                matched_user = u
+                break
+        if not matched_user:
+            return None
+
+        org_id = self.user_org.get(matched_user.user_id)
+        if not org_id:
+            return None
+
+        org = self.get_organization(org_id)
+        if not org:
+            return None
+
+        return matched_user, org
+
 
 _GLOBAL_DATASTORE = MultitenantDataStore()
 
