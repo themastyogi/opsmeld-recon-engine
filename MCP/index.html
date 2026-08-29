@@ -2426,8 +2426,10 @@
                 if (res.status === 401) {
                     const select = document.getElementById('dt-company-select');
                     if (select) {
-                        select.innerHTML = '<option value="">Authentication Required (Sign In Modal Active)</option>';
+                        select.innerHTML = '<option value="">🔒 Authentication Required (Click here to Sign In)</option>';
+                        select.onclick = function() { openAppLoginModal(); };
                     }
+                    renderPlatformStateBanner('AUTHENTICATION_UNAVAILABLE', 'Active session required. <button class="btn-btn" style="background: #059669; color: white; margin-left: 12px; font-weight: 800; padding: 4px 12px;" onclick="openAppLoginModal()">Sign In Now 🔑</button>');
                     openAppLoginModal();
                     return null;
                 }
