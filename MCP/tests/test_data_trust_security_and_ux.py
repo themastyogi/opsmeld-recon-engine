@@ -558,6 +558,47 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.assertIn("error", data)
         self.assertEqual(data["customers"], [], "Expected zero customers on BC failure")
 
+    def test_n_authorized_companies_discovery_and_filtering(self):
+        """P0 Regression Test: When BC returns N companies, CompanyAccessManager discovers N authorized companies and filters out unauthorized companies without synthetic injection or removal."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        from unittest.mock import MagicMock
+
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+
+        # BC returns 3 companies: GUID-1, GUID-2, GUID-3
+        bc_companies = [
+            {"id": "GUID-COMP-01", "name": "CRONUS USA", "displayName": "CRONUS USA Inc"},
+            {"id": "GUID-COMP-02", "name": "CRONUS IN", "displayName": "CRONUS India"},
+            {"id": "GUID-COMP-03", "name": "CRONUS UK", "displayName": "CRONUS UK Ltd"}
+        ]
+
+        def mock_bc_rest(ep):
+            if ep == "companies":
+                return {"value": bc_companies}
+            elif "generalLedgerEntries" in ep:
+                # GUID-01 and GUID-02 succeed GL probe; GUID-03 fails with 403
+                if "GUID-COMP-03" in ep:
+                    return {"is_error": True, "http_status": 403, "error": "Access Denied"}
+                return {"value": [{"id": "GL-1"}]}
+            return {"value": []}
+
+        mock_client._execute_bc_rest.side_effect = mock_bc_rest
+
+        mgr = CompanyAccessManager()
+        discovered = mgr.get_discovered_companies(mock_client)
+
+        # Raw count: 3. Authorized count: 2 (GUID-01 and GUID-02).
+        self.assertEqual(len(discovered), 2, "Expected exactly 2 authorized companies returned")
+        discovered_ids = [c["id"] for c in discovered]
+        self.assertIn("GUID-COMP-01", discovered_ids)
+        self.assertIn("GUID-COMP-02", discovered_ids)
+        self.assertNotIn("GUID-COMP-03", discovered_ids, "Unauthorized company GUID-03 must be filtered out")
+
+        # Verify no synthetic companies injected
+        for c in discovered:
+            self.assertNotIn(c["id"], ("default_company", "unspecified_company", "FIXTURE_COMPANY"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -795,7 +795,7 @@
                         <span>🌐 Environment: <strong style="color: #4F46E5;">Production</strong></span>
                         <span>🏢 Company: 
                             <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 4px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; font-weight: 700; background: white; color: #0F172A;">
-                                <option value="CRONUS IN">CRONUS IN (CRONUS India)</option>
+                                <option value="">Loading authorized companies...</option>
                             </select>
                         </span>
                     </div>
@@ -2416,20 +2416,36 @@
     // Opsmeld Data Trust Platform UX JavaScript Functions
     function loadAuthorizedCompanies() {
         fetch('/api/data-trust/authorized-companies')
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
             .then(data => {
                 const select = document.getElementById('dt-company-select');
-                if (select && data.companies && data.companies.length > 0) {
+                if (select && data.companies) {
                     select.innerHTML = '';
+                    if (data.companies.length === 0) {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = 'No authorized companies available';
+                        select.appendChild(opt);
+                        return;
+                    }
                     data.companies.forEach(c => {
                         const opt = document.createElement('option');
-                        opt.value = c.id || c.name;
-                        opt.textContent = `${c.name} (${c.displayName || c.name})`;
+                        opt.value = c.id; // Real Business Central GUID
+                        opt.textContent = c.displayName ? `${c.name} (${c.displayName})` : c.name;
                         select.appendChild(opt);
                     });
                 }
             })
-            .catch(err => console.log('Company discovery fallback to active context'));
+            .catch(err => {
+                console.error('Company discovery error:', err);
+                const select = document.getElementById('dt-company-select');
+                if (select) {
+                    select.innerHTML = '<option value="">Failed to load authorized companies</option>';
+                }
+            });
     }
 
     function runDataTrustRecon(company_id) {

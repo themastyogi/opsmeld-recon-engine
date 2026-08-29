@@ -3,9 +3,12 @@ Opsmeld Data Trust - Server-Side Company Authorization and Discovery Module.
 Enforces that Data Trust never exposes Business Central data outside the authorized company scope.
 Integrates real company-scoped Business Central access verification as the final authorization gate.
 """
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from core.bc_mcp_client import BCMCPClient
 from modules.data_trust_engine.company_context import DataTrustState, build_user_message, map_http_error
+
+logger = logging.getLogger("OpsmeldReconEngine.Authorization")
 
 
 class CompanyAccessManager:
@@ -17,20 +20,40 @@ class CompanyAccessManager:
         pass
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
-        """Retrieves company list from Business Central REST API /companies endpoint."""
+        """Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies."""
         if not client:
             return []
         resp = client._execute_bc_rest("companies")
-        if isinstance(resp, dict) and isinstance(resp.get("value"), list):
-            return [
-                {
-                    "id": c.get("id"),
-                    "name": str(c.get("name") or c.get("id")),
-                    "displayName": str(c.get("displayName") or c.get("name") or c.get("id"))
-                }
-                for c in resp["value"] if isinstance(c, dict) and c.get("id")
-            ]
-        return []
+        if not isinstance(resp, dict) or resp.get("is_error") or "error" in resp:
+            logger.warning(f"BC /companies endpoint query failed: {resp.get('error') if isinstance(resp, dict) else 'Unknown error'}")
+            return []
+
+        raw_list = resp.get("value", []) if isinstance(resp, dict) and isinstance(resp.get("value"), list) else []
+        logger.info(f"BC /companies raw count: {len(raw_list)}")
+
+        authorized_companies = []
+        for c in raw_list:
+            if not isinstance(c, dict) or not c.get("id"):
+                continue
+            comp_id = c.get("id")
+            comp_name = str(c.get("name") or comp_id)
+            display_name = str(c.get("displayName") or comp_name)
+
+            # Step B verification gate: Verify company-scoped GL read access
+            probe_resp = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=1")
+            if isinstance(probe_resp, dict) and (probe_resp.get("is_error") or "error" in probe_resp):
+                status_code = probe_resp.get("http_status", 500)
+                logger.warning(f"Discovered company '{comp_name}' ({comp_id}) failed GL authorization probe (HTTP {status_code})")
+                continue
+
+            authorized_companies.append({
+                "id": comp_id,
+                "name": comp_name,
+                "displayName": display_name
+            })
+
+        logger.info(f"Authorized company count: {len(authorized_companies)}")
+        return authorized_companies
 
     def validate_company_access(
         self,
