@@ -1,4 +1,4 @@
-﻿# Live Business Central Company Discovery Diagnostic Tool
+# Live Business Central Company Discovery Diagnostic Tool
 import sys
 import json
 import logging
@@ -23,6 +23,9 @@ def run_diagnostic():
     cfg = load_client_config()
     print(f"Tenant ID: {cfg.tenant_id}")
     print(f"Environment: {cfg.environment}")
+    print(f"Client Key: {getattr(cfg, 'client_key', 'default_client')}")
+    cache_path = cfg.get_absolute_cache_path()
+    print(f"Token Cache Path: {cache_path} (Exists: {cache_path.exists()})")
 
     client = BCMCPClient(cfg)
     token = client.get_access_token()
