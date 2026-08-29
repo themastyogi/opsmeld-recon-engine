@@ -73,6 +73,9 @@ def run_diagnostic():
 
             client_secret = getattr(cfg, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
             print(f"Client Secret configured: {bool(client_secret)}")
+        except ImportError as ie:
+            print(f"MSAL ImportError: {ie}")
+            print("HINT: Run the script using the project virtualenv Python: `./venv/bin/python scratch/diagnose_company_discovery.py`")
         except Exception as ex:
             print(f"MSAL Diagnostic Exception: {ex}")
 
