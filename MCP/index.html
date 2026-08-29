@@ -1621,10 +1621,7 @@
             .then(r => r.json())
             .then(data => {
                 if (!data.authenticated) {
-                    if (publicLanding) publicLanding.style.display = 'none';
-                    if (signinWall) signinWall.style.display = 'flex';
-                    if (authDenied) authDenied.style.display = 'none';
-                    if (appShell) appShell.style.display = 'none';
+                    switchMainView('public');
                     return;
                 }
                 const permissions = data.permissions || [];
