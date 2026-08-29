@@ -408,7 +408,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
 
         # Verify disk persistence: ensure "does-not-exist" was NEVER created or persisted
         engine = DataTrustEngine(client_key="TEST_404_MUTATION")
-        findings, _ = engine._load_from_disk(company_id="GUID-COMP-VALID")
+        findings, *_ = engine._load_from_disk(company_id="GUID-COMP-VALID")
         self.assertFalse(any(f.get("id") == "does-not-exist" for f in findings))
 
     def test_bc_connected_zero_records_honest_empty_state(self):
@@ -508,17 +508,17 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         engine.save_stored_findings([{"id": "FINDING-B-2002", "data_source": "LIVE_BUSINESS_CENTRAL"}], company_id="GUID-COMP-B")
 
         # Query A -> Company A findings only
-        load_a1, _ = engine._load_from_disk(company_id="GUID-COMP-A")
+        load_a1, *_ = engine._load_from_disk(company_id="GUID-COMP-A")
         self.assertEqual(len(load_a1), 1)
         self.assertEqual(load_a1[0]["id"], "FINDING-A-1001")
 
         # Query B -> Company B findings only
-        load_b, _ = engine._load_from_disk(company_id="GUID-COMP-B")
+        load_b, *_ = engine._load_from_disk(company_id="GUID-COMP-B")
         self.assertEqual(len(load_b), 1)
         self.assertEqual(load_b[0]["id"], "FINDING-B-2002")
 
         # Query A again -> Company A findings only
-        load_a2, _ = engine._load_from_disk(company_id="GUID-COMP-A")
+        load_a2, *_ = engine._load_from_disk(company_id="GUID-COMP-A")
         self.assertEqual(len(load_a2), 1)
         self.assertEqual(load_a2[0]["id"], "FINDING-A-1001")
 

@@ -88,19 +88,19 @@ class DataTrustEngine:
         txs, _ = acquirer.acquire_transactions()
         return txs
 
-    def _load_from_disk(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _load_from_disk(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
         p = self.get_findings_file_path(company_id=company_id)
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
-                        return data.get("active_findings", []), data.get("_audit_history", [])
+                        return data.get("active_findings", []), data.get("_audit_history", []), data.get("data_source")
                     elif isinstance(data, list):
-                        return data, []
+                        return data, [], None
             except Exception:
                 pass
-        return [], []
+        return [], [], None
 
     def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         target_comp = company_id
@@ -114,7 +114,7 @@ class DataTrustEngine:
         if not target_comp:
             return []
 
-        active_findings, _ = self._load_from_disk(company_id=target_comp)
+        active_findings, _, _ = self._load_from_disk(company_id=target_comp)
 
         if self.client:
             live_findings = [
@@ -134,7 +134,9 @@ class DataTrustEngine:
     ) -> bool:
         target_comp = company_id or "unspecified_company"
         p = self.get_findings_file_path(company_id=target_comp)
-        eff_ds = data_source or ("LIVE_BUSINESS_CENTRAL" if (self.client and self.client.get_access_token()) else "TEST_FIXTURE")
+        # P0: Never derive LIVE_BUSINESS_CENTRAL from token existence.
+        # Provenance must come exclusively from successful authoritative BC acquisition.
+        eff_ds = data_source or "TEST_FIXTURE"
         payload = {
             "client_key": self.client_key,
             "company_id": target_comp,
@@ -165,7 +167,7 @@ class DataTrustEngine:
                 return {"status": "CONFIGURATION_MISSING", "error": "Missing mandatory company_id parameter."}
             company_id = "FIXTURE_COMPANY"
 
-        active_findings, audit_history = self._load_from_disk(company_id=company_id)
+        active_findings, audit_history, existing_ds = self._load_from_disk(company_id=company_id)
         updated = False
         for f in active_findings:
             if f.get("id") == finding_id:
@@ -175,7 +177,7 @@ class DataTrustEngine:
                 break
 
         if updated:
-            self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history, data_source="LIVE_BUSINESS_CENTRAL")
+            self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history, data_source=existing_ds)
             return {"status": "OK", "finding_id": finding_id, "new_status": new_status}
 
         # P0: Unknown finding_id must NEVER create a finding. Return 404.
@@ -199,7 +201,7 @@ class DataTrustEngine:
         resolved_company_id = res.get("company_id") or company_id
 
         # Load existing company-scoped disk snapshot to preserve historical audit evaluations
-        existing_findings_raw, existing_audit_history = self._load_from_disk(company_id=resolved_company_id)
+        existing_findings_raw, existing_audit_history, _ = self._load_from_disk(company_id=resolved_company_id)
 
         # Build current run audit record to append to non-destructive _audit_history
         now_iso = datetime.now().isoformat()
@@ -259,7 +261,8 @@ class DataTrustEngine:
             # On a live reconciliation run, replace active findings with current run findings (or [] for State 2 clean state)
             active_findings_to_save = newly_eval_findings
 
-        self.save_stored_findings(active_findings_to_save, company_id=resolved_company_id, audit_history=updated_audit_history)
+        run_ds = res.get("run_summary", {}).get("data_source") or "TEST_FIXTURE"
+        self.save_stored_findings(active_findings_to_save, company_id=resolved_company_id, audit_history=updated_audit_history, data_source=run_ds)
         return active_findings_to_save
 
     def generate_synthetic_or_live_findings(self) -> List[Dict[str, Any]]:
