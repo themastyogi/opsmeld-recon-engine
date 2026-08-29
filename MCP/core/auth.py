@@ -15,7 +15,7 @@ SESSION_TTL_SECONDS = 86400  # 24 hours
 
 
 class OpsmeldUserSession:
-    """Represents an authenticated Opsmeld user session with explicit two-dimensional permissions."""
+    """Represents an authenticated Opsmeld user session with explicit multitenant permissions."""
     def __init__(
         self,
         token: str,
@@ -23,6 +23,7 @@ class OpsmeldUserSession:
         email: str,
         display_name: str,
         roles: List[str],
+        organization_id: str = "org_abc_001",
         permissions: Optional[Set[str]] = None,
         allowed_companies: Optional[Set[str]] = None,
         created_at: Optional[float] = None,
@@ -33,6 +34,7 @@ class OpsmeldUserSession:
         self.email = email
         self.display_name = display_name
         self.roles = roles or []
+        self.organization_id = organization_id
         self.permissions = set(permissions) if permissions is not None else RBACResolver.resolve_permissions(self.roles)
         # Fail closed: allowed_companies is strictly an explicit Set[str]. None or empty fails closed.
         self.allowed_companies = set(allowed_companies) if allowed_companies is not None else set()
@@ -55,12 +57,22 @@ class OpsmeldUserSession:
         return company_id in self.allowed_companies
 
     def to_dict(self) -> Dict[str, Any]:
+        from core.models import get_datastore
+        ds = get_datastore()
+        org = ds.get_organization(self.organization_id)
+        org_name = org.name if org else "ABC Manufacturing"
+        org_status = org.status if org else "ACTIVE"
         return {
             "token": self.token,
             "user": {
                 "id": self.user_id,
                 "email": self.email,
                 "display_name": self.display_name
+            },
+            "organization": {
+                "id": self.organization_id,
+                "name": org_name,
+                "status": org_status
             },
             "roles": sorted(self.roles),
             "permissions": sorted(list(self.permissions)),

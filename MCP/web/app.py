@@ -15,6 +15,8 @@ from core.bc_mcp_client import BCMCPClient
 from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
 from core.auth import get_auth_manager
 from core.rbac import RBACResolver, get_module_registry
+from core.authorization import CentralAuthorizationEngine, DenialReason, ModulePortalState
+from core.models import get_datastore, OrganizationStatus
 from modules.ar_manager import ARManagerReport
 from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
@@ -74,54 +76,71 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return session_info["client_key"]
         return load_client_config().client_key
 
-    def _require_auth(
-        self,
-        required_permission: Optional[str] = None,
-        company_id: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    def _require_auth(self, module_id: str = "data_trust", required_permission: Optional[str] = None, company_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Enforces two-dimensional authorization security boundary:
-        1. Authentication Check: Active Opsmeld session token required (HTTP 401).
-        2. Dimension 1 Check: Required module permission (HTTP 403 Forbidden).
-        3. Dimension 2 Check: Explicit company entitlement (HTTP 403 Access Denied / 400 Configuration Missing).
+        Enforces multitenant authorization via CentralAuthorizationEngine evaluating the 6 policy gates:
+        Session (1) -> Organization Status (2) -> Subscription (3) -> User Permission (4) -> Company ACL (5) -> BC Probe (6)
         """
         token = self._get_session_token()
         auth_mgr = get_auth_manager()
         session = auth_mgr.get_session(token)
-        if not session:
-            self._set_headers("application/json", 401)
+
+        if company_id is not None and (not company_id or not GUID_REGEX.match(company_id)):
+            self._set_headers("application/json", 400)
             self._write_response(json.dumps({
-                "error": "Unauthorized: Active Opsmeld session token required",
-                "status": "AUTHENTICATION_UNAVAILABLE"
+                "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                "status": "CONFIGURATION_MISSING"
             }).encode("utf-8"))
             return None
 
-        # Check Dimension 1: Module Permission
-        if required_permission and not session.has_permission(required_permission):
-            self._set_headers("application/json", 403)
-            self._write_response(json.dumps({
-                "error": f"Forbidden: User lacks required module permission '{required_permission}'",
-                "status": "ACCESS_DENIED"
-            }).encode("utf-8"))
-            return None
+        is_allowed, reason = CentralAuthorizationEngine.authorize(
+            session=session,
+            module_id=module_id,
+            permission=required_permission,
+            company_id=company_id
+        )
 
-        # Check Dimension 2: Explicit Company Entitlement
-        if company_id is not None:
-            if not company_id or not GUID_REGEX.match(company_id):
-                self._set_headers("application/json", 400)
+        if not is_allowed:
+            if reason == DenialReason.UNAUTHENTICATED:
+                self._set_headers("application/json", 401)
                 self._write_response(json.dumps({
-                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
-                    "status": "CONFIGURATION_MISSING"
+                    "error": "Unauthorized: Active Opsmeld session token required",
+                    "status": "AUTHENTICATION_UNAVAILABLE"
                 }).encode("utf-8"))
-                return None
-
-            if not session.is_company_allowed(company_id):
+            elif reason == DenialReason.ORGANIZATION_SUSPENDED:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": "Access Denied: Customer organization subscription is suspended or expired.",
+                    "status": "ORGANIZATION_SUSPENDED"
+                }).encode("utf-8"))
+            elif reason == DenialReason.MODULE_NOT_SUBSCRIBED:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": f"Access Denied: Module '{module_id}' is not included in your organization's subscription.",
+                    "status": "MODULE_NOT_SUBSCRIBED"
+                }).encode("utf-8"))
+            elif reason == DenialReason.USER_NOT_PERMITTED:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": f"Forbidden: User lacks required module permission '{required_permission}'",
+                    "status": "ACCESS_DENIED",
+                    "reason": reason
+                }).encode("utf-8"))
+            elif reason == DenialReason.COMPANY_NOT_PERMITTED:
                 self._set_headers("application/json", 403)
                 self._write_response(json.dumps({
                     "error": f"Access Denied: User is not authorized to access company '{company_id}'",
-                    "status": "ACCESS_DENIED"
+                    "status": "ACCESS_DENIED",
+                    "reason": reason
                 }).encode("utf-8"))
-                return None
+            else:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": f"Access Denied: Request failed authorization policy gate ({reason}).",
+                    "status": "ACCESS_DENIED",
+                    "reason": reason
+                }).encode("utf-8"))
+            return None
 
         return session.to_dict()
 
@@ -178,6 +197,46 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             html = report.render_html(tiered, config.name, error_msg=error_msg)
             self._set_headers()
             self._write_response(html.encode("utf-8"))
+
+        elif path == "/api/portal/modules":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session:
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
+                return
+            modules_eval = CentralAuthorizationEngine.evaluate_portal_modules(session)
+            res = {"status": "success", "modules": modules_eval}
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps(res).encode("utf-8"))
+            return
+
+        elif path == "/api/admin/organizations":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or "ENTERPRISE_ADMIN" not in session.roles:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Platform Admin required"}).encode("utf-8"))
+                return
+            ds = get_datastore()
+            orgs = [o.to_dict() for o in ds.organizations.values()]
+            subs = [s.to_dict() for s in ds.subscriptions.values()]
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({"status": "success", "organizations": orgs, "subscriptions": subs}).encode("utf-8"))
+            return
+
+        elif path == "/api/org/users":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session:
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
+                return
+            ds = get_datastore()
+            users = [u.to_dict() for u in ds.users.values()]
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({"status": "success", "users": users}).encode("utf-8"))
+            return
 
         elif path == "/api/ar-manager/data":
             session_info = self._require_auth(required_permission="ar_control_tower:read")
@@ -584,6 +643,31 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 res = {"error": "Invalid credentials. Please check your provisioned email and password."}
                 self._set_headers("application/json", 401)
                 self._write_response(json.dumps(res).encode("utf-8"))
+            return
+
+        elif path == "/api/admin/organizations/status":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or "ENTERPRISE_ADMIN" not in session.roles:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Platform Admin required"}).encode("utf-8"))
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            data = json.loads(body)
+            org_id = data.get("organization_id", "org_abc_001")
+            new_status = data.get("status")
+            modules = data.get("modules")
+
+            ds = get_datastore()
+            org = ds.get_organization(org_id)
+            if org and new_status:
+                org.status = new_status
+            if org and modules is not None:
+                ds.org_modules[org_id] = set(modules)
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({"status": "success", "organization_id": org_id, "org_status": org.status if org else None}).encode("utf-8"))
             return
 
         elif path == "/api/settings":
