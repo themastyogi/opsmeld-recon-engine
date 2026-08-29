@@ -2808,46 +2808,18 @@
         }
     }
 
-    function openAppLoginModal() {
-        const modal = document.getElementById('opsmeld-app-login-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-            modal.style.visibility = 'visible';
-            modal.style.opacity = '1';
-            modal.style.zIndex = '999999';
-        }
-    }
-
     function performAppLogout() {
-        openAppLoginModal();
+        localStorage.removeItem('opsmeld_token');
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+            .finally(() => switchMainView('public'));
     }
 
     function loadAuthorizedCompanies() {
-        fetch('/api/data-trust/authorized-companies', { credentials: 'same-origin' })
+        fetch('/api/data-trust/authorized-companies', { headers: getAuthHeaders(), credentials: 'same-origin' })
             .then(res => {
                 if (res.status === 401) {
-                    return fetch('/api/auth/login_app', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: 'admin@opsmeld.com', password: 'password123' }),
-                        credentials: 'same-origin'
-                    })
-                    .then(loginRes => loginRes.json())
-                    .then(loginData => {
-                        if (loginData.token || loginData.status === 'success') {
-                            return fetch('/api/data-trust/authorized-companies', { credentials: 'same-origin' })
-                                .then(r => r.json());
-                        } else {
-                            const select = document.getElementById('dt-company-select');
-                            if (select) {
-                                select.innerHTML = '<option value="">🔒 Authentication Required</option>';
-                            }
-                            const authBtn = document.getElementById('dt-auth-btn');
-                            if (authBtn) authBtn.style.display = 'inline-block';
-                            openAppLoginModal();
-                            return null;
-                        }
-                    });
+                    switchMainView('public');
+                    return null;
                 }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return res.json();
