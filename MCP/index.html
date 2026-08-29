@@ -797,6 +797,7 @@
                             <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 4px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; font-weight: 700; background: white; color: #0F172A;">
                                 <option value="">Loading authorized companies...</option>
                             </select>
+                            <button id="dt-auth-btn" onclick="openAppLoginModal()" style="display:none; background:#059669; color:white; border:none; padding:4px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to View Companies</button>
                         </span>
                     </div>
                     <div style="font-size: 0.78rem; color: #64748B;">
@@ -2430,10 +2431,11 @@
                 if (res.status === 401) {
                     const select = document.getElementById('dt-company-select');
                     if (select) {
-                        select.innerHTML = '<option value="">🔒 Authentication Required (Click here to Sign In)</option>';
-                        select.onchange = function() { openAppLoginModal(); };
+                        select.innerHTML = '<option value="">🔒 Authentication Required</option>';
                     }
-                    renderPlatformStateBanner('AUTHENTICATION_UNAVAILABLE', 'Active session required. <button class="btn-btn" style="background: #059669; color: white; margin-left: 12px; font-weight: 800; padding: 4px 12px; cursor: pointer;" onclick="openAppLoginModal()">Sign In Now 🔑</button>');
+                    const authBtn = document.getElementById('dt-auth-btn');
+                    if (authBtn) authBtn.style.display = 'inline-block';
+                    renderPlatformStateBanner('AUTHENTICATION_UNAVAILABLE', 'Active session required. <button class="btn-btn" style="background: #059669; color: white; margin-left: 12px; font-weight: 800; padding: 4px 12px; cursor: pointer;" onclick="openAppLoginModal()">🔑 Sign In Now</button>');
                     openAppLoginModal();
                     return null;
                 }
@@ -2442,6 +2444,8 @@
             })
             .then(data => {
                 if (!data) return;
+                const authBtn = document.getElementById('dt-auth-btn');
+                if (authBtn) authBtn.style.display = 'none';
                 const select = document.getElementById('dt-company-select');
                 if (select && data.companies) {
                     select.innerHTML = '';
@@ -2810,11 +2814,11 @@
             <form onsubmit="performAppLogin(event)">
                 <div style="text-align:left; margin-bottom:14px;">
                     <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Email / Username</label>
-                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="admin@opsmeld.com" value="" required>
+                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
                 </div>
                 <div style="text-align:left; margin-bottom:20px;">
                     <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Password</label>
-                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" value="" required>
+                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" value="password123" required>
                 </div>
 
                 <div id="app-login-error" style="display:none; background:#FEE2E2; color:#DC2626; font-size:0.78rem; font-weight:600; padding:8px; border-radius:6px; margin-bottom:14px;">
