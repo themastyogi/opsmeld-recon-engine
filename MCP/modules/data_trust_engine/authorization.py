@@ -19,14 +19,19 @@ class CompanyAccessManager:
     def __init__(self):
         pass
 
-    def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
-        """Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies."""
-        if not client:
-            return []
+    def get_discovered_companies_with_provenance(self, client: Optional[BCMCPClient]) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies.
+        Returns 2-tuple: (discovered_companies_list, data_source)
+        """
+        if not client or not client.get_access_token():
+            logger.warning("Company discovery skipped: No client or access token missing")
+            return [], "DATA_UNAVAILABLE"
+
         resp = client._execute_bc_rest("companies")
         if not isinstance(resp, dict) or resp.get("is_error") or "error" in resp:
             logger.warning(f"BC /companies endpoint query failed: {resp.get('error') if isinstance(resp, dict) else 'Unknown error'}")
-            return []
+            return [], "DATA_UNAVAILABLE"
 
         raw_list = resp.get("value", []) if isinstance(resp, dict) and isinstance(resp.get("value"), list) else []
         logger.info(f"BC /companies raw count: {len(raw_list)}")
@@ -53,7 +58,12 @@ class CompanyAccessManager:
             })
 
         logger.info(f"Authorized company count: {len(authorized_companies)}")
-        return authorized_companies
+        return authorized_companies, "LIVE_BUSINESS_CENTRAL"
+
+    def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
+        """Retrieves company list from Business Central REST API /companies endpoint."""
+        companies, _ = self.get_discovered_companies_with_provenance(client)
+        return companies
 
     def validate_company_access(
         self,

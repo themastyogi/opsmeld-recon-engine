@@ -238,10 +238,12 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         handler._write_response = OpsmeldWebHandler._write_response.__get__(handler, OpsmeldWebHandler)
 
         with patch("core.auth.AuthManager.get_session_info", return_value={"user": "admin"}), \
-             patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies", return_value=[]):
+             patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies_with_provenance", return_value=([], "DATA_UNAVAILABLE")):
             handler.do_GET()
             response_bytes = handler.wfile.getvalue()
             self.assertIn(b'"companies": []', response_bytes)
+            self.assertIn(b'"status": "DATA_UNAVAILABLE"', response_bytes)
+            self.assertIn(b'"data_source": "DATA_UNAVAILABLE"', response_bytes)
             self.assertNotIn(b"CRONUS IN", response_bytes)
 
 

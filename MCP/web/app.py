@@ -268,9 +268,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config(client_key)
             client = BCMCPClient(config)
             mgr = CompanyAccessManager()
-            discovered = mgr.get_discovered_companies(client)
+            discovered, data_source = mgr.get_discovered_companies_with_provenance(client)
+            status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(discovered) > 0 else "DATA_UNAVAILABLE"
             self._set_headers("application/json")
-            self._write_response(json.dumps({"companies": discovered}).encode("utf-8"))
+            self._write_response(json.dumps({
+                "status": status,
+                "data_source": data_source,
+                "companies": discovered
+            }).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":
             session_info = self._require_auth()

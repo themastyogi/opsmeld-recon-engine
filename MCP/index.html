@@ -2427,7 +2427,9 @@
                     if (data.companies.length === 0) {
                         const opt = document.createElement('option');
                         opt.value = '';
-                        opt.textContent = 'No authorized companies available';
+                        opt.textContent = data.data_source === 'DATA_UNAVAILABLE'
+                            ? 'Data Unavailable (BC Session Offline)'
+                            : 'No authorized companies available';
                         select.appendChild(opt);
                         return;
                     }
