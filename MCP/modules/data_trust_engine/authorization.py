@@ -142,12 +142,10 @@ class CompanyAccessManager:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
         else:
-            # Match requested company GUID or name against discovered list
+            # Match requested company GUID strictly against discovered list (GUID-only enforcement)
             matched = [
                 c for c in discovered
                 if c["id"] == requested_company
-                or c["name"].lower() == requested_company.lower()
-                or c["displayName"].lower() == requested_company.lower()
             ]
             if len(matched) == 1:
                 target_comp_guid = matched[0]["id"]

@@ -131,11 +131,11 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
         self.mock_client._execute_bc_rest.return_value = {
             "value": [{"id": "GUID-COMP-A", "name": "COMPANY_A", "displayName": "Company A"}]
         }
-        is_auth_1, state_1, _ = self.auth_mgr.validate_company_access(self.mock_client, requested_company="COMPANY_A")
+        is_auth_1, state_1, _ = self.auth_mgr.validate_company_access(self.mock_client, requested_company="GUID-COMP-A")
         self.assertTrue(is_auth_1)
 
         self.mock_client._execute_bc_rest.return_value = {"value": []}
-        is_auth_2, state_2, info_2 = self.auth_mgr.validate_company_access(self.mock_client, requested_company="COMPANY_A")
+        is_auth_2, state_2, info_2 = self.auth_mgr.validate_company_access(self.mock_client, requested_company="GUID-COMP-A")
 
         self.assertFalse(is_auth_2)
         self.assertEqual(state_2, DataTrustState.ACCESS_DENIED)
@@ -676,6 +676,38 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             self.assertEqual(saved.get("data_source"), "DATA_UNAVAILABLE", "Omitted data_source must default to DATA_UNAVAILABLE")
             self.assertNotEqual(saved.get("data_source"), "TEST_FIXTURE")
             self.assertNotEqual(saved.get("data_source"), "LIVE_BUSINESS_CENTRAL")
+
+    def test_validate_company_access_guid_only_matching(self):
+        """P0 Security Hardening Test: validate_company_access() strictly requires exact BC GUID matching and rejects company names/displayNames even if present in /companies."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        from unittest.mock import MagicMock
+
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+
+        comp_guid = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
+        mock_client._execute_bc_rest.side_effect = lambda ep: {
+            "value": [
+                {"id": comp_guid, "name": "CRONUS IN", "displayName": "CRONUS IN"}
+            ]
+        } if ep == "companies" else {"value": [{"id": "GL-1"}]}
+
+        mgr = CompanyAccessManager()
+
+        # 1. Real GUID -> SUCCESS
+        is_auth_guid, status_guid, details_guid = mgr.validate_company_access(mock_client, requested_company=comp_guid)
+        self.assertTrue(is_auth_guid, "Real BC GUID must be authorized successfully")
+        self.assertEqual(details_guid.get("company_id"), comp_guid)
+
+        # 2. Company Name ("CRONUS IN") -> REJECTED (ACCESS_DENIED)
+        is_auth_name, status_name, details_name = mgr.validate_company_access(mock_client, requested_company="CRONUS IN")
+        self.assertFalse(is_auth_name, "Company name ('CRONUS IN') must be rejected by validate_company_access()")
+        self.assertEqual(status_name, "ACCESS_DENIED")
+
+        # 3. Display Name ("My Company") -> REJECTED (ACCESS_DENIED)
+        is_auth_disp, status_disp, details_disp = mgr.validate_company_access(mock_client, requested_company="My Company")
+        self.assertFalse(is_auth_disp, "Display name ('My Company') must be rejected by validate_company_access()")
+        self.assertEqual(status_disp, "ACCESS_DENIED")
 
 
 if __name__ == "__main__":
