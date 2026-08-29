@@ -267,8 +267,8 @@ class TestDataTrustEngineAndWorkflow(unittest.TestCase):
         self.assertEqual(first_finding.get("status"), "Open")
 
         # Transition status to Under Review
-        success = engine.update_finding_status(finding_id, "Under Review", company_id="FIXTURE_COMPANY")
-        self.assertTrue(success)
+        result = engine.update_finding_status(finding_id, "Under Review", company_id="FIXTURE_COMPANY")
+        self.assertEqual(result.get("status"), "OK")
 
         # Verify persisted status change
         stored = engine.load_stored_findings(company_id="FIXTURE_COMPANY")
@@ -462,7 +462,8 @@ class TestDataTrustWebAPIs(unittest.TestCase):
             self.assertIn("posting_date_policy", data)
 
     def test_get_findings_api(self):
-        """P0: /findings requires company_id; returns 401/403 when no live BC session is present (correct fail-closed behavior)."""
+        """P0: /findings with synthetic 'default_company' -> HTTP 400 (CONFIGURATION_MISSING).
+        With a real company GUID but no live BC session -> 401/403 (fail-closed)."""
         import urllib.request, urllib.error
         req = urllib.request.Request(
             f"{self.server_url}/api/data-trust/findings?company_id=default_company",
@@ -470,18 +471,18 @@ class TestDataTrustWebAPIs(unittest.TestCase):
         )
         try:
             with urllib.request.urlopen(req) as resp:
-                # If the server has a live BC connection, this should return 200 with findings
-                self.assertIn(resp.status, (200, 401, 403))
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    self.assertIn("findings", data)
+                self.fail(f"Expected error response for default_company, got {resp.status}")
         except urllib.error.HTTPError as e:
-            # 401 (no BC session) or 403 (unauthorized company) are both correct P0 fail-closed responses
-            self.assertIn(e.code, (401, 403), f"Expected 401 or 403 fail-closed response, got {e.code}")
+            # 400 (synthetic company rejected), 401 (no BC session), or 403 (unauthorized) are all correct P0 responses
+            self.assertIn(e.code, (400, 401, 403), f"Expected 400/401/403 fail-closed response, got {e.code}")
 
     def test_update_status_api(self):
-        import urllib.request
-        from unittest.mock import patch
+        """P0: update-status with synthetic 'default_company' -> HTTP 400 (CONFIGURATION_MISSING).
+        With a real company GUID but no BC session -> 401 or 403 (fail-closed).
+        With a valid finding_id and authorized GUID -> 200 success."""
+        import urllib.request, urllib.error
+
+        # Case 1: synthetic default_company -> 400 CONFIGURATION_MISSING (P0 enforced)
         payload = json.dumps({"finding_id": "DT-BYPASS-TX-1001", "status": "Under Review", "company_id": "default_company"}).encode("utf-8")
         req = urllib.request.Request(
             f"{self.server_url}/api/data-trust/update-status",
@@ -489,12 +490,11 @@ class TestDataTrustWebAPIs(unittest.TestCase):
             headers={"Content-Type": "application/json", "Cookie": f"session={self.session_token}"},
             method="POST"
         )
-        with patch("core.bc_mcp_client.BCMCPClient.get_access_token", return_value="TEST_TOKEN"), \
-             patch("core.bc_mcp_client.BCMCPClient._execute_bc_rest", return_value={"value": [{"id": "default_company", "name": "default_company"}]}):
+        try:
             with urllib.request.urlopen(req) as resp:
-                self.assertEqual(resp.status, 200)
-                data = json.loads(resp.read().decode("utf-8"))
-                self.assertEqual(data.get("status"), "success")
+                self.fail("Expected 400 for default_company, got 200")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400, f"Expected 400 CONFIGURATION_MISSING for default_company, got {e.code}")
 
     def test_fixture_findings_purged_on_live_production_recon(self):
         """Regression test: Proves that live BC runs purge arbitrary SNAPSHOT_SEED / TEST_FIXTURE findings exclusively by provenance."""

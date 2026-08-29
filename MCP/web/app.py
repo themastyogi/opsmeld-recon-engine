@@ -285,6 +285,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     "status": "CONFIGURATION_MISSING"
                 }).encode("utf-8"))
                 return
+            if company_id in ("default_company", "unspecified_company"):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
@@ -326,6 +333,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             status = query_params.get("status", [None])[0]
             search = query_params.get("search", [None])[0]
             include_insufficient = query_params.get("include_insufficient", ["false"])[0].lower() == "true"
+
+            # P0: Synthetic placeholder names must never reach the BC client
+            if company_id in ("default_company", "unspecified_company"):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
@@ -562,6 +578,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 }).encode("utf-8"))
                 return
 
+            # P0: Synthetic placeholder names must never reach the BC client
+            if company_id in ("default_company", "unspecified_company"):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                    "status": "CONFIGURATION_MISSING"
+                }).encode("utf-8"))
+                return
+
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
@@ -585,14 +610,20 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
 
             engine = DataTrustEngine(client, client_key=client_key)
-            success = engine.update_finding_status(finding_id, new_status, company_id=company_id)
-            if success:
-                res = {"status": "success", "finding_id": finding_id, "new_status": new_status}
+            result = engine.update_finding_status(finding_id, new_status, company_id=company_id)
+            result_status = result.get("status", "NOT_FOUND")
+            if result_status == "OK":
                 self._set_headers("application/json", 200)
-                self._write_response(json.dumps(res).encode("utf-8"))
-            else:
+                self._write_response(json.dumps({"status": "success", "finding_id": finding_id, "new_status": new_status}).encode("utf-8"))
+            elif result_status == "NOT_FOUND":
                 self._set_headers("application/json", 404)
-                self._write_response(json.dumps({"error": f"Finding '{finding_id}' not found", "status": "NOT_FOUND"}).encode("utf-8"))
+                self._write_response(json.dumps({"error": result.get("error", f"Finding '{finding_id}' not found"), "status": "NOT_FOUND"}).encode("utf-8"))
+            elif result_status == "CONFIGURATION_MISSING":
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": result.get("error", "Missing mandatory company_id"), "status": "CONFIGURATION_MISSING"}).encode("utf-8"))
+            else:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": result.get("error", "Invalid request"), "status": result_status}).encode("utf-8"))
 
         elif path == "/api/data-trust/config":
             session_info = self._require_auth()

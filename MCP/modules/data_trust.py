@@ -150,51 +150,53 @@ class DataTrustEngine:
         except Exception:
             return False
 
-    def update_finding_status(self, finding_id: str, new_status: str, company_id: Optional[str] = None) -> bool:
-        """Mutates status of an existing finding within the authorized company scope. Returns False if finding_id is not found."""
+    def update_finding_status(self, finding_id: str, new_status: str, company_id: Optional[str] = None) -> dict:
+        """Mutates status of an existing finding within the authorized company scope.
+        Returns dict with status=NOT_FOUND (HTTP 404) if finding_id does not exist.
+        Never creates a finding for an unknown ID. Never scans across companies."""
         valid_statuses = ["Open", "Under Review", "Confirmed", "False Positive", "Ignored"]
         if new_status not in valid_statuses:
-            return False
+            return {"status": "INVALID_STATUS", "error": f"Status '{new_status}' is not valid."}
 
-        target_comp = company_id
-        if not target_comp and self.client:
-            from modules.data_trust_engine.authorization import CompanyAccessManager
-            mgr = CompanyAccessManager()
-            is_auth, st_name, details = mgr.validate_company_access(self.client)
-            if is_auth and details.get("company_id"):
-                target_comp = details["company_id"]
+        # P0: company_id is mandatory in live/production mode.
+        # In fixture mode (no client), default to FIXTURE_COMPANY for backward compatibility.
+        if not company_id:
+            if self.client is not None:
+                return {"status": "CONFIGURATION_MISSING", "error": "Missing mandatory company_id parameter."}
+            company_id = "FIXTURE_COMPANY"
 
-        candidate_companies = [target_comp] if target_comp else ["default_company", "FIXTURE_COMPANY", "unspecified_company"]
+        active_findings, audit_history = self._load_from_disk(company_id=company_id)
+        updated = False
+        for f in active_findings:
+            if f.get("id") == finding_id:
+                f["status"] = new_status
+                f["last_evaluated_at"] = datetime.now().isoformat()
+                updated = True
+                break
 
-        for cid in candidate_companies:
-            active_findings, audit_history = self._load_from_disk(company_id=cid)
-            updated = False
-            for f in active_findings:
-                if f.get("id") == finding_id:
-                    f["status"] = new_status
-                    f["last_evaluated_at"] = datetime.now().isoformat()
-                    updated = True
-                    break
+        if updated:
+            self.save_stored_findings(active_findings, company_id=company_id, audit_history=audit_history, data_source="LIVE_BUSINESS_CENTRAL")
+            return {"status": "OK", "finding_id": finding_id, "new_status": new_status}
 
-            if updated:
-                self.save_stored_findings(active_findings, company_id=cid, audit_history=audit_history, data_source="LIVE_BUSINESS_CENTRAL")
-                return True
-
-        return False
+        # P0: Unknown finding_id must NEVER create a finding. Return 404.
+        return {"status": "NOT_FOUND", "error": f"Finding '{finding_id}' not found in company scope.", "http_status": 404}
 
     def run_recon(self, sample_transactions: Optional[List[Dict[str, Any]]] = None, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Legacy façade method delegating to DataTrustEngineOrchestrator inside data_trust_engine."""
         from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
         orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
         mode = "TEST_FIXTURE" if self.client is None else "AUTO"
-        target_company = company_id or "default_company"
+        # P0: Never resolve to default_company. If company_id is missing in live mode, return empty.
+        if not company_id and self.client is not None:
+            return []
+        target_company = company_id or "FIXTURE_COMPANY"  # Fixture mode only when client is None
         res = orchestrator.run_recon(company_id=target_company, sample_transactions=sample_transactions, mode=mode)
 
         if res.get("status") in ("DATA_UNAVAILABLE", "ACCESS_DENIED", "AUTHENTICATION_UNAVAILABLE", "COMPANY_NOT_FOUND"):
             return []
 
         newly_eval_findings = res.get("findings", [])
-        resolved_company_id = res.get("run_summary", {}).get("company_id") or company_id or "default_company"
+        resolved_company_id = res.get("company_id") or company_id
 
         # Load existing company-scoped disk snapshot to preserve historical audit evaluations
         existing_findings_raw, existing_audit_history = self._load_from_disk(company_id=resolved_company_id)
