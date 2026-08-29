@@ -2415,12 +2415,20 @@
         
     // Opsmeld Data Trust Platform UX JavaScript Functions
     function loadAuthorizedCompanies() {
-        fetch('/api/data-trust/authorized-companies')
+        fetch('/api/data-trust/authorized-companies', { credentials: 'same-origin' })
             .then(res => {
+                if (res.status === 401) {
+                    const select = document.getElementById('dt-company-select');
+                    if (select) {
+                        select.innerHTML = '<option value="">Authentication Required (Please Sign In)</option>';
+                    }
+                    return null;
+                }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return res.json();
             })
             .then(data => {
+                if (!data) return;
                 const select = document.getElementById('dt-company-select');
                 if (select && data.companies) {
                     select.innerHTML = '';
@@ -2439,6 +2447,9 @@
                         opt.textContent = c.displayName ? `${c.name} (${c.displayName})` : c.name;
                         select.appendChild(opt);
                     });
+                    if (select.value) {
+                        runDataTrustRecon(select.value);
+                    }
                 }
             })
             .catch(err => {
