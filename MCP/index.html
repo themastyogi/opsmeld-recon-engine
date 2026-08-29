@@ -2410,18 +2410,15 @@
         }
     }
 
-
-
-        
-    // Opsmeld Data Trust Platform UX JavaScript Functions
     function loadAuthorizedCompanies() {
         fetch('/api/data-trust/authorized-companies', { credentials: 'same-origin' })
             .then(res => {
                 if (res.status === 401) {
                     const select = document.getElementById('dt-company-select');
                     if (select) {
-                        select.innerHTML = '<option value="">Authentication Required (Please Sign In)</option>';
+                        select.innerHTML = '<option value="">Authentication Required (Sign In Modal Active)</option>';
                     }
+                    performAppLogout();
                     return null;
                 }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2466,7 +2463,7 @@
         renderPlatformStateBanner('LOADING', 'Running live Data Trust audit engine against Business Central...');
         const compId = company_id || (document.getElementById('dt-company-select') ? document.getElementById('dt-company-select').value : '');
         
-        fetch(`/api/data-trust/run-recon?company_id=${encodeURIComponent(compId)}`, { method: 'POST' })
+        fetch(`/api/data-trust/run-recon?company_id=${encodeURIComponent(compId)}`, { method: 'POST', credentials: 'same-origin' })
             .then(res => {
                 return res.text().then(text => {
                     try {
@@ -2531,30 +2528,27 @@
             bg = '#F8FAFC'; border = '#E2E8F0'; color = '#475569'; title = '⚪ Insufficient Evidence';
         }
 
-        let refText = runId ? `<div style="font-size: 0.78rem; font-weight: 700; margin-top: 4px;">Reference ID: ${runId}</div>` : '';
+        container.style.background = bg;
+        container.style.borderColor = border;
+        container.style.color = color;
+        
+        const runRefText = runId ? ` (Reference: ${runId})` : '';
+        const bodyText = message ? `${message}${runRefText}` : `Operational state: ${status}${runRefText}`;
 
-        let diagHtml = '';
+        let html = `<div style="font-weight: 700; margin-bottom: 4px;">${title}</div><div>${bodyText}</div>`;
+        
         if (diagnostics) {
-            diagHtml = `
-                <details style="margin-top: 8px; font-size: 0.78rem; color: #475569;">
-                    <summary style="cursor: pointer; font-weight: 700;">🔧 Admin Diagnostic Details</summary>
-                    <div style="background: white; padding: 8px 12px; border-radius: 6px; border: 1px solid #E2E8F0; margin-top: 4px;" class="mono">
-                        <div>HTTP Status: ${diagnostics.http_status || 'N/A'}</div>
-                        <div>Endpoint: ${diagnostics.endpoint || 'N/A'}</div>
-                        <div>Error Code: ${diagnostics.error_code || 'N/A'}</div>
-                    </div>
-                </details>
-            `;
+            html += `<details style="margin-top: 8px; font-size: 0.78rem; opacity: 0.9;">
+                <summary style="cursor: pointer; font-weight: 600;">Technical Diagnostics</summary>
+                <div style="margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.05); padding: 6px; border-radius: 4px;">
+                    <div>HTTP Status: ${diagnostics.http_status || 'N/A'}</div>
+                    <div>Target Resource: ${diagnostics.endpoint || 'N/A'}</div>
+                    <div>Error Category: ${diagnostics.error_type || 'N/A'}</div>
+                </div>
+            </details>`;
         }
-
-        container.innerHTML = `
-            <div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 14px 18px; color: ${color};">
-                <div style="font-weight: 800; font-size: 0.95rem;">${title}</div>
-                <div style="font-size: 0.85rem; margin-top: 4px; line-height: 1.4;">${message}</div>
-                ${refText}
-                ${diagHtml}
-            </div>
-        `;
+        
+        container.innerHTML = html;
     }
 
     function openDataTrustModal(docNo, amount, impact, recAction, dedupKey) {
