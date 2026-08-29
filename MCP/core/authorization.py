@@ -124,8 +124,6 @@ class CentralAuthorizationEngine:
         for mod in modules:
             is_subscribed = datastore.is_module_subscribed(org_id, mod.module_id)
             has_permission = any(p in user_perms for p in mod.permissions)
-            if not is_subscribed and has_permission:
-                is_subscribed = True
 
             if not is_subscribed:
                 state = ModulePortalState.NOT_SUBSCRIBED

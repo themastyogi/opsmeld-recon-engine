@@ -333,6 +333,8 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             description="Continuous liquidity modeling and bank reconciliation audit",
             permissions=["layer_4:read", "layer_4:write"]
         )
+        from core.models import get_datastore
+        get_datastore().org_modules["org_abc_001"].add("layer_4")
 
         token = self.auth_mgr.create_session(
             user_id="usr_treasury",
