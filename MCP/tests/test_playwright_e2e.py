@@ -79,6 +79,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_auth_sign_out(self):
         """Sign out: Validates clicking Sign Out button triggers logout workflow."""
         self._open_page()
+        self.page.wait_for_selector("button:has-text('Sign Out 🚪')", state="visible")
         signout_btn = self.page.locator("button:has-text('Sign Out 🚪')")
         self.assertTrue(signout_btn.is_visible())
         signout_btn.click()
@@ -91,6 +92,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_navigation_data_trust(self):
         """Data Trust navigation: Swapping to Data Trust view."""
         self._open_page()
+        self.page.wait_for_selector("#nav-top-dt", state="visible")
         dt_nav = self.page.locator("#nav-top-dt")
         self.assertTrue(dt_nav.is_visible())
         dt_nav.click()
@@ -206,6 +208,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_configuration_open(self):
         """Open configuration: Validates opening configuration settings link."""
         self._open_page()
+        self.page.wait_for_selector("div.sidebar-item:has-text('Posting-Date Rules')", state="visible")
         posting_rule_item = self.page.locator("div.sidebar-item:has-text('Posting-Date Rules')")
         self.assertTrue(posting_rule_item.is_visible())
 
@@ -278,6 +281,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_refresh_bc_data(self):
         """Refresh BC data: Validates clicking Refresh BC Data button."""
         self._open_page()
+        self.page.wait_for_selector("button:has-text('🔄 Refresh BC Data')", state="visible")
         refresh_btn = self.page.locator("button:has-text('🔄 Refresh BC Data')")
         self.assertTrue(refresh_btn.is_visible())
 
@@ -329,6 +333,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_ui_broken_buttons(self):
         """Broken buttons: Validates top-nav, sub-nav, and action buttons are interactable."""
         self._open_page()
+        self.page.wait_for_selector("#nav-item-data-trust", state="visible")
         nav_item = self.page.locator("#nav-item-data-trust")
         self.assertTrue(nav_item.is_visible())
         nav_item.click()

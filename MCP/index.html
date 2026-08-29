@@ -1497,20 +1497,15 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        switchMainView('public');
         fetch('/api/auth/me', { credentials: 'same-origin' })
             .then(res => res.json())
             .then(data => {
-                if (!window.userSelectedView) {
-                    if (data.authenticated) {
-                        switchMainView('control-tower');
-                    } else {
-                        switchMainView('public');
-                    }
+                if (data.authenticated && window.userSelectedView === 'public') {
+                    switchMainView('control-tower');
                 }
             })
-            .catch(() => {
-                if (!window.userSelectedView) switchMainView('public');
-            });
+            .catch(() => {});
     });
 
     let currentInspectedFindingId = null;
