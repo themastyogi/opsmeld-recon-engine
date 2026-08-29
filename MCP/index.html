@@ -415,7 +415,7 @@
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="font-size: 2rem;">🎯</div>
-                                <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">✓ ENABLED</span>
+                                <span id="badge-ar_control_tower" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
                             </div>
                             <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">AR Control Tower</h3>
                             <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Receivables workload management, customer risk tiering, collection procedure workflows, and draft General Journal voucher staging.</p>
@@ -428,7 +428,7 @@
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="font-size: 2rem;">🛡️</div>
-                                <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">✓ ENABLED</span>
+                                <span id="badge-data_trust" style="background: #D1FAE5; color: #047857; font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 20px;">AUTHORIZED</span>
                             </div>
                             <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Data Trust Expert</h3>
                             <p style="font-size: 0.84rem; color: #64748B; line-height: 1.5; margin: 0 0 16px 0;">Continuous Business Central transaction audit, posting-date policy enforcement, subledger bypass detection & narration mismatch interpretation.</p>
@@ -1318,6 +1318,7 @@
         const ctView = document.getElementById('view-control-tower');
         const segView = document.getElementById('view-segments');
         const dtView = document.getElementById('view-data-trust');
+        const subHeader = document.querySelector('.sub-header');
 
         const topPortal = document.getElementById('nav-top-portal');
         const topAr = document.getElementById('nav-top-ar');
@@ -1331,6 +1332,7 @@
             if (ctView) ctView.style.display = 'none';
             if (segView) segView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
+            if (subHeader) subHeader.style.display = 'none';
             loadOpsmeldPortalInfo();
         } else if (viewName === 'control-tower') {
             if (topAr) topAr.classList.add('active');
@@ -1338,6 +1340,7 @@
             if (ctView) ctView.style.display = 'block';
             if (segView) segView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
+            if (subHeader) subHeader.style.display = 'flex';
             loadControlTowerData();
         } else if (viewName === 'data-trust') {
             if (topDt) topDt.classList.add('active');
@@ -1345,12 +1348,14 @@
             if (dtView) dtView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (segView) segView.style.display = 'none';
+            if (subHeader) subHeader.style.display = 'flex';
             loadAuthorizedCompanies();
         } else {
             if (portalView) portalView.style.display = 'none';
             if (segView) segView.style.display = 'block';
             if (ctView) ctView.style.display = 'none';
             if (dtView) dtView.style.display = 'none';
+            if (subHeader) subHeader.style.display = 'flex';
         }
     }
 
@@ -1380,19 +1385,25 @@
                         const btn = document.getElementById('btn-' + mod.id);
                         if (badge && btn) {
                             if (mod.enabled) {
-                                badge.textContent = '✓ ENABLED';
+                                badge.textContent = 'AUTHORIZED';
                                 badge.style.background = '#D1FAE5';
                                 badge.style.color = '#047857';
                                 btn.disabled = false;
                                 btn.style.opacity = '1';
                                 btn.style.cursor = 'pointer';
+                                if (mod.id === 'ar_control_tower') {
+                                    btn.textContent = 'Launch AR Control Tower ➔';
+                                } else if (mod.id === 'data_trust') {
+                                    btn.textContent = 'Launch Data Trust Expert ➔';
+                                }
                             } else {
-                                badge.textContent = '🔒 ACCESS RESTRICTED';
+                                badge.textContent = 'NOT ASSIGNED';
                                 badge.style.background = '#FEE2E2';
                                 badge.style.color = '#DC2626';
                                 btn.disabled = true;
-                                btn.style.opacity = '0.5';
+                                btn.style.opacity = '0.7';
                                 btn.style.cursor = 'not-allowed';
+                                btn.textContent = 'Request Access 🔒';
                             }
                         }
                     });
@@ -2655,8 +2666,10 @@
         container.style.display = 'block';
         let bg = '#EFF6FF', border = '#BFDBFE', color = '#1E40AF', title = 'ℹ️ Data Trust Status';
 
-        if (status === 'ACCESS_DENIED' || status === 'AUTHENTICATION_UNAVAILABLE') {
+        if (status === 'ACCESS_DENIED') {
             bg = '#FEF2F2'; border = '#FCA5A5'; color = '#991B1B'; title = '🔒 Access Restricted';
+        } else if (status === 'AUTHENTICATION_UNAVAILABLE') {
+            bg = '#FEF2F2'; border = '#FCA5A5'; color = '#991B1B'; title = '🔌 Business Central Integration Session Offline';
         } else if (status === 'DATA_UNAVAILABLE' || status === 'DATA_REQUEST_INVALID') {
             bg = '#FFFBEB'; border = '#FDE68A'; color = '#92400E'; title = '⚠️ Data Retrieval Unavailable';
         } else if (status === 'PARTIAL') {
