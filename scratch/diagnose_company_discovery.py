@@ -1,8 +1,4 @@
-﻿""
-Opsmeld Data Trust - Live Business Central Company Discovery Diagnostic Tool.
-Analyzes the complete pipeline:
-BC REST API /companies -> CompanyAccessManager -> Server GL Probe -> API Endpoint -> UI Dropdown
-"""
+﻿# Live Business Central Company Discovery Diagnostic Tool
 import sys
 import json
 import logging
@@ -21,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 
 def run_diagnostic():
     print("=" * 80)
-    print("OPSMELD DATA TRUST - BC COMPANY DISCOVERY & AUTHORIZATION DIAGNOSTIC")
+    print("OPSMELD DATA TRUST - BC COMPANY DISCOVERY DIAGNOSTIC")
     print("=" * 80)
 
     cfg = load_client_config()
@@ -36,7 +32,6 @@ def run_diagnostic():
         print("ERROR: Access token could not be acquired. Check session or device code flow.")
         return
 
-    # STEP 1: RAW BC /companies QUERY
     raw = client._execute_bc_rest("companies")
     print("\n===== STEP 1: RAW BC /companies RESPONSE =====")
     if isinstance(raw, dict) and not raw.get("is_error") and "error" not in raw:
@@ -50,13 +45,12 @@ def run_diagnostic():
         companies = []
         raw_count = 0
 
-    # STEP 2: PER-COMPANY GL AUTHORIZATION PROBE
     print("\n===== STEP 2: PER-COMPANY GL AUTHORIZATION PROBES =====")
     probe_results = []
     for c in companies:
         comp_id = c.get("id")
         comp_name = c.get("name")
-        probe = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=1")
+        probe = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?=1")
         if isinstance(probe, dict) and (probe.get("is_error") or "error" in probe):
             status = probe.get("http_status", "?")
             err = probe.get("error", "Unknown error")
@@ -64,25 +58,25 @@ def run_diagnostic():
             probe_results.append((comp_id, comp_name, status, "REJECTED", err))
         else:
             val_len = len(probe.get("value", [])) if isinstance(probe, dict) else 0
-            print(f"  [AUTHORIZED] {comp_name} ({comp_id}) -> GL probe HTTP 200 (value len={val_len})")
+            print(f"  [AUTHORIZED] {comp_name} ({comp_id}) -> GL probe HTTP 200 (records={val_len})")
             probe_results.append((comp_id, comp_name, 200, "AUTHORIZED", "OK"))
 
-    # STEP 3: OPSMELD DISCOVERY PIPELINE
     print("\n===== STEP 3: OPSMELD AUTHORIZED COMPANIES PIPELINE =====")
     mgr = CompanyAccessManager()
-    authorized = mgr.get_discovered_companies(client)
+    authorized, ds = mgr.get_discovered_companies_with_provenance(client)
     auth_count = len(authorized)
-    print(f"AUTHORIZED COMPANY COUNT: {auth_count}")
+    print(f"DATA SOURCE              : {ds}")
+    print(f"AUTHORIZED COMPANY COUNT : {auth_count}")
     for c in authorized:
         print(f"  GUID: {c.get('id')} | Name: {c.get('name')} | DisplayName: {c.get('displayName')}")
 
-    # STEP 4: DIAGNOSTIC SUMMARY & CLASSIFICATION
     print("\n" + "=" * 80)
     print("DIAGNOSTIC SUMMARY")
     print("=" * 80)
     print(f"BC RAW COMPANY COUNT      : {raw_count}")
     print(f"AUTHORIZED COMPANY COUNT  : {auth_count}")
-    
+    print(f"DATA SOURCE               : {ds}")
+
     if raw_count == 1 and auth_count == 1:
         print("\nCLASSIFICATION: [CASE A] Business Central returns only 1 company to this tenant/session context.")
         print("CONCLUSION: Opsmeld is NOT hiding companies. The BC environment itself contains only 1 company.")
