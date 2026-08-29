@@ -144,28 +144,40 @@ class DataAcquirer:
                 if ledger_type in ("VENDOR", "BOTH"):
                     vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/vendorLedgerEntries")
                     if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
-                        logger.warning(f"vendorLedgerEntries endpoint not available ({vle_resp.get('error')}). Querying purchaseInvoices.")
-                        vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/purchaseInvoices")
+                        if vle_resp.get("http_status") == 404 or "404" in str(vle_resp.get("error", "")):
+                            logger.warning(f"vendorLedgerEntries endpoint not available ({vle_resp.get('error')}). Querying purchaseInvoices.")
+                            vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/purchaseInvoices")
+
+                    if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
+                        return [], "DATA_UNAVAILABLE"
 
                     dvle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedVendorLedgerEntries")
+                    if isinstance(dvle_resp, dict) and (dvle_resp.get("is_error") or "error" in dvle_resp):
+                        dvle_raw = []
+                    else:
+                        dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) else []
 
-                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) and "error" not in vle_resp else []
-                    dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) and "error" not in dvle_resp else []
-
+                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
                     resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", comp_guid)
                     acquired.extend(resolved_vendor)
 
                 if ledger_type in ("CUSTOMER", "BOTH"):
                     cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/customerLedgerEntries")
                     if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
-                        logger.warning(f"customerLedgerEntries endpoint not available ({cle_resp.get('error')}). Querying salesInvoices.")
-                        cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/salesInvoices")
+                        if cle_resp.get("http_status") == 404 or "404" in str(cle_resp.get("error", "")):
+                            logger.warning(f"customerLedgerEntries endpoint not available ({cle_resp.get('error')}). Querying salesInvoices.")
+                            cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/salesInvoices")
+
+                    if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
+                        return [], "DATA_UNAVAILABLE"
 
                     dcle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedCustLedgerEntries")
+                    if isinstance(dcle_resp, dict) and (dcle_resp.get("is_error") or "error" in dcle_resp):
+                        dcle_raw = []
+                    else:
+                        dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) else []
 
-                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) and "error" not in cle_resp else []
-                    dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) and "error" not in dcle_resp else []
-
+                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
                     resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", comp_guid)
                     acquired.extend(resolved_cust)
 
