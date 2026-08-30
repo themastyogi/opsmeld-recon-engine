@@ -197,6 +197,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path in ["/", "/index.html", "/dashboard", "/collections"]:
             candidates = [
                 Path(__file__).resolve().parent.parent / "index.html",
+                Path(__file__).resolve().parent.parent.parent / "index.html",
                 Path.cwd() / "MCP" / "index.html",
                 Path.cwd() / "index.html",
                 Path(__file__).resolve().parent / "index.html"
