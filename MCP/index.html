@@ -1118,6 +1118,7 @@
                             <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 4px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; font-weight: 700; background: white; color: #0F172A;">
                                 <option value="">Loading authorized companies...</option>
                             </select>
+                            <button class="btn-btn" onclick="loadAuthorizedCompanies()" style="background:#2563EB; color:white; padding:4px 10px; border-radius:6px; font-size:0.78rem; font-weight:700; cursor:pointer; margin-left:8px;">🔄 Refresh Companies</button>
                             <button id="dt-auth-btn" onclick="openAppLoginModal()" style="display:none; background:#059669; color:white; border:none; padding:4px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to View Companies</button>
                         </span>
                     </div>
@@ -2953,6 +2954,15 @@
                 const select = document.getElementById('dt-company-select');
                 if (select && data.companies) {
                     select.innerHTML = '';
+                    if (data.companies.length === 0) {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = data.data_source === 'DATA_UNAVAILABLE'
+                            ? 'Data Unavailable (BC Session Offline)'
+                            : 'No authorized companies available';
+                        select.appendChild(opt);
+                        return;
+                    }
                     data.companies.forEach(c => {
                         const opt = document.createElement('option');
                         opt.value = c.id; // Real Business Central GUID or ID
@@ -2960,13 +2970,7 @@
                         select.appendChild(opt);
                     });
 
-                    // Add option to enter custom 4th/5th company dynamically
-                    const addOpt = document.createElement('option');
-                    addOpt.value = '__ADD_CUSTOM_COMPANY__';
-                    addOpt.textContent = '➕ Add Custom / 4th Company...';
-                    select.appendChild(addOpt);
-
-                    if (select.value && select.value !== '__ADD_CUSTOM_COMPANY__') {
+                    if (select.value) {
                         runDataTrustRecon(select.value);
                     }
                 }
@@ -3007,31 +3011,7 @@
     }
 
     function onCompanySelectChange(selectedCompany) {
-        if (selectedCompany === '__ADD_CUSTOM_COMPANY__') {
-            const newCompName = prompt("Enter your Business Central Company Name or GUID (e.g. Production Company 4):");
-            if (newCompName && newCompName.trim()) {
-                const cleanName = newCompName.trim();
-                const select = document.getElementById('dt-company-select');
-                if (select) {
-                    const opt = document.createElement('option');
-                    opt.value = cleanName;
-                    opt.textContent = cleanName;
-                    select.insertBefore(opt, select.lastChild);
-                    select.value = cleanName;
-                    clearDataTrustStateDisplay();
-                    renderPlatformStateBanner('LOADING', `Loading selected company data for ${cleanName}...`);
-                    runDataTrustRecon(cleanName);
-                    return;
-                }
-            } else {
-                const select = document.getElementById('dt-company-select');
-                if (select && select.options.length > 1) {
-                    select.selectedIndex = 0;
-                    runDataTrustRecon(select.value);
-                }
-                return;
-            }
-        }
+        if (!selectedCompany) return;
         clearDataTrustStateDisplay();
         renderPlatformStateBanner('LOADING', `Loading selected company data for ${selectedCompany}...`);
         runDataTrustRecon(selectedCompany);
