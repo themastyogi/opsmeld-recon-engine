@@ -21,6 +21,9 @@ from modules.ar_manager import ARManagerReport
 from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
 
+import logging
+logger = logging.getLogger(__name__)
+
 CURRENT_DEVICE_FLOW = None
 
 
@@ -564,6 +567,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
+            classification = query_params.get("classification", [None])[0]
+            evidence_strength = query_params.get("evidence_strength", [None])[0]
+            rule_pack = query_params.get("rule_pack", [None])[0]
+            severity = query_params.get("severity", [None])[0]
+            status = query_params.get("status", [None])[0]
+            search = query_params.get("search", [None])[0]
+            include_insufficient = query_params.get("include_insufficient", ["false"])[0].lower() == "true"
             session_info = self._require_auth(required_permission="data_trust:read", company_id=company_id)
             if not session_info:
                 return
@@ -623,7 +633,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             res = {
                 "client_name": config.name,
                 "summary": summary,
-                "findings": filtered
+                "total_filtered_count": len(filtered),
+                "findings": filtered[:100]
             }
             self._set_headers("application/json")
             self._write_response(json.dumps(res).encode("utf-8"))
