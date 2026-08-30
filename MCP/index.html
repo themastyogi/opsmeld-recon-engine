@@ -1649,12 +1649,6 @@
         }
 
         if (viewName === 'signin') {
-            if (publicLanding) publicLanding.style.display = 'none';
-            if (authDenied) authDenied.style.display = 'none';
-            if (notProvisioned) notProvisioned.style.display = 'none';
-            if (appShell) appShell.style.display = 'none';
-            if (signinWall) signinWall.style.display = 'flex';
-
             const unauthContainer = document.getElementById('signin-unauth-container');
             const welcomeContainer = document.getElementById('signin-welcome-container');
             const welcomeEmail = document.getElementById('welcome-user-email');
@@ -1662,14 +1656,25 @@
             if (window.OpsmeldSession) {
                 window.OpsmeldSession.resolveState().then(state => {
                     if (state.status === 'AUTHENTICATED_PROVISIONED') {
+                        if (publicLanding) publicLanding.style.display = 'none';
+                        if (authDenied) authDenied.style.display = 'none';
+                        if (notProvisioned) notProvisioned.style.display = 'none';
+                        if (appShell) appShell.style.display = 'none';
+                        if (signinWall) signinWall.style.display = 'flex';
+
                         if (welcomeEmail) welcomeEmail.innerText = state.user ? (state.user.email || state.user.display_name) : 'Authorized User';
                         if (unauthContainer) unauthContainer.style.display = 'none';
                         if (welcomeContainer) welcomeContainer.style.display = 'block';
                     } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
                         switchMainView('account-not-provisioned');
                     } else {
-                        if (unauthContainer) unauthContainer.style.display = 'block';
-                        if (welcomeContainer) welcomeContainer.style.display = 'none';
+                        // Unauthenticated: Keep landing page visible and trigger Microsoft Entra login modal directly
+                        if (publicLanding) publicLanding.style.display = 'block';
+                        if (signinWall) signinWall.style.display = 'none';
+                        if (authDenied) authDenied.style.display = 'none';
+                        if (notProvisioned) notProvisioned.style.display = 'none';
+                        if (appShell) appShell.style.display = 'none';
+                        openAppLoginModal();
                     }
                 });
             }

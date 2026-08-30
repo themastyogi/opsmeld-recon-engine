@@ -17,7 +17,7 @@ def run_server():
     server.serve_forever()
 
 def run_browser_verification():
-    print("=== STARTING REFINED UX FRONTEND VERIFICATION (A-D) ===")
+    print("=== STARTING STREAMLINED FRONTEND VERIFICATION (A-D) ===")
     
     # Start local server
     t = threading.Thread(target=run_server, daemon=True)
@@ -30,9 +30,9 @@ def run_browser_verification():
         browser = p.chromium.launch(headless=True)
         
         # ---------------------------------------------------------------------
-        # TEST A: Fresh Entra Login (Direct to Portal on Complete)
+        # TEST A: Fresh User / New Entra Login (Direct Entra Device Modal)
         # ---------------------------------------------------------------------
-        print("\n[TEST A] Fresh User / New Entra Login Flow...")
+        print("\n[TEST A] Fresh User / Direct Entra Device Modal...")
         context_a = browser.new_context()
         page_a = context_a.new_page()
         page_a.goto(base_url)
@@ -42,19 +42,14 @@ def run_browser_verification():
         print(f"  Initial Load -> Public Landing: {landing_visible_a}, App Shell: {app_shell_visible_a}")
         assert landing_visible_a and not app_shell_visible_a, "Test A: Must load public landing page"
         
+        # Click Sign In on navbar -> DIRECTLY opens Entra Device Modal!
         page_a.click("button:has-text('Sign In')")
-        page_a.wait_for_selector("#signin-unauth-container", state="visible")
-        unauth_visible = page_a.is_visible("#signin-unauth-container")
-        print(f"  After Sign In Click -> Login Screen Visible: {unauth_visible}")
-        assert unauth_visible, "Test A: Must render login screen"
-        
-        page_a.click("#signin-unauth-container button")
         page_a.wait_for_selector("#login-modal", state="visible")
         user_code_text = page_a.text_content("#login-user-code")
-        print(f"  After Entra Click -> Modal Visible: True, User Code: {user_code_text.strip()}")
-        assert page_a.is_visible("#login-modal"), "Test A: Must display Entra device authorization modal"
+        print(f"  After Sign In Click -> Entra Modal Opens Directly: True, User Code: {user_code_text.strip()}")
+        assert page_a.is_visible("#login-modal"), "Test A: Sign In MUST open Entra device modal directly without intermediate card"
         
-        # Simulate Entra Polling Completion for Fresh Login
+        # Simulate Entra Verification Completion -> Proceeds directly to Portal
         auth_mgr = get_auth_manager()
         admin_companies = getattr(auth_mgr, "default_admin_companies", set())
         fresh_token = auth_mgr.create_session(
@@ -74,7 +69,7 @@ def run_browser_verification():
         context_a.close()
 
         # ---------------------------------------------------------------------
-        # TEST B: Returning User with Existing Session (Welcome Back Prompt)
+        # TEST B: Returning User with Active Session (Welcome Back Prompt)
         # ---------------------------------------------------------------------
         print("\n[TEST B] Returning User with Active Session...")
         context_b = browser.new_context()
@@ -146,7 +141,7 @@ def run_browser_verification():
         assert landing_d and token_d is None, "Test D: Sign out returns to landing page"
         
         browser.close()
-        print("\n=== ALL REFINED UX FRONTEND VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
+        print("\n=== ALL STREAMLINED FRONTEND VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
 
 if __name__ == "__main__":
     run_browser_verification()
