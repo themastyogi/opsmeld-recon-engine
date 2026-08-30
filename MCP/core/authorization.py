@@ -68,14 +68,18 @@ class CentralAuthorizationEngine:
             return False, DenialReason.ORGANIZATION_SUSPENDED
 
         # Gate 3: Is module subscribed for organization?
-        if not datastore.is_module_subscribed(org_id, module_id):
+        alt_module_id = module_id.replace("-", "_") if "-" in module_id else module_id.replace("_", "-")
+        if not datastore.is_module_subscribed(org_id, module_id) and not datastore.is_module_subscribed(org_id, alt_module_id):
             logger.warning(f"Authorization Denied: Module '{module_id}' is NOT SUBSCRIBED for org '{org_id}'")
             return False, DenialReason.MODULE_NOT_SUBSCRIBED
 
         # Gate 4: User permission
         if permission:
             user_perms = session.permissions if hasattr(session, "permissions") else datastore.get_user_permissions(session.user_id, org_id)
-            if permission not in user_perms:
+            alt_permission = permission.replace("-", "_") if "-" in permission else permission.replace("_", "-")
+            roles = getattr(session, "roles", [])
+            is_enterprise_admin = "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles
+            if not is_enterprise_admin and permission not in user_perms and alt_permission not in user_perms and "*" not in user_perms:
                 logger.warning(f"Authorization Denied: User '{session.user_id}' lacks permission '{permission}' for module '{module_id}'")
                 return False, DenialReason.USER_NOT_PERMITTED
 

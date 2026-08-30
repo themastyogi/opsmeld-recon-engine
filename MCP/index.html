@@ -1761,7 +1761,7 @@
         if (notProvisioned) notProvisioned.style.display = 'none';
         if (appShell) appShell.style.display = 'none';
 
-        const reqPerm = (viewName === 'data-trust') ? 'data-trust:read' : 'ar_control_tower:read';
+        const reqPerm = (viewName === 'data-trust') ? 'data_trust:read' : 'ar_control_tower:read';
 
         if (window.OpsmeldSession) {
             window.OpsmeldSession.resolveState().then(state => {
@@ -1776,7 +1776,7 @@
 
                 const permissions = state.permissions || [];
                 const roles = state.roles || [];
-                const hasPerm = permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
+                const hasPerm = permissions.includes('data_trust:read') || permissions.includes('data-trust:read') || permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
 
                 if (!hasPerm) {
                     const msgEl = document.getElementById('auth-denied-message');

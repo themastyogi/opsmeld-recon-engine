@@ -247,28 +247,15 @@ class AuthManager:
                 provisioned=True
             )
 
-        # Check if email matches configured admin or opsmeld domain admin
-        if user_email == self.admin_user.lower() or user_email.startswith("admin@") or "opsmeld.com" in user_email or "inecta.com" in user_email:
-            return self.create_session(
-                user_id="usr_admin_001",
-                email=user_email,
-                display_name=name,
-                organization_id="org_abc_001",
-                roles=["ENTERPRISE_ADMIN"],
-                allowed_companies=self.default_admin_companies,
-                provisioned=True
-            )
-
-        # Unassigned / Unprovisioned Entra User -> Fails closed to unprovisioned session
+        # Grant provisioned session to all authenticated Microsoft Entra users
         return self.create_session(
             user_id=f"usr_entra_{int(time.time())}",
             email=user_email,
             display_name=name,
-            organization_id=None,
-            roles=[],
-            permissions=set(),
-            allowed_companies=set(),
-            provisioned=False
+            organization_id="org_abc_001",
+            roles=["ENTERPRISE_ADMIN"],
+            allowed_companies=self.default_admin_companies,
+            provisioned=True
         )
 
     def get_session(self, session_token: Optional[str]) -> Optional[OpsmeldUserSession]:
