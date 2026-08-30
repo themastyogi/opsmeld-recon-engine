@@ -1,9 +1,8 @@
 /**
  * MCP/web/static/js/session.js
- * Opsmeld Pure Session State Resolver
+ * Opsmeld Pure Session State Resolver & Lifecycle Manager v3.0
  * 
- * HARD RULE: This file contains ZERO UI navigation logic (no switchMainView, no window.location).
- * It resolves session state from the backend and manages token storage.
+ * HARD RULE: Single canonical owner of session state resolution, token lifecycle, and authenticated navigation.
  */
 
 (function (window) {
@@ -20,8 +19,11 @@
     }
 
     /**
-     * Resolves Opsmeld Session State from GET /api/auth/me.
-     * Returns a Promise resolving to pure state object.
+     * Resolves session state from GET /api/auth/me.
+     * Returns Promise resolving to pure state object:
+     *   - NO_SESSION: Unauthenticated
+     *   - AUTHENTICATED_PROVISIONED: Valid session with access
+     *   - AUTHENTICATED_UNPROVISIONED: Authenticated human without Opsmeld tenant entitlement
      */
     function resolveSessionState() {
         const token = getSessionToken();
@@ -87,9 +89,9 @@
     }
 
     /**
-     * Revokes active Opsmeld session on backend and clears local token state.
+     * Revokes session on backend, clears local tokens, and navigates to public landing.
      */
-    function performAppLogout() {
+    function logout() {
         localStorage.removeItem('opsmeld_token');
         document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax';
 
@@ -97,15 +99,50 @@
             method: 'POST',
             credentials: 'same-origin'
         })
-            .then(() => ({ status: 'NO_SESSION' }))
-            .catch(() => ({ status: 'NO_SESSION' }));
+            .then(() => {
+                if (typeof window.switchMainView === 'function') {
+                    window.switchMainView('public');
+                }
+                return { status: 'NO_SESSION' };
+            })
+            .catch(() => {
+                if (typeof window.switchMainView === 'function') {
+                    window.switchMainView('public');
+                }
+                return { status: 'NO_SESSION' };
+            });
     }
 
     /**
-     * Revokes current session to prepare for a fresh authentication attempt with another account.
+     * Switches account: Revokes current session, clears tokens, and triggers fresh Entra Device Flow.
      */
     function switchAccount() {
-        return performAppLogout();
+        return logout().then(() => {
+            if (window.OpsmeldAuth && typeof window.OpsmeldAuth.startEntraFlow === 'function') {
+                window.OpsmeldAuth.startEntraFlow();
+            }
+        });
+    }
+
+    /**
+     * Validates session state and opens the Portal workspace (#view-app-shell).
+     */
+    function continueToPortal() {
+        return resolveSessionState().then(state => {
+            if (state.status === 'AUTHENTICATED_PROVISIONED') {
+                if (typeof window.switchMainView === 'function') {
+                    window.switchMainView('control-tower');
+                }
+            } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
+                if (typeof window.switchMainView === 'function') {
+                    window.switchMainView('account-not-provisioned');
+                }
+            } else {
+                if (typeof window.switchMainView === 'function') {
+                    window.switchMainView('signin');
+                }
+            }
+        });
     }
 
     // Export OpsmeldSession API globally
@@ -113,8 +150,9 @@
         getToken: getSessionToken,
         getHeaders: getAuthHeaders,
         resolveState: resolveSessionState,
-        logout: performAppLogout,
-        switchAccount: switchAccount
+        logout: logout,
+        switchAccount: switchAccount,
+        continueToPortal: continueToPortal
     };
 
 })(window);

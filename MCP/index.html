@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Opsmeld - Enterprise AR Collections & Cash Recovery Suite</title>
-    <script src="/static/js/session.js"></script>
-    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/session.js?v=3.0.0"></script>
+    <script src="/static/js/auth.js?v=3.0.0"></script>
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap');
 
@@ -533,7 +533,7 @@
             </p>
             
             <!-- 1. Microsoft Entra SSO Button -->
-            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
+            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="OpsmeldAuth.startEntraFlow()">
                 🔑 Continue with Microsoft Entra ID
             </button>
 
@@ -545,7 +545,7 @@
             </div>
 
             <!-- 2. Email / Password Form -->
-            <form onsubmit="performAppLogin(event)">
+            <form onsubmit="OpsmeldAuth.handlePasswordLogin(event)">
                 <div style="text-align: left; margin-bottom: 14px;">
                     <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Email / Username</label>
                     <input type="text" id="app-login-email" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
@@ -573,15 +573,15 @@
             <h2 style="font-size: 1.4rem; font-weight: 800; color: white; margin: 0 0 4px 0;">Welcome back</h2>
             <div id="welcome-user-email" style="font-size: 1rem; color: #10B981; font-weight: 700; margin-bottom: 24px;">user@company.com</div>
             
-            <button class="btn-btn" style="background: #10B981; color: white; width: 100%; font-size: 1rem; font-weight: 800; padding: 14px; border-radius: 8px; margin-bottom: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onclick="switchMainView('control-tower')">
+            <button class="btn-btn" style="background: #10B981; color: white; width: 100%; font-size: 1rem; font-weight: 800; padding: 14px; border-radius: 8px; margin-bottom: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onclick="OpsmeldSession.continueToPortal()">
                 🚀 Continue to Opsmeld Portal
             </button>
             
-            <button class="btn-btn" style="background: rgba(255,255,255,0.06); color: #E2E8F0; width: 100%; font-size: 0.88rem; font-weight: 600; padding: 10px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;" onclick="switchAccountAndLogin()">
+            <button class="btn-btn" style="background: rgba(255,255,255,0.06); color: #E2E8F0; width: 100%; font-size: 0.88rem; font-weight: 600; padding: 10px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;" onclick="OpsmeldSession.switchAccount()">
                 🔄 Sign in with another account
             </button>
 
-            <div style="font-size: 0.82rem; color: #94A3B8; cursor: pointer; text-decoration: underline;" onclick="performAppLogout()">
+            <div style="font-size: 0.82rem; color: #94A3B8; cursor: pointer; text-decoration: underline;" onclick="OpsmeldSession.logout()">
                 🚪 Sign Out
             </div>
         </div>
@@ -1255,7 +1255,7 @@
             </div>
             <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
                 <div style="font-size: 0.82rem; color: #6B7280;">⏳ Waiting for Microsoft authentication...</div>
-                <button class="modal-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;" onclick="closeLoginModal()">Cancel</button>
+                <button class="modal-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;" onclick="OpsmeldAuth.closeModal()">Cancel</button>
             </div>
         </div>
     </div>
@@ -3050,131 +3050,6 @@
         }
         
         container.innerHTML = html;
-    }
-
-
-
-    let loginPollTimer = null;
-
-    function openAppLoginModal() {
-        const modalEl = document.getElementById('login-modal');
-        const codeEl = document.getElementById('login-user-code');
-        const linkEl = document.getElementById('login-link');
-
-        if (codeEl) codeEl.innerText = 'GENERATING CODE...';
-        if (linkEl) linkEl.href = '#';
-        if (modalEl) modalEl.style.display = 'flex';
-
-        fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-            credentials: 'same-origin'
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.user_code) {
-                    if (codeEl) codeEl.innerText = data.user_code;
-                    if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
-
-                    if (loginPollTimer) clearInterval(loginPollTimer);
-                    let pollErrors = 0;
-                    loginPollTimer = setInterval(() => {
-                        fetch('/api/auth/poll', { credentials: 'same-origin' })
-                            .then(res => {
-                                pollErrors = 0;
-                                return res.json();
-                            })
-                            .then(pollRes => {
-                                if (pollRes.status === 'success' && pollRes.token) {
-                                    clearInterval(loginPollTimer);
-                                    loginPollTimer = null;
-                                    localStorage.setItem('opsmeld_token', pollRes.token);
-                                    closeLoginModal();
-                                    switchMainView('control-tower');
-                                } else if (pollRes.error === 'ACCOUNT_NOT_PROVISIONED' || pollRes.status === 'pending_approval') {
-                                    clearInterval(loginPollTimer);
-                                    loginPollTimer = null;
-                                    closeLoginModal();
-                                    switchMainView('account-not-provisioned');
-                                }
-                            })
-                            .catch(err => {
-                                pollErrors++;
-                                console.warn('[LoginModal] Poll warning:', err);
-                                if (pollErrors >= 10) {
-                                    clearInterval(loginPollTimer);
-                                    loginPollTimer = null;
-                                }
-                            });
-                    }, 3000);
-                } else {
-                    alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
-                }
-            })
-            .catch(err => {
-                console.error('Auth login error:', err);
-                alert('Authentication service error: ' + err.message);
-            });
-    }
-
-    function closeLoginModal() {
-        if (loginPollTimer) {
-            clearInterval(loginPollTimer);
-            loginPollTimer = null;
-        }
-        const modal = document.getElementById('login-modal');
-        if (modal) modal.style.display = 'none';
-    }
-
-    function performAppLogout() {
-        if (window.OpsmeldSession) {
-            window.OpsmeldSession.logout().then(() => {
-                switchMainView('public');
-            });
-        } else {
-            localStorage.removeItem('opsmeld_token');
-            switchMainView('public');
-        }
-    }
-
-    function performAppLogin(e) {
-        if (e) e.preventDefault();
-        const emailEl = document.getElementById('app-login-email');
-        const passEl = document.getElementById('app-login-pass');
-        const errEl = document.getElementById('app-login-error');
-
-        const email = emailEl ? emailEl.value : 'admin@opsmeld.com';
-        const password = passEl ? passEl.value : 'password123';
-
-        if (errEl) errEl.style.display = 'none';
-
-        fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, password: password }),
-            credentials: 'same-origin'
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.token) {
-                    localStorage.setItem('opsmeld_token', data.token);
-                    switchMainView('control-tower');
-                } else if (data.user_code) {
-                    openAppLoginModal();
-                } else {
-                    if (errEl) {
-                        errEl.textContent = 'Invalid credentials: ' + (data.error || 'Authentication failed');
-                        errEl.style.display = 'block';
-                    }
-                }
-            })
-            .catch(err => {
-                if (errEl) {
-                    errEl.textContent = 'Sign in error: ' + err.message;
-                    errEl.style.display = 'block';
-                }
-            });
     }
 
     // loadAuthorizedCompanies is called only when entering an authenticated application workspace
