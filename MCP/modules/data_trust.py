@@ -112,16 +112,12 @@ class DataTrustEngine:
                 target_comp = details["company_id"]
 
         if not target_comp:
-            return []
+            target_comp = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
 
         active_findings, _, _ = self._load_from_disk(company_id=target_comp)
 
-        if self.client:
-            live_findings = [
-                f for f in active_findings
-                if f.get("data_source") == "LIVE_BUSINESS_CENTRAL"
-            ]
-            return live_findings
+        if not active_findings:
+            active_findings = self.run_recon(company_id=target_comp)
 
         return active_findings
 

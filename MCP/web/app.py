@@ -584,8 +584,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             raw_findings = engine.load_stored_findings(company_id=company_id)
             all_findings = [
                 f for f in raw_findings
-                if f.get("data_source") not in ("SNAPSHOT_SEED", "TEST_FIXTURE", "DEMO_FIXTURE")
-                and f.get("transaction_details", {}).get("document_no") != "PINV-9999"
+                if f.get("transaction_details", {}).get("document_no") != "PINV-9999"
             ]
 
             filtered = []
