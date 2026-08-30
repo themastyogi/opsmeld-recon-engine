@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from modules.data_trust_engine.authorization import CompanyAccessManager
 from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
 from modules.data_trust_engine.acquisition import GUID_REGEX
