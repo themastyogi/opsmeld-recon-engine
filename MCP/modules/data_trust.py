@@ -117,7 +117,13 @@ class DataTrustEngine:
         active_findings, _, _ = self._load_from_disk(company_id=target_comp)
 
         if not active_findings:
-            active_findings = self.run_recon(company_id=target_comp)
+            from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
+            orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
+            mode = "TEST_FIXTURE" if self.client is None else "AUTO"
+            res = orchestrator.run_recon(company_id=target_comp, mode=mode)
+            active_findings = res.get("findings", [])
+            if active_findings:
+                self.save_stored_findings(active_findings, company_id=target_comp, data_source=res.get("run_summary", {}).get("data_source"))
 
         return active_findings
 
