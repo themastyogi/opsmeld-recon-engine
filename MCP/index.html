@@ -1191,14 +1191,22 @@
 
     <!-- Login Modal Popup -->
     <div id="login-modal" class="modal-overlay" style="display:none; z-index: 2000;">
-        <div class="modal-box" style="width: 480px;">
-            <h2 style="font-size: 1.2rem; font-weight: 700; margin-top: 0; color: #1F2937;">🔑 Sign In with Microsoft Entra</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem;">To authorize Opsmeld with Business Central, open the link below and enter your code:</p>
-            <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                <div style="font-size: 0.85rem; color: #4B5563;">Step 1: Open <a id="login-link" href="https://microsoft.com/devicelogin" target="_blank" style="color: #4F46E5; font-weight: 700;">https://microsoft.com/devicelogin</a></div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #111827; letter-spacing: 0.08em; margin-top: 8px;" class="mono" id="login-user-code">FETCHING...</div>
+        <div class="modal-box" style="width: 480px; text-align: center;">
+            <h2 style="font-size: 1.3rem; font-weight: 800; margin-top: 0; color: #1F2937;">🔑 Sign In with Microsoft Entra</h2>
+            <p style="color: #4B5563; font-size: 0.9rem; line-height: 1.5;">Authenticate with your Microsoft Entra ID / Business Central account using the code below:</p>
+            <div style="background: #F3F4F6; border: 1px solid #E5E7EB; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                <div style="font-size: 0.82rem; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Your Entra Authentication Code</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #111827; letter-spacing: 0.1em; margin: 10px 0;" class="mono" id="login-user-code">GENERATING CODE...</div>
+                <div style="margin-top: 14px;">
+                    <a id="login-link" href="https://microsoft.com/devicelogin" target="_blank" class="btn-btn" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; text-decoration: none; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                        🚀 Open Microsoft Entra Login Page
+                    </a>
+                </div>
             </div>
-            <button class="modal-btn" onclick="closeLoginModal()">Done / Refresh</button>
+            <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
+                <div style="font-size: 0.82rem; color: #6B7280;">⏳ Waiting for Microsoft authentication...</div>
+                <button class="modal-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;" onclick="closeLoginModal()">Cancel</button>
+            </div>
         </div>
     </div>
 
@@ -2955,6 +2963,14 @@
     let loginPollTimer = null;
 
     function openAppLoginModal() {
+        const modalEl = document.getElementById('login-modal');
+        const codeEl = document.getElementById('login-user-code');
+        const linkEl = document.getElementById('login-link');
+
+        if (codeEl) codeEl.innerText = 'GENERATING CODE...';
+        if (linkEl) linkEl.href = '#';
+        if (modalEl) modalEl.style.display = 'flex';
+
         fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2964,12 +2980,8 @@
             .then(res => res.json())
             .then(data => {
                 if (data.user_code) {
-                    const codeEl = document.getElementById('login-user-code');
-                    const linkEl = document.getElementById('login-link');
-                    const modalEl = document.getElementById('login-modal');
                     if (codeEl) codeEl.innerText = data.user_code;
                     if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
-                    if (modalEl) modalEl.style.display = 'flex';
 
                     if (loginPollTimer) clearInterval(loginPollTimer);
                     loginPollTimer = setInterval(() => {
@@ -2992,10 +3004,12 @@
                             .catch(err => console.error('Poll error:', err));
                     }, 3000);
                 } else {
+                    if (modalEl) modalEl.style.display = 'none';
                     alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
                 }
             })
             .catch(err => {
+                if (modalEl) modalEl.style.display = 'none';
                 console.error('Auth login error:', err);
                 alert('Authentication service error: ' + err.message);
             });
