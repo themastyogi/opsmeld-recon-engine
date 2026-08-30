@@ -155,11 +155,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         path = parsed_url.path
 
         if path in ["/", "/index.html", "/dashboard", "/collections"]:
-            index_path = Path(__file__).resolve().parent / "index.html"
-            if not index_path.exists():
-                index_path = Path(__file__).resolve().parent.parent / "index.html"
+            candidates = [
+                Path(__file__).resolve().parent.parent / "index.html",
+                Path.cwd() / "MCP" / "index.html",
+                Path.cwd() / "index.html",
+                Path(__file__).resolve().parent / "index.html"
+            ]
+            index_path = next((p for p in candidates if p.exists()), None)
             
-            if index_path.exists():
+            if index_path:
                 html = index_path.read_text(encoding="utf-8")
             else:
                 client_key = self._get_client_key(parsed_url)
