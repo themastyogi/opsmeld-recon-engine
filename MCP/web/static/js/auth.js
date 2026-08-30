@@ -35,69 +35,12 @@
     }
 
     /**
-     * Starts the Microsoft Entra Device Authorization Flow.
-     * Displays Entra modal, initiates device flow on backend, and polls until complete.
+     * Starts the official Microsoft Entra Web Authorization Flow.
+     * Navigates directly to login.microsoftonline.com for interactive user login (email input & Authenticator app prompt).
      */
     function startEntraFlow() {
         stopPolling();
-        openEntraModal();
-
-        const codeEl = document.getElementById('login-user-code');
-        const linkEl = document.getElementById('login-link');
-
-        return fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-            credentials: 'same-origin'
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.user_code) {
-                    if (codeEl) codeEl.innerText = data.user_code;
-                    if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
-
-                    let pollErrors = 0;
-                    loginPollTimer = setInterval(() => {
-                        fetch('/api/auth/poll', { credentials: 'same-origin' })
-                            .then(res => {
-                                pollErrors = 0;
-                                return res.json();
-                            })
-                            .then(pollRes => {
-                                if (pollRes.status === 'success' && pollRes.token) {
-                                    stopPolling();
-                                    localStorage.setItem('opsmeld_token', pollRes.token);
-                                    closeEntraModal();
-                                    if (typeof window.switchMainView === 'function') {
-                                        window.switchMainView('control-tower');
-                                    }
-                                } else if (pollRes.error === 'ACCOUNT_NOT_PROVISIONED' || pollRes.status === 'pending_approval') {
-                                    stopPolling();
-                                    closeEntraModal();
-                                    if (typeof window.switchMainView === 'function') {
-                                        window.switchMainView('account-not-provisioned');
-                                    }
-                                }
-                            })
-                            .catch(err => {
-                                pollErrors++;
-                                console.warn('[AuthController] Poll warning:', err);
-                                if (pollErrors >= 10) {
-                                    stopPolling();
-                                }
-                            });
-                    }, 3000);
-                } else {
-                    alert('Unable to initiate Microsoft Entra login: ' + (data.error || JSON.stringify(data)));
-                    closeEntraModal();
-                }
-            })
-            .catch(err => {
-                console.error('[AuthController] Auth login error:', err);
-                alert('Authentication service error: ' + err.message);
-                closeEntraModal();
-            });
+        window.location.href = '/api/auth/entra/authorize';
     }
 
     /**

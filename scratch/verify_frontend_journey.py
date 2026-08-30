@@ -17,7 +17,7 @@ def run_server():
     server.serve_forever()
 
 def run_browser_verification():
-    print("=== STARTING OPTION B FRONTEND VERIFICATION (A-D) ===")
+    print("=== STARTING MICROSOFT ENTRA WEB OAUTH VERIFICATION (A-D) ===")
     
     # Start local server
     t = threading.Thread(target=run_server, daemon=True)
@@ -30,9 +30,9 @@ def run_browser_verification():
         browser = p.chromium.launch(headless=True)
         
         # ---------------------------------------------------------------------
-        # TEST A: Option B Canonical Sign-In Screen (Entra SSO + Password Form)
+        # TEST A: Microsoft Entra Interactive Web OAuth Login Endpoint
         # ---------------------------------------------------------------------
-        print("\n[TEST A] Option B Canonical Sign-In Screen...")
+        print("\n[TEST A] Microsoft Entra Interactive Web Authorization Endpoint...")
         context_a = browser.new_context()
         page_a = context_a.new_page()
         page_a.goto(base_url)
@@ -42,26 +42,20 @@ def run_browser_verification():
         print(f"  Initial Load -> Public Landing: {landing_visible_a}, App Shell: {app_shell_visible_a}")
         assert landing_visible_a and not app_shell_visible_a, "Test A: Must load public landing page"
         
-        # Click Sign In on navbar -> Renders Option B Sign In Wall!
+        # Click Sign In -> Renders Option B Sign In Wall
         page_a.click("button:has-text('Sign In')")
         page_a.wait_for_selector("#signin-unauth-container", state="visible")
-        unauth_visible = page_a.is_visible("#signin-unauth-container")
-        entra_btn_visible = page_a.is_visible("#signin-unauth-container button:has-text('Continue with Microsoft Entra ID')")
-        email_input_visible = page_a.is_visible("#app-login-email")
-        password_input_visible = page_a.is_visible("#app-login-pass")
-        print(f"  After Sign In Click -> Option B Card Visible: {unauth_visible}, Entra SSO Btn: {entra_btn_visible}, Password Form: {email_input_visible and password_input_visible}")
-        assert unauth_visible and entra_btn_visible and email_input_visible and password_input_visible, "Test A: Must render Option B card with BOTH Entra SSO button and Password form"
         
-        # Verify Clicking Entra SSO button opens device code modal
-        page_a.click("#signin-unauth-container button:has-text('Continue with Microsoft Entra ID')")
-        page_a.wait_for_selector("#login-modal", state="visible")
-        user_code_text = page_a.text_content("#login-user-code")
-        print(f"  After Entra Click -> Modal Visible: True, User Code: {user_code_text.strip()}")
-        assert page_a.is_visible("#login-modal"), "Test A: Clicking Entra SSO button must open device code modal"
+        # Verify /api/auth/entra/authorize returns valid Microsoft login URL
+        auth_url_info = page_a.evaluate("""fetch('/api/auth/entra/authorize?json=true').then(r => r.json())""")
+        auth_url = auth_url_info.get("auth_url", "")
+        print(f"  Entra Web OAuth Authorization URL: {auth_url[:75]}...")
+        assert "login.microsoftonline.com" in auth_url, "Test A: Must target official Microsoft online login portal"
+        assert "response_type=code" in auth_url, "Test A: Must use standard OAuth2 authorization code flow"
         context_a.close()
 
         # ---------------------------------------------------------------------
-        # TEST B: Returning User with Active Session (Welcome Back Prompt)
+        # TEST B: Returning User with Active Session
         # ---------------------------------------------------------------------
         print("\n[TEST B] Returning User with Active Session...")
         context_b = browser.new_context()
@@ -102,19 +96,23 @@ def run_browser_verification():
         assert app_shell_final, "Test B: Portal renders after explicit Continue click"
 
         # ---------------------------------------------------------------------
-        # TEST C: Sign In With Another Account
+        # TEST C: Sign In With Password (Option B)
         # ---------------------------------------------------------------------
-        print("\n[TEST C] Sign In With Another Account...")
-        page_c = context_b.new_page()
+        print("\n[TEST C] Sign In With Password (Option B)...")
+        context_c = browser.new_context()
+        page_c = context_c.new_page()
         page_c.goto(base_url)
         page_c.click("button:has-text('Sign In')")
-        page_c.wait_for_selector("#signin-welcome-container", state="visible")
+        page_c.wait_for_selector("#signin-unauth-container", state="visible")
         
-        page_c.click("button:has-text('Sign in with another account')")
-        page_c.wait_for_selector("#login-modal", state="visible")
-        token_after_switch = page_c.evaluate("localStorage.getItem('opsmeld_token')")
-        print(f"  After Another Account Click -> Modal Visible: True, Token Revoked: {token_after_switch is None}")
-        assert token_after_switch is None, "Test C: Session token must be revoked"
+        page_c.fill("#app-login-email", "admin@opsmeld.com")
+        page_c.fill("#app-login-pass", "password123")
+        page_c.click("#signin-unauth-container button[type='submit']")
+        page_c.wait_for_selector("#view-app-shell", state="visible")
+        app_shell_c = page_c.is_visible("#view-app-shell")
+        print(f"  After Password Sign In Submit -> App Shell Visible: {app_shell_c}")
+        assert app_shell_c, "Test C: Valid password sign-in proceeds directly to Portal"
+        context_c.close()
 
         # ---------------------------------------------------------------------
         # TEST D: Sign Out Journey
@@ -135,7 +133,7 @@ def run_browser_verification():
         assert landing_d and token_d is None, "Test D: Sign out returns to landing page"
         
         browser.close()
-        print("\n=== ALL OPTION B FRONTEND VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
+        print("\n=== ALL MICROSOFT ENTRA OAUTH VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
 
 if __name__ == "__main__":
     run_browser_verification()

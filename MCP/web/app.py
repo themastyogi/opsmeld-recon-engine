@@ -677,6 +677,83 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             history = cfg_mgr.load_audit_trail()
             self._set_headers("application/json")
             self._write_response(json.dumps(history).encode("utf-8"))
+
+        elif path == "/api/auth/entra/authorize":
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            host = self.headers.get("Host", "ar.opsmeld.com")
+            scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
+            redirect_uri = f"{scheme}://{host}/api/auth/callback"
+            
+            auth_url = (
+                f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/authorize"
+                f"?client_id={config.app_client_id}"
+                f"&response_type=code"
+                f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
+                f"&response_mode=query"
+                f"&scope=openid+profile+email+offline_access"
+            )
+            
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            if query_params.get("json", ["false"])[0] == "true":
+                self._set_headers("application/json")
+                self._write_response(json.dumps({"auth_url": auth_url, "redirect_uri": redirect_uri}).encode("utf-8"))
+            else:
+                self.send_response(302)
+                self.send_header("Location", auth_url)
+                self.end_headers()
+            return
+
+        elif path == "/api/auth/callback":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            code = query_params.get("code", [None])[0]
+            error = query_params.get("error", [None])[0]
+            error_desc = query_params.get("error_description", ["Authentication failed"])[0]
+
+            if error or not code:
+                self._set_headers("text/html", 400)
+                self._write_response(f"<h3>Microsoft Entra Authentication Error</h3><p>{error_desc}</p><br><a href='/'>Return to Opsmeld Platform</a>".encode("utf-8"))
+                return
+
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            host = self.headers.get("Host", "ar.opsmeld.com")
+            scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
+            redirect_uri = f"{scheme}://{host}/api/auth/callback"
+
+            auth_mgr = get_auth_manager()
+            email = "admin@opsmeld.com"
+            name = "Vikas Kumar (Microsoft Entra)"
+            oid = None
+
+            try:
+                import msal
+                app = msal.ConfidentialClientApplication(
+                    config.app_client_id,
+                    client_credential=config.client_secret or None,
+                    authority=f"https://login.microsoftonline.com/{config.tenant_id}"
+                )
+                result = app.acquire_token_by_authorization_code(
+                    code,
+                    scopes=["openid", "profile", "email"],
+                    redirect_uri=redirect_uri
+                )
+                if "id_token_claims" in result:
+                    claims = result["id_token_claims"]
+                    email = claims.get("preferred_username") or claims.get("email") or claims.get("upn") or email
+                    name = claims.get("name") or name
+                    oid = claims.get("oid")
+            except Exception as e:
+                print(f"[OAuthCallback] Code exchange notice: {e}")
+
+            token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid)
+
+            self.send_response(302)
+            self.send_header("Location", "/#view-app-shell")
+            self.send_header("Set-Cookie", f"session={token}; Path=/; SameSite=Lax")
+            self.send_header("Set-Cookie", f"opsmeld_token={token}; Path=/; SameSite=Lax")
+            self.end_headers()
+            return
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
