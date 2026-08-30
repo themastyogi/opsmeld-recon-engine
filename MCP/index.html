@@ -3039,6 +3039,20 @@
                     console.error('Auth login error:', err);
                     alert('Authentication service error: ' + err.message);
                 });
+        } else {
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+                credentials: 'same-origin'
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.user_code) {
+                        if (codeEl) codeEl.innerText = data.user_code;
+                        if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
+                    }
+                });
         }
     }
 
