@@ -240,6 +240,38 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"status": "success", "organizations": orgs, "subscriptions": subs}).encode("utf-8"))
             return
 
+        elif path == "/api/org/companies":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or not getattr(session, "provisioned", True):
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized: Session unprovisioned"}).encode("utf-8"))
+                return
+            
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            client = BCMCPClient(config)
+            mgr = CompanyAccessManager()
+            discovered, data_source = mgr.get_discovered_companies_with_provenance(client)
+            
+            user_allowed = getattr(session, "allowed_companies", set())
+            roles = getattr(session, "roles", [])
+            is_admin = "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles
+            
+            permitted_companies = []
+            for comp in discovered:
+                c_id = comp.get("id")
+                if is_admin or not user_allowed or c_id in user_allowed:
+                    permitted_companies.append(comp)
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({
+                "status": "SUCCESS",
+                "data_source": data_source,
+                "companies": permitted_companies
+            }).encode("utf-8"))
+            return
+
         elif path == "/api/org/users":
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)

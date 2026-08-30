@@ -128,12 +128,15 @@ class CentralAuthorizationEngine:
             if not is_subscribed:
                 state = ModulePortalState.NOT_SUBSCRIBED
                 message = "Not included in your organization's current plan."
+                can_request = False
             elif not has_permission:
                 state = ModulePortalState.NOT_PERMITTED
-                message = "Available for your organization. You don't currently have access."
+                message = "Available to your organization. You don't currently have access."
+                can_request = True
             else:
                 state = ModulePortalState.AVAILABLE
                 message = "Available for your account."
+                can_request = False
 
             results.append({
                 "id": mod.module_id,
@@ -143,7 +146,10 @@ class CentralAuthorizationEngine:
                 "state": state,
                 "message": message,
                 "enabled": state == ModulePortalState.AVAILABLE,
-                "is_available": state == ModulePortalState.AVAILABLE
+                "is_available": state == ModulePortalState.AVAILABLE,
+                "organization_subscribed": is_subscribed,
+                "user_permitted": has_permission,
+                "can_request_access": can_request
             })
 
         return results
