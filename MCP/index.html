@@ -2961,8 +2961,8 @@
                     }
                     data.companies.forEach(c => {
                         const opt = document.createElement('option');
-                        opt.value = c.id; // Real Business Central GUID
-                        opt.textContent = c.displayName ? `${c.name} (${c.displayName})` : c.name;
+                        opt.value = c.id; // Real Business Central GUID or ID
+                        opt.textContent = (c.displayName && c.displayName !== c.name) ? c.displayName : c.name;
                         select.appendChild(opt);
                     });
                     if (select.value) {
