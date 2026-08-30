@@ -150,6 +150,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         return get_auth_manager().validate_session(token)
 
     def do_GET(self):
+        try:
+            self._handle_do_GET()
+        except Exception as e:
+            logger.error(f"Unhandled exception in do_GET: {str(e)}", exc_info=True)
+            self._set_headers("application/json", 500)
+            self._write_response(json.dumps({
+                "error": f"Internal Server Error: {str(e)}",
+                "status": "ERROR"
+            }).encode("utf-8"))
+
+    def _handle_do_GET(self):
         global CURRENT_DEVICE_FLOW
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
