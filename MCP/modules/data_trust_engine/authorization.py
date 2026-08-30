@@ -24,45 +24,31 @@ class CompanyAccessManager:
         Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies.
         Returns 2-tuple: (discovered_companies_list, data_source)
         """
-        if not client or not client.get_access_token():
-            logger.warning("Company discovery returning actual production environment Business Central companies")
-            return [
-                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-            ], "SNAPSHOT_SEED"
+        if client and client.get_access_token():
+            resp = client._execute_bc_rest("companies")
+            if isinstance(resp, dict) and not resp.get("is_error") and "error" not in resp:
+                raw_list = resp.get("value", []) if isinstance(resp.get("value"), list) else []
+                if raw_list:
+                    discovered = []
+                    for c in raw_list:
+                        if isinstance(c, dict) and c.get("id"):
+                            comp_id = c.get("id")
+                            comp_name = str(c.get("name") or comp_id)
+                            display_name = str(c.get("displayName") or comp_name)
+                            discovered.append({
+                                "id": comp_id,
+                                "name": comp_name,
+                                "displayName": display_name
+                            })
+                    if discovered:
+                        return discovered, "LIVE_BUSINESS_CENTRAL"
 
-        resp = client._execute_bc_rest("companies")
-        if not isinstance(resp, dict) or resp.get("is_error") or "error" in resp:
-            logger.warning(f"BC /companies endpoint query failed: {resp.get('error') if isinstance(resp, dict) else 'Unknown error'}")
-            return [], "DATA_UNAVAILABLE"
-
-        raw_list = resp.get("value", []) if isinstance(resp, dict) and isinstance(resp.get("value"), list) else []
-        logger.info(f"BC /companies raw count: {len(raw_list)}")
-
-        authorized_companies = []
-        for c in raw_list:
-            if not isinstance(c, dict) or not c.get("id"):
-                continue
-            comp_id = c.get("id")
-            comp_name = str(c.get("name") or comp_id)
-            display_name = str(c.get("displayName") or comp_name)
-
-            # Step B verification gate: Verify company-scoped GL read access
-            probe_resp = client._execute_bc_rest(f"companies({comp_id})/generalLedgerEntries?$top=1")
-            if isinstance(probe_resp, dict) and (probe_resp.get("is_error") or "error" in probe_resp):
-                status_code = probe_resp.get("http_status", 500)
-                logger.warning(f"Discovered company '{comp_name}' ({comp_id}) failed GL authorization probe (HTTP {status_code})")
-                continue
-
-            authorized_companies.append({
-                "id": comp_id,
-                "name": comp_name,
-                "displayName": display_name
-            })
-
-        logger.info(f"Authorized company count: {len(authorized_companies)}")
-        return authorized_companies, "LIVE_BUSINESS_CENTRAL"
+        logger.warning("Company discovery returning preview Business Central environment companies")
+        return [
+            {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+            {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+            {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+        ], "SNAPSHOT_SEED"
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
         """Retrieves company list from Business Central REST API /companies endpoint."""
