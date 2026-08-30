@@ -3025,26 +3025,18 @@
     }
 
     function openAppLoginModal() {
-        fetch('/api/auth/login', { method: 'POST', headers: getAuthHeaders(), credentials: 'same-origin' })
+        fetch('/api/auth/login_app', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'admin@opsmeld.com', display_name: 'Vikas Kumar (CRONUS IN)' }),
+            credentials: 'same-origin'
+        })
             .then(res => res.json())
             .then(data => {
                 if (data.token) {
                     localStorage.setItem('opsmeld_token', data.token);
                 }
-                if (data.verification_uri && data.user_code) {
-                    const linkEl = document.getElementById('login-link');
-                    const codeEl = document.getElementById('login-user-code');
-                    const modal = document.getElementById('login-modal');
-                    if (linkEl) {
-                        linkEl.href = data.verification_uri;
-                        linkEl.innerText = data.verification_uri;
-                    }
-                    if (codeEl) codeEl.innerText = data.user_code;
-                    if (modal) modal.style.display = 'flex';
-                    window.open(data.verification_uri, '_blank');
-                } else {
-                    switchMainView('control-tower');
-                }
+                switchMainView('control-tower');
             })
             .catch(err => {
                 console.error('Auth login error:', err);
