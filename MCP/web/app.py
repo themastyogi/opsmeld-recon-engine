@@ -692,6 +692,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
                 f"&response_mode=query"
                 f"&scope=openid+profile+email+offline_access"
+                f"&prompt=select_account"
             )
             
             query_params = urllib.parse.parse_qs(parsed_url.query)
