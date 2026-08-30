@@ -150,36 +150,36 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         """Finding selection: Validates clicking detail triggers drawer/modal."""
         self._open_page()
         self.page.evaluate("switchMainView('data-trust')")
-        self.page.evaluate("openDataTrustModal('GJV-2026-0891', '45000', 'Direct G/L bypass on Control Account 10200', 'Human review required', 'Subledger Bypass:10200:TX-1001')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-101')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
 
     def test_findings_inspect_evidence(self):
         """Inspect Evidence: Validates evidence modal displays evidence chain box."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-101', '15000', 'Impact statement', 'Review required', 'Key-101')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-102')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
-        evidence_chain = self.page.locator("#dt-evidence-chain")
+        evidence_chain = self.page.locator("#dt-modal-evidence-chain-box")
         self.assertIsNotNone(evidence_chain)
 
     def test_findings_evidence_modal_close(self):
         """Evidence modal close: Validates close button hides modal."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-102', '12000', 'Impact', 'Action', 'Key-102')")
-        disp_open = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-103')")
+        disp_open = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp_open, "flex")
         self.page.evaluate("closeDataTrustModal()")
-        disp_close = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        disp_close = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp_close, "none")
 
     def test_findings_evidence_different_signal_types(self):
         """Evidence for different signal types: Validates rendering C1, C4, C6, C8, C10 signals."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-SIGNAL', '50000', 'Signal impact', 'Action', 'Key-Sig')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-104')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
-        evidence_chain = self.page.locator("#dt-evidence-chain")
+        evidence_chain = self.page.locator("#dt-modal-evidence-chain-box")
         self.assertIsNotNone(evidence_chain)
 
     def test_findings_empty(self):
@@ -209,8 +209,8 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_status_update_finding(self):
         """Update finding status: Validates status selection change."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-STAT', '20000', 'Impact', 'Action', 'Key-Stat')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-105')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
 
     def test_status_unauthorized_update(self):
@@ -276,22 +276,22 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
     def test_inventory_baseline_hierarchy_displayed(self):
         """Baseline hierarchy displayed: Validates baseline hierarchy level in evidence."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-HIER', '30000', 'Selected Baseline Level: VENDOR_ITEM', 'Action', 'Key-Hier')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-106')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
 
     def test_inventory_peer_movement_displayed(self):
         """Peer movement displayed: Validates peer attenuation status in evidence chain."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-PEER', '35000', 'Peer Attenuation Status: ATTENUATED', 'Action', 'Key-Peer')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-107')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
 
     def test_inventory_driver_analysis_displayed(self):
         """Driver analysis displayed: Validates costing driver explanations."""
         self._open_page()
-        self.page.evaluate("openDataTrustModal('DOC-DRV', '40000', 'C4 Cost Adjustment entry explains movement', 'Action', 'Key-Drv')")
-        disp = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-108')")
+        disp = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp, "flex")
 
     # -------------------------------------------------------------------------
@@ -362,11 +362,11 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         """Broken modals: Validates opening and closing modals without DOM errors."""
         self._open_page()
         self.page.wait_for_function("typeof window.openDataTrustModal === 'function'")
-        self.page.evaluate("openDataTrustModal('DOC-MODAL', '10000', 'Impact', 'Action', 'Key-Modal')")
-        disp_open = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        self.page.evaluate("openDataTrustModal('FINDING-109')")
+        disp_open = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp_open, "flex")
         self.page.evaluate("closeDataTrustModal()")
-        disp_close = self.page.evaluate("document.getElementById('opsmeld-datatrust-modal').style.display")
+        disp_close = self.page.evaluate("document.getElementById('dt-evidence-modal').style.display")
         self.assertEqual(disp_close, "none")
 
         self.assertEqual(len(self.console_errors), 0)

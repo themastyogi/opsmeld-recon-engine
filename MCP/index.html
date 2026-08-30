@@ -594,7 +594,7 @@
                 <span>🔍 Search</span>
                 <span>🔔</span>
                 <span>🌐</span>
-                <span>👤 Vikas Kumar (<span id="user-company-label">CRONUS IN</span>)</span>
+                <span>👤 <span id="user-display-name">User</span> (<span id="user-company-label">CRONUS IN</span>)</span>
                 <button id="auth-toggle-btn" onclick="performAppLogout()" style="background:#EF4444; color:white; border:none; padding:5px 12px; border-radius:4px; font-weight:700; font-size:0.78rem; cursor:pointer; margin-left:8px;" title="Click to Sign Out and return to Sign In wall">Sign Out 🚪</button>
             </div>
         </div>
@@ -1919,10 +1919,8 @@
     function updateFindingStatusTable(findingId, newStatus) {
         fetch('/api/data-trust/update-status', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-User-Email': 'Vikas Kumar (admin@opsmeld.com)'
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({ finding_id: findingId, status: newStatus })
         }).then(res => res.json()).then(res => {
             loadDataTrustFindings();
@@ -1933,20 +1931,6 @@
         if (!currentInspectedFindingId) return;
         updateFindingStatusTable(currentInspectedFindingId, newStatus);
         closeDataTrustModal();
-    }
-
-    function runDataTrustRecon() {
-        fetch('/api/data-trust/run-recon', {
-            method: 'POST',
-            headers: {
-                'X-User-Email': 'Vikas Kumar (admin@opsmeld.com)'
-            }
-        })
-            .then(res => res.json())
-            .then(data => {
-                alert(data.message || 'Data Trust audit engine completed successfully.');
-                loadDataTrustFindings();
-            });
     }
 
     function loadControlTowerData() {
@@ -2809,11 +2793,7 @@
         }
     }
 
-    function performAppLogout() {
-        localStorage.removeItem('opsmeld_token');
-        fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
-            .finally(() => switchMainView('public'));
-    }
+
 
     function loadAuthorizedCompanies() {
         fetch('/api/data-trust/authorized-companies', { headers: getAuthHeaders(), credentials: 'same-origin' })
@@ -2956,28 +2936,17 @@
         container.innerHTML = html;
     }
 
-    function openDataTrustModal(docNo, amount, impact, recAction, dedupKey) {
-        const modal = document.getElementById('opsmeld-datatrust-modal');
-        if (modal) {
-            if (docNo) document.getElementById('dt-doc-no').innerText = docNo;
-            if (amount) document.getElementById('dt-amount').innerText = (String(amount).startsWith('$') ? amount : '$' + formatMoney(amount) + ' USD');
-            if (impact) document.getElementById('dt-impact').innerText = impact;
-            if (recAction) document.getElementById('dt-rec-action').innerText = recAction;
-            if (dedupKey) document.getElementById('dt-dedup-key').innerText = dedupKey;
-            modal.style.display = 'flex';
-        }
-    }
 
-    function closeDataTrustModal() {
-        const modal = document.getElementById('opsmeld-datatrust-modal');
-        if (modal) modal.style.display = 'none';
-    }
 
     function openAppLoginModal() {
+        const emailEl = document.getElementById('app-login-email');
+        const passEl = document.getElementById('app-login-password');
+        const email = emailEl ? emailEl.value : '';
+        const password = passEl ? passEl.value : '';
         fetch('/api/auth/login_app', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'admin@opsmeld.com', display_name: 'Vikas Kumar (CRONUS IN)' }),
+            body: JSON.stringify({ email: email, password: password }),
             credentials: 'same-origin'
         })
             .then(res => res.json())
