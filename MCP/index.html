@@ -1988,7 +1988,7 @@
         document.getElementById('dt-modal-status').innerText = '...';
         document.getElementById('dt-modal-severity-badge').innerText = '...';
         document.getElementById('dt-modal-evidence-chain-box').innerHTML = '<div style="padding:12px; color:#6B7280; text-align:center;">⌛ Fetching originating evidence signals from engine...</div>';
-        document.getElementById('dt-modal-impact-box').innerText = 'Loading business impact statement...';
+        modal.style.display = 'flex';
 
         const compEl = document.getElementById('dt-company-select');
         const compId = compEl ? compEl.value : '';

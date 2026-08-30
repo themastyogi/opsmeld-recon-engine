@@ -7,34 +7,47 @@ from datetime import date, timedelta
 from typing import Any, Dict, List
 
 
-def get_sample_transactions() -> List[Dict[str, Any]]:
+def get_sample_transactions(company_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    comp_prefix = "IN"
+    multiplier = 1.0
+    comp_name = "CRONUS IN"
+    if company_id:
+        if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
+            comp_prefix = "US"
+            multiplier = 1.8
+            comp_name = "My Company"
+        elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
+            comp_prefix = "SB"
+            multiplier = 0.6
+            comp_name = "Sandbox"
+
     today_str = date.today().isoformat()
     past_str = (date.today() - timedelta(days=15)).isoformat()
     future_str = (date.today() + timedelta(days=10)).isoformat()
 
     adequate_peer_history = [
-        {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Office paper and pens", "amount": 120.0},
-        {"account_no": "60100", "vendor_name": "Fabrikam Supplies", "narration": "Printer toner cartridge", "amount": 250.0},
+        {"account_no": "60100", "vendor_name": f"{comp_name} Supplies", "narration": f"[{comp_name}] Office paper and pens", "amount": 120.0 * multiplier},
+        {"account_no": "60100", "vendor_name": f"{comp_name} Supplies", "narration": f"[{comp_name}] Printer toner cartridge", "amount": 250.0 * multiplier},
     ] * 12
 
     small_peer_history = [
-        {"account_no": "60300", "vendor_name": "ChemTech Corp", "narration": "Solvent supply", "amount": 180.0},
+        {"account_no": "60300", "vendor_name": "ChemTech Corp", "narration": f"[{comp_name}] Solvent supply", "amount": 180.0 * multiplier},
     ] * 4
 
     return [
         # TX-1001: Independent Subledger Bypass (Rule Pack 2 ONLY) -> HIGH Policy Violation, zero Narration mismatch
         {
-            "id": "TX-1001",
-            "document_no": "GJV-2026-0891",
+            "id": f"TX-{comp_prefix}-1001",
+            "document_no": f"GJV-{comp_prefix}-2026-0891",
             "account_no": "10200",
             "gl_account_no": "10200",
-            "account_name": "Accounts Payable Control",
+            "account_name": f"[{comp_name}] Accounts Payable Control",
             "posting_date": today_str,
-            "amount": 45000.00,
-            "user": "JSMITH",
+            "amount": round(45000.00 * multiplier, 2),
+            "user": f"JSMITH_{comp_prefix}",
             "source_code": "GENJNL",
             "document_type": "General Journal",
-            "narration": "Standard AP control ledger adjustment",
+            "narration": f"[{comp_name}] Standard AP control ledger adjustment",
             "peer_history": []
         },
         # TX-1002: Independent Narration Anomaly (Rule Pack 3 ONLY) -> HIGH Evidence Strength (3 signals: N2, N3, N5)
