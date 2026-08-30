@@ -524,16 +524,44 @@
 
     <!-- 2. COMMON STANDALONE SIGN-IN WALL VIEW -->
     <div id="view-signin-wall" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
-        <!-- Container A: Unauthenticated State -->
+        <!-- Container A: Unauthenticated Canonical Sign-In Screen (Option B) -->
         <div id="signin-unauth-container" style="background: #1E293B; border: 1px solid #334155; border-radius: 16px; padding: 40px; width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: block;">
             <div style="font-size: 1.8rem; font-weight: 900; color: white; margin-bottom: 8px;">🟢 opsmeld</div>
             <h2 style="font-size: 1.3rem; font-weight: 800; color: white; margin: 0 0 8px 0;">Sign In to Opsmeld Platform</h2>
-            <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 28px 0;">
-                Authenticate with your Microsoft Entra ID / Business Central account to access your authorized financial intelligence applications.
+            <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 24px 0;">
+                Authenticate with your Microsoft Entra ID or your provisioned Opsmeld credentials.
             </p>
-            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 16px; cursor: pointer;" onclick="openAppLoginModal()">
+            
+            <!-- 1. Microsoft Entra SSO Button -->
+            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
                 🔑 Continue with Microsoft Entra ID
             </button>
+
+            <!-- Divider -->
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+                <div style="flex: 1; height: 1px; background: #334155;"></div>
+                <span style="font-size: 0.75rem; color: #64748B; font-weight: 700; text-transform: uppercase;">OR SIGN IN WITH PASSWORD</span>
+                <div style="flex: 1; height: 1px; background: #334155;"></div>
+            </div>
+
+            <!-- 2. Email / Password Form -->
+            <form onsubmit="performAppLogin(event)">
+                <div style="text-align: left; margin-bottom: 14px;">
+                    <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Email / Username</label>
+                    <input type="text" id="app-login-email" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
+                </div>
+                <div style="text-align: left; margin-bottom: 20px;">
+                    <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Password</label>
+                    <input type="password" id="app-login-pass" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="••••••••" value="password123" required>
+                </div>
+
+                <div id="app-login-error" style="display: none; background: #FEE2E2; color: #DC2626; font-size: 0.78rem; font-weight: 600; padding: 8px; border-radius: 6px; margin-bottom: 14px;">
+                    Invalid credentials. Please check your provisioned email and password.
+                </div>
+
+                <button type="submit" class="btn-btn" style="width: 100%; background: #2563EB; color: white; font-weight: 800; font-size: 0.95rem; padding: 12px; border-radius: 8px; margin-bottom: 20px; cursor: pointer;">Sign In</button>
+            </form>
+
             <div style="font-size: 0.78rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
                 ← Back to Opsmeld Platform
             </div>
@@ -1670,28 +1698,33 @@
                     } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
                         switchMainView('account-not-provisioned');
                     } else {
-                        if (publicLanding) publicLanding.style.display = 'block';
-                        if (signinWall) signinWall.style.display = 'none';
+                        if (publicLanding) publicLanding.style.display = 'none';
                         if (authDenied) authDenied.style.display = 'none';
                         if (notProvisioned) notProvisioned.style.display = 'none';
                         if (appShell) appShell.style.display = 'none';
-                        openAppLoginModal();
+                        if (signinWall) signinWall.style.display = 'flex';
+
+                        if (unauthContainer) unauthContainer.style.display = 'block';
+                        if (welcomeContainer) welcomeContainer.style.display = 'none';
                     }
                 });
             } else {
                 if (!token) {
-                    if (publicLanding) publicLanding.style.display = 'block';
-                    if (signinWall) signinWall.style.display = 'none';
+                    if (publicLanding) publicLanding.style.display = 'none';
                     if (authDenied) authDenied.style.display = 'none';
                     if (notProvisioned) notProvisioned.style.display = 'none';
                     if (appShell) appShell.style.display = 'none';
-                    openAppLoginModal();
+                    if (signinWall) signinWall.style.display = 'flex';
+
+                    if (unauthContainer) unauthContainer.style.display = 'block';
+                    if (welcomeContainer) welcomeContainer.style.display = 'none';
                 } else {
                     if (publicLanding) publicLanding.style.display = 'none';
                     if (authDenied) authDenied.style.display = 'none';
                     if (notProvisioned) notProvisioned.style.display = 'none';
                     if (appShell) appShell.style.display = 'none';
                     if (signinWall) signinWall.style.display = 'flex';
+
                     if (unauthContainer) unauthContainer.style.display = 'none';
                     if (welcomeContainer) welcomeContainer.style.display = 'block';
                 }

@@ -17,7 +17,7 @@ def run_server():
     server.serve_forever()
 
 def run_browser_verification():
-    print("=== STARTING STREAMLINED FRONTEND VERIFICATION (A-D) ===")
+    print("=== STARTING OPTION B FRONTEND VERIFICATION (A-D) ===")
     
     # Start local server
     t = threading.Thread(target=run_server, daemon=True)
@@ -30,9 +30,9 @@ def run_browser_verification():
         browser = p.chromium.launch(headless=True)
         
         # ---------------------------------------------------------------------
-        # TEST A: Fresh User / New Entra Login (Direct Entra Device Modal)
+        # TEST A: Option B Canonical Sign-In Screen (Entra SSO + Password Form)
         # ---------------------------------------------------------------------
-        print("\n[TEST A] Fresh User / Direct Entra Device Modal...")
+        print("\n[TEST A] Option B Canonical Sign-In Screen...")
         context_a = browser.new_context()
         page_a = context_a.new_page()
         page_a.goto(base_url)
@@ -42,30 +42,22 @@ def run_browser_verification():
         print(f"  Initial Load -> Public Landing: {landing_visible_a}, App Shell: {app_shell_visible_a}")
         assert landing_visible_a and not app_shell_visible_a, "Test A: Must load public landing page"
         
-        # Click Sign In on navbar -> DIRECTLY opens Entra Device Modal!
+        # Click Sign In on navbar -> Renders Option B Sign In Wall!
         page_a.click("button:has-text('Sign In')")
+        page_a.wait_for_selector("#signin-unauth-container", state="visible")
+        unauth_visible = page_a.is_visible("#signin-unauth-container")
+        entra_btn_visible = page_a.is_visible("#signin-unauth-container button:has-text('Continue with Microsoft Entra ID')")
+        email_input_visible = page_a.is_visible("#app-login-email")
+        password_input_visible = page_a.is_visible("#app-login-pass")
+        print(f"  After Sign In Click -> Option B Card Visible: {unauth_visible}, Entra SSO Btn: {entra_btn_visible}, Password Form: {email_input_visible and password_input_visible}")
+        assert unauth_visible and entra_btn_visible and email_input_visible and password_input_visible, "Test A: Must render Option B card with BOTH Entra SSO button and Password form"
+        
+        # Verify Clicking Entra SSO button opens device code modal
+        page_a.click("#signin-unauth-container button:has-text('Continue with Microsoft Entra ID')")
         page_a.wait_for_selector("#login-modal", state="visible")
         user_code_text = page_a.text_content("#login-user-code")
-        print(f"  After Sign In Click -> Entra Modal Opens Directly: True, User Code: {user_code_text.strip()}")
-        assert page_a.is_visible("#login-modal"), "Test A: Sign In MUST open Entra device modal directly without intermediate card"
-        
-        # Simulate Entra Verification Completion -> Proceeds directly to Portal
-        auth_mgr = get_auth_manager()
-        admin_companies = getattr(auth_mgr, "default_admin_companies", set())
-        fresh_token = auth_mgr.create_session(
-            user_id="usr_fresh_001",
-            email="fresh.user@opsmeld.com",
-            display_name="Fresh Entra User",
-            roles=["USER"],
-            organization_id="org_abc_001",
-            allowed_companies=admin_companies
-        )
-        page_a.evaluate(f"localStorage.setItem('opsmeld_token', '{fresh_token}')")
-        page_a.evaluate("closeLoginModal(); switchMainView('control-tower');")
-        page_a.wait_for_selector("#view-app-shell", state="visible")
-        app_shell_fresh = page_a.is_visible("#view-app-shell")
-        print(f"  After Entra Verification -> Direct to Portal (App Shell Visible): {app_shell_fresh}")
-        assert app_shell_fresh, "Test A: Fresh Entra auth MUST proceed directly to Portal"
+        print(f"  After Entra Click -> Modal Visible: True, User Code: {user_code_text.strip()}")
+        assert page_a.is_visible("#login-modal"), "Test A: Clicking Entra SSO button must open device code modal"
         context_a.close()
 
         # ---------------------------------------------------------------------
@@ -73,6 +65,8 @@ def run_browser_verification():
         # ---------------------------------------------------------------------
         print("\n[TEST B] Returning User with Active Session...")
         context_b = browser.new_context()
+        auth_mgr = get_auth_manager()
+        admin_companies = getattr(auth_mgr, "default_admin_companies", set())
         token_b = auth_mgr.create_session(
             user_id="usr_admin_001",
             email="admin@opsmeld.com",
@@ -141,7 +135,7 @@ def run_browser_verification():
         assert landing_d and token_d is None, "Test D: Sign out returns to landing page"
         
         browser.close()
-        print("\n=== ALL STREAMLINED FRONTEND VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
+        print("\n=== ALL OPTION B FRONTEND VERIFICATION TESTS (A-D) PASSED 100% CLEANLY! ===")
 
 if __name__ == "__main__":
     run_browser_verification()
