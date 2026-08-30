@@ -658,6 +658,18 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self._write_response(json.dumps(res).encode("utf-8"))
             return
 
+        elif path == "/api/auth/logout":
+            token = self._get_session_token()
+            if token:
+                get_auth_manager().revoke_session(token)
+            cookie_header = "session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", cookie_header)
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "success", "message": "Logged out"}).encode("utf-8"))
+            return
+
         elif path == "/api/onboarding/register":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
