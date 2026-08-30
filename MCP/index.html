@@ -3009,56 +3009,63 @@
         if (linkEl) linkEl.href = '#';
         if (modalEl) modalEl.style.display = 'flex';
 
-        if (window.OpsmeldAuth) {
-            window.OpsmeldAuth.initiateEntraFlow()
-                .then(data => {
-                    if (data.user_code) {
-                        if (codeEl) codeEl.innerText = data.user_code;
-                        if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+            credentials: 'same-origin'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.user_code) {
+                    if (codeEl) codeEl.innerText = data.user_code;
+                    if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
 
-                        window.OpsmeldAuth.startPolling(
-                            () => {
-                                closeLoginModal();
-                                switchMainView('control-tower');
-                            },
-                            () => {
-                                closeLoginModal();
-                                switchMainView('account-not-provisioned');
-                            },
-                            (err) => {
-                                console.warn('[LoginModal] Polling ended:', err);
-                            }
-                        );
-                    } else {
-                        if (modalEl) modalEl.style.display = 'none';
-                        alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
-                    }
-                })
-                .catch(err => {
-                    if (modalEl) modalEl.style.display = 'none';
-                    console.error('Auth login error:', err);
-                    alert('Authentication service error: ' + err.message);
-                });
-        } else {
-            fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-                credentials: 'same-origin'
+                    if (loginPollTimer) clearInterval(loginPollTimer);
+                    let pollErrors = 0;
+                    loginPollTimer = setInterval(() => {
+                        fetch('/api/auth/poll', { credentials: 'same-origin' })
+                            .then(res => {
+                                pollErrors = 0;
+                                return res.json();
+                            })
+                            .then(pollRes => {
+                                if (pollRes.status === 'success' && pollRes.token) {
+                                    clearInterval(loginPollTimer);
+                                    loginPollTimer = null;
+                                    localStorage.setItem('opsmeld_token', pollRes.token);
+                                    closeLoginModal();
+                                    switchMainView('control-tower');
+                                } else if (pollRes.error === 'ACCOUNT_NOT_PROVISIONED' || pollRes.status === 'pending_approval') {
+                                    clearInterval(loginPollTimer);
+                                    loginPollTimer = null;
+                                    closeLoginModal();
+                                    switchMainView('account-not-provisioned');
+                                }
+                            })
+                            .catch(err => {
+                                pollErrors++;
+                                console.warn('[LoginModal] Poll warning:', err);
+                                if (pollErrors >= 10) {
+                                    clearInterval(loginPollTimer);
+                                    loginPollTimer = null;
+                                }
+                            });
+                    }, 3000);
+                } else {
+                    alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
+                }
             })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.user_code) {
-                        if (codeEl) codeEl.innerText = data.user_code;
-                        if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
-                    }
-                });
-        }
+            .catch(err => {
+                console.error('Auth login error:', err);
+                alert('Authentication service error: ' + err.message);
+            });
     }
 
     function closeLoginModal() {
-        if (window.OpsmeldAuth) {
-            window.OpsmeldAuth.stopPolling();
+        if (loginPollTimer) {
+            clearInterval(loginPollTimer);
+            loginPollTimer = null;
         }
         const modal = document.getElementById('login-modal');
         if (modal) modal.style.display = 'none';
