@@ -1633,6 +1633,7 @@
             if (publicLanding) publicLanding.style.display = 'none';
             if (signinWall) signinWall.style.display = 'flex';
             if (authDenied) authDenied.style.display = 'none';
+            if (notProvisioned) notProvisioned.style.display = 'none';
             if (appShell) appShell.style.display = 'none';
             return;
         }
@@ -1641,6 +1642,7 @@
             if (publicLanding) publicLanding.style.display = 'none';
             if (signinWall) signinWall.style.display = 'none';
             if (authDenied) authDenied.style.display = 'flex';
+            if (notProvisioned) notProvisioned.style.display = 'none';
             if (appShell) appShell.style.display = 'none';
             return;
         }
@@ -1649,6 +1651,7 @@
         if (publicLanding) publicLanding.style.display = 'none';
         if (signinWall) signinWall.style.display = 'none';
         if (authDenied) authDenied.style.display = 'none';
+        if (notProvisioned) notProvisioned.style.display = 'none';
         if (appShell) appShell.style.display = 'block';
 
         if (viewName === 'control-tower' || viewName === 'portal-landing') {
