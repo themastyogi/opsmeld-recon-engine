@@ -4,7 +4,7 @@ Isolated fixture data generator for offline preview, integration testing, and de
 Production acquisition code must NEVER depend on fixture builders.
 """
 from datetime import date, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def get_sample_transactions(company_id: Optional[str] = None) -> List[Dict[str, Any]]:
