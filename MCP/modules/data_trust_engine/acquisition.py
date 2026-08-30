@@ -89,28 +89,28 @@ class DataAcquirer:
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
             from modules.data_trust_engine.fixtures import get_sample_transactions
-            return get_sample_transactions(), "SNAPSHOT_SEED"
+            return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
 
         if self.client:
             token = self.client.get_access_token()
             comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
                 from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(), "SNAPSHOT_SEED"
+                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
 
             try:
                 gl_resp = self.client._execute_bc_rest(f"companies({comp_guid})/generalLedgerEntries")
                 if isinstance(gl_resp, dict) and not gl_resp.get("is_error") and "error" not in gl_resp and "value" in gl_resp:
                     return gl_resp["value"], "LIVE_BUSINESS_CENTRAL"
                 from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(), "SNAPSHOT_SEED"
+                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
             except Exception as e:
                 logger.error(f"Live G/L acquisition exception: {str(e)}")
                 from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(), "SNAPSHOT_SEED"
+                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
 
         from modules.data_trust_engine.fixtures import get_sample_transactions
-        return get_sample_transactions(), "SNAPSHOT_SEED"
+        return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
 
     def acquire_payment_transactions(
         self,
@@ -355,29 +355,36 @@ class DataAcquirer:
     def _get_fixture_inventory_cost_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns synthetic inventory costing transactions for offline testing & demo modes."""
         comp = company_id or "FIXTURE_COMPANY"
+        comp_prefix = "IN"
+        if company_id:
+            if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
+                comp_prefix = "US"
+            elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
+                comp_prefix = "SB"
+
         base_records = []
         
         # Build 30 historical baseline entries for Item X + Vendor A (Median = 105.0)
         for i in range(1, 31):
             base_records.append({
-                "id": f"IC-BASE-{i}",
+                "id": f"IC-BASE-{comp_prefix}-{i}",
                 "environment_id": "test_fixture_env",
                 "company_id": comp,
                 "company_name": comp,
-                "item_no": "ITEM-X",
-                "item_description": "Industrial Widget X",
+                "item_no": f"ITEM-X-{comp_prefix}",
+                "item_description": f"[{comp}] Industrial Widget X",
                 "location_code": "DELHI",
                 "variant_code": "DEFAULT",
-                "vendor_no": "VENDOR-A",
-                "vendor_name": "Fabrikam Supplies",
+                "vendor_no": f"VENDOR-A-{comp_prefix}",
+                "vendor_name": f"{comp} Fabrikam Supplies",
                 "source_type": "Vendor",
-                "source_no": "VENDOR-A",
+                "source_no": f"VENDOR-A-{comp_prefix}",
                 "item_ledger_entry_no": f"100{i}",
                 "value_entry_no": f"200{i}",
                 "posting_date": f"2026-07-{min(i, 28):02d}",
                 "document_date": f"2026-07-{min(i, 28):02d}",
                 "valuation_date": f"2026-07-{min(i, 28):02d}",
-                "document_no": f"PINV-10{i}",
+                "document_no": f"PINV-{comp_prefix}-10{i}",
                 "document_type": "Purchase Invoice",
                 "entry_type": "Purchase",
                 "quantity": 10.0,
@@ -404,12 +411,12 @@ class DataAcquirer:
 
         # Add current transaction: unexplained cost spike (+38% -> 145.0)
         base_records.append({
-            "id": "IC-CURR-SPIKE",
+            "id": f"IC-CURR-SPIKE-{comp_prefix}",
             "environment_id": "test_fixture_env",
             "company_id": comp,
             "company_name": comp,
-            "item_no": "ITEM-X",
-            "item_description": "Industrial Widget X",
+            "item_no": f"ITEM-X-{comp_prefix}",
+            "item_description": f"[{comp}] Industrial Widget X",
             "location_code": "DELHI",
             "variant_code": "DEFAULT",
             "vendor_no": "VENDOR-A",
@@ -552,16 +559,23 @@ class DataAcquirer:
     def _get_fixture_payment_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns isolated fixture payment transactions for offline testing and demo mode."""
         comp = company_id or "FIXTURE_COMPANY"
+        comp_prefix = "IN"
+        if company_id:
+            if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
+                comp_prefix = "US"
+            elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
+                comp_prefix = "SB"
+
         return [
             {
-                "id": "PT-VEND-101",
+                "id": f"PT-{comp_prefix}-VEND-101",
                 "environment_id": "test_fixture_env",
                 "company_id": comp,
                 "ledger_type": "VENDOR",
                 "account_no": "V00010",
                 "vendor_no": "V00010",
-                "vendor_name": "Fabrikam Supplies",
-                "document_no": "INV-10452",
+                "vendor_name": f"{comp} Fabrikam Supplies",
+                "document_no": f"INV-{comp_prefix}-10452",
                 "document_type": "Invoice",
                 "document_date": "2026-07-20",
                 "posting_date": "2026-07-20",
@@ -574,7 +588,7 @@ class DataAcquirer:
                 "payment_terms_code": "30 Days",
                 "amount": 185000.0,
                 "currency_code": "INR",
-                "user_id": "MKUMAR",
+                "user_id": f"MKUMAR_{comp_prefix}",
                 "source_code": "PURCHASES",
                 "peer_history": [
                     {"payment_date": "2026-07-18", "due_date": "2026-07-20", "amount": 120000.0}
@@ -582,27 +596,27 @@ class DataAcquirer:
                 ]
             },
             {
-                "id": "PT-CUST-202",
+                "id": f"PT-{comp_prefix}-CUST-202",
                 "environment_id": "production_env",
                 "company_id": comp,
                 "ledger_type": "CUSTOMER",
                 "account_no": "C00020",
                 "customer_no": "C00020",
-                "customer_name": "Global Retail Ltd",
-                "document_no": "SINV-80210",
+                "customer_name": f"{comp} Global Retail Ltd",
+                "document_no": f"SINV-{comp_prefix}-80210",
                 "document_type": "Invoice",
-                "document_date": "2026-07-01",
-                "posting_date": "2026-07-01",
-                "due_date": "2026-07-31",
-                "payment_date": "2026-08-15",
-                "closed_at_date": "2026-08-15",
+                "document_date": "2026-06-01",
+                "posting_date": "2026-06-01",
+                "due_date": "2026-07-01",
+                "payment_date": "2026-07-15",
+                "closed_at_date": "2026-07-15",
                 "application_resolved": True,
                 "application_count": 1,
                 "payment_discount_date": "2026-07-15",
                 "payment_terms_code": "30 Days",
                 "amount": 420000.0,
                 "currency_code": "INR",
-                "user_id": "JSMITH",
+                "user_id": f"JSMITH_{comp_prefix}",
                 "source_code": "SALES",
                 "peer_history": [
                     {"payment_date": "2026-06-30", "due_date": "2026-06-30", "amount": 350000.0}
@@ -610,14 +624,14 @@ class DataAcquirer:
                 ]
             },
             {
-                "id": "PT-VEND-303",
+                "id": f"PT-{comp_prefix}-VEND-303",
                 "environment_id": "production_env",
                 "company_id": comp,
                 "ledger_type": "VENDOR",
                 "account_no": "V00030",
                 "vendor_no": "V00030",
-                "vendor_name": "TechComponents Inc",
-                "document_no": "PINV-70912",
+                "vendor_name": f"{comp} TechComponents Inc",
+                "document_no": f"PINV-{comp_prefix}-70912",
                 "document_type": "Invoice",
                 "document_date": "2026-08-01",
                 "posting_date": "2026-08-01",
@@ -630,19 +644,19 @@ class DataAcquirer:
                 "payment_terms_code": "2/10 Net 30",
                 "amount": 95000.0,
                 "currency_code": "INR",
-                "user_id": "MKUMAR",
+                "user_id": f"MKUMAR_{comp_prefix}",
                 "source_code": "PURCHASES",
                 "peer_history": []
             },
             {
-                "id": "PT-VEND-404",
+                "id": f"PT-{comp_prefix}-VEND-404",
                 "environment_id": "production_env",
                 "company_id": comp,
                 "ledger_type": "VENDOR",
                 "account_no": "V00040",
                 "vendor_no": "V00040",
-                "vendor_name": "Apex Logistics",
-                "document_no": "PINV-60114",
+                "vendor_name": f"{comp} Apex Logistics",
+                "document_no": f"PINV-{comp_prefix}-60114",
                 "document_type": "Invoice",
                 "document_date": "2026-08-15",
                 "posting_date": "2026-08-15",
@@ -654,19 +668,19 @@ class DataAcquirer:
                 "payment_terms_code": "15 Days",
                 "amount": 34000.0,
                 "currency_code": "INR",
-                "user_id": "JSMITH",
+                "user_id": f"JSMITH_{comp_prefix}",
                 "source_code": "PURCHASES",
                 "peer_history": []
             },
             {
-                "id": "PT-VEND-505",
+                "id": f"PT-{comp_prefix}-VEND-505",
                 "environment_id": "production_env",
                 "company_id": comp,
                 "ledger_type": "VENDOR",
                 "account_no": "V00050",
                 "vendor_no": "V00050",
-                "vendor_name": "MultiPart Vendor",
-                "document_no": "PINV-50999",
+                "vendor_name": f"{comp} MultiPart Vendor",
+                "document_no": f"PINV-{comp_prefix}-50999",
                 "document_type": "Invoice",
                 "document_date": "2026-08-01",
                 "posting_date": "2026-08-01",
@@ -677,7 +691,7 @@ class DataAcquirer:
                 "application_count": 3,
                 "amount": 150000.0,
                 "currency_code": "INR",
-                "user_id": "MKUMAR",
+                "user_id": f"MKUMAR_{comp_prefix}",
                 "source_code": "PURCHASES",
                 "peer_history": []
             }
