@@ -576,7 +576,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/data-trust/findings":
             query_params = urllib.parse.parse_qs(parsed_url.query)
-            company_id = query_params.get("company_id", [None])[0] or query_params.get("c", [None])[0]
+            company_id = query_params.get("company_id", [None])[0]
             classification = query_params.get("classification", [None])[0]
             evidence_strength = query_params.get("evidence_strength", [None])[0]
             rule_pack = query_params.get("rule_pack", [None])[0]

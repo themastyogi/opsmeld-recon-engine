@@ -2953,22 +2953,20 @@
                 const select = document.getElementById('dt-company-select');
                 if (select && data.companies) {
                     select.innerHTML = '';
-                    if (data.companies.length === 0) {
-                        const opt = document.createElement('option');
-                        opt.value = '';
-                        opt.textContent = data.data_source === 'DATA_UNAVAILABLE'
-                            ? 'Data Unavailable (BC Session Offline)'
-                            : 'No authorized companies available';
-                        select.appendChild(opt);
-                        return;
-                    }
                     data.companies.forEach(c => {
                         const opt = document.createElement('option');
                         opt.value = c.id; // Real Business Central GUID or ID
                         opt.textContent = (c.displayName && c.displayName !== c.name) ? c.displayName : c.name;
                         select.appendChild(opt);
                     });
-                    if (select.value) {
+
+                    // Add option to enter custom 4th/5th company dynamically
+                    const addOpt = document.createElement('option');
+                    addOpt.value = '__ADD_CUSTOM_COMPANY__';
+                    addOpt.textContent = '➕ Add Custom / 4th Company...';
+                    select.appendChild(addOpt);
+
+                    if (select.value && select.value !== '__ADD_CUSTOM_COMPANY__') {
                         runDataTrustRecon(select.value);
                     }
                 }
@@ -3009,6 +3007,31 @@
     }
 
     function onCompanySelectChange(selectedCompany) {
+        if (selectedCompany === '__ADD_CUSTOM_COMPANY__') {
+            const newCompName = prompt("Enter your Business Central Company Name or GUID (e.g. Production Company 4):");
+            if (newCompName && newCompName.trim()) {
+                const cleanName = newCompName.trim();
+                const select = document.getElementById('dt-company-select');
+                if (select) {
+                    const opt = document.createElement('option');
+                    opt.value = cleanName;
+                    opt.textContent = cleanName;
+                    select.insertBefore(opt, select.lastChild);
+                    select.value = cleanName;
+                    clearDataTrustStateDisplay();
+                    renderPlatformStateBanner('LOADING', `Loading selected company data for ${cleanName}...`);
+                    runDataTrustRecon(cleanName);
+                    return;
+                }
+            } else {
+                const select = document.getElementById('dt-company-select');
+                if (select && select.options.length > 1) {
+                    select.selectedIndex = 0;
+                    runDataTrustRecon(select.value);
+                }
+                return;
+            }
+        }
         clearDataTrustStateDisplay();
         renderPlatformStateBanner('LOADING', `Loading selected company data for ${selectedCompany}...`);
         runDataTrustRecon(selectedCompany);
