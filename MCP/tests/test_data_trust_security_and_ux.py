@@ -33,6 +33,7 @@ class TestDataTrustSecurityAndUX(unittest.TestCase):
             email="admin@opsmeld.com",
             display_name="Test Admin",
             roles=["ENTERPRISE_ADMIN"],
+            organization_id="org_abc_001",
             allowed_companies=valid_companies
         )
         self.auth_mgr = CompanyAccessManager()

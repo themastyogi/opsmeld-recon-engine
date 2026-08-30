@@ -76,6 +76,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="auditor@opsmeld.com",
             display_name="Auditor User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler("/api/auth/me", headers={"Cookie": f"session={token}"})
@@ -93,6 +94,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="ar@opsmeld.com",
             display_name="AR Analyst",
             roles=["AR_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler(f"/api/data-trust/findings?company_id={self.test_guid_a}", headers={"Cookie": f"session={token}"})
@@ -119,6 +121,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="dt@opsmeld.com",
             display_name="DT User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler(f"/api/data-trust/findings?company_id={self.test_guid_a}", headers={"Cookie": f"session={token}"})
@@ -132,6 +135,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="auditor_read@opsmeld.com",
             display_name="Read Only Auditor",
             roles=["DATA_TRUST_AUDITOR"], # data_trust:read only
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler(f"/api/data-trust/run-recon?company_id={self.test_guid_a}", headers={"Cookie": f"session={token}"})
@@ -147,6 +151,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="dt_scoped@opsmeld.com",
             display_name="Scoped User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a} # Only company A allowed
         )
         # Attempt to access company B
@@ -174,6 +179,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="dt_multi@opsmeld.com",
             display_name="Multi Company User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a, self.test_guid_b}
         )
         handler = self._create_test_handler(f"/api/data-trust/findings?company_id={self.test_guid_b}", headers={"Cookie": f"session={token}"})
@@ -187,6 +193,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="ar_only@opsmeld.com",
             display_name="AR Analyst Only",
             roles=["AR_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler("/api/data-trust/authorized-companies", headers={"Cookie": f"session={token}"})
@@ -200,6 +207,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="dt_only@opsmeld.com",
             display_name="DT Analyst Only",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler("/api/ar-manager/data", headers={"Cookie": f"session={token}"})
@@ -218,6 +226,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="admin_multi@opsmeld.com",
             display_name="Enterprise Admin User",
             roles=["ENTERPRISE_ADMIN"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         # AR access check
@@ -241,6 +250,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="logout@opsmeld.com",
             display_name="Logout Test",
             roles=["ENTERPRISE_ADMIN"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         # Verify valid before logout
@@ -264,6 +274,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="expired@opsmeld.com",
             display_name="Expired User",
             roles=["ENTERPRISE_ADMIN"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         # Manually expire session timestamp
@@ -281,6 +292,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="invalid_comp@opsmeld.com",
             display_name="Test User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler("/api/data-trust/findings?company_id=CRONUS_IN_NAME", headers={"Cookie": f"session={token}"})
@@ -296,6 +308,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="unauth_guid@opsmeld.com",
             display_name="Test User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler(f"/api/data-trust/findings?company_id={self.unauthorized_guid}", headers={"Cookie": f"session={token}"})
@@ -314,6 +327,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="bcoff@opsmeld.com",
             display_name="Test User",
             roles=["DATA_TRUST_ANALYST"],
+            organization_id="org_abc_001",
             allowed_companies={self.test_guid_a}
         )
         handler = self._create_test_handler("/api/data-trust/authorized-companies", headers={"Cookie": f"session={token}"})
@@ -341,6 +355,7 @@ class TestUnifiedPortalRBAC(unittest.TestCase):
             email="treasury@opsmeld.com",
             display_name="Treasury Officer",
             roles=[],
+            organization_id="org_abc_001",
             direct_permissions=["layer_4:read"]
         )
 

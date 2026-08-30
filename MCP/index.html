@@ -1524,25 +1524,7 @@
         return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
-    function openAppLoginModal() {
-        fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'admin@opsmeld.com', display_name: 'Vikas Kumar (CRONUS IN)' }),
-            credentials: 'same-origin'
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.token) {
-                localStorage.setItem('opsmeld_token', data.token);
-            }
-            switchMainView('portal-home');
-        })
-        .catch(err => {
-            console.error('Login error:', err);
-            switchMainView('portal-home');
-        });
-    }
+
 
     function openRegisterModal() {
         const modal = document.getElementById('modal-register-company');
@@ -2404,40 +2386,7 @@
         document.getElementById('procedure-modal').style.display = 'none';
     }
 
-    let loginPollTimer = null;
 
-    function closeLoginModal() {
-        if (loginPollTimer) clearInterval(loginPollTimer);
-        document.getElementById('login-modal').style.display = 'none';
-        loadLiveCustomerData();
-    }
-
-    function startMicrosoftLogin() {
-        fetch('/api/auth/login')
-            .then(res => res.json())
-            .then(data => {
-                if (data.user_code) {
-                    document.getElementById('login-user-code').innerText = data.user_code;
-                    document.getElementById('login-link').href = data.verification_uri || 'https://login.microsoft.com/device';
-                    document.getElementById('login-modal').style.display = 'flex';
-
-                    // Start background polling to detect when sign-in completes on Microsoft's site
-                    if (loginPollTimer) clearInterval(loginPollTimer);
-                    loginPollTimer = setInterval(() => {
-                        fetch('/api/auth/poll')
-                            .then(res => res.json())
-                            .then(pollRes => {
-                                if (pollRes.status === 'success') {
-                                    clearInterval(loginPollTimer);
-                                    closeLoginModal();
-                                }
-                            });
-                    }, 3000);
-                } else {
-                    alert('Unable to initiate login: ' + JSON.stringify(data));
-                }
-            });
-    }
 
     function formatMoney(num) {
         return '$' + (Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
@@ -2456,7 +2405,7 @@
                 if (data.error) {
                     let loginBtnHtml = '';
                     if (data.error.includes('403') || data.error.includes('Forbidden') || data.error.includes('Authentication token missing')) {
-                        loginBtnHtml = `<div style="margin-top:12px;"><button class="btn-btn" style="background:#4F46E5;" onclick="startMicrosoftLogin()">🔑 Sign In with Microsoft Entra</button></div>`;
+                        loginBtnHtml = `<div style="margin-top:12px;"><button class="btn-btn" style="background:#4F46E5;" onclick="openAppLoginModal()">🔑 Sign In with Microsoft Entra</button></div>`;
                     }
                     container.innerHTML = `
                     <div style="background: #FDEDEC; border: 1px solid #F5B7B1; color: #78281F; border-radius: 8px; padding: 16px; margin-bottom: 24px;">

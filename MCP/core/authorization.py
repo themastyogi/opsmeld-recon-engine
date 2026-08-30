@@ -116,7 +116,10 @@ class CentralAuthorizationEngine:
         if not session:
             return []
 
-        org_id = getattr(session, "organization_id", "org_abc_001")
+        org_id = getattr(session, "organization_id", None)
+        if not org_id or not getattr(session, "provisioned", False):
+            return []
+
         user_perms = session.permissions if hasattr(session, "permissions") else datastore.get_user_permissions(session.user_id, org_id)
         modules = get_module_registry().list_modules()
 

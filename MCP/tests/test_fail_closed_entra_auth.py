@@ -110,6 +110,36 @@ class TestFailClosedEntraAuth(unittest.TestCase):
             reg_names = [r["organization_name"] for r in data["registrations"]]
             self.assertIn("Test Corp Persistence", reg_names)
 
+    def test_login_entra_user_without_arguments_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            self.auth_mgr.login_entra_user()
+
+    def test_create_session_without_org_id_raises_typeerror(self):
+        with self.assertRaises(TypeError):
+            self.auth_mgr.create_session(
+                user_id="u1",
+                email="e1@test.com",
+                display_name="Test",
+                roles=["USER"]
+            )
+
+    def test_unprovisioned_session_evaluates_zero_modules(self):
+        token = self.auth_mgr.create_session(
+            user_id="usr_unprovisioned_test",
+            email="unprovisioned@test.com",
+            display_name="Unprovisioned Test",
+            roles=[],
+            organization_id=None,
+            provisioned=False
+        )
+        session = self.auth_mgr.get_session(token)
+        self.assertIsNotNone(session)
+        self.assertFalse(session.provisioned)
+        self.assertIsNone(session.organization_id)
+
+        modules = CentralAuthorizationEngine.evaluate_portal_modules(session)
+        self.assertEqual(modules, [])
+
 
 if __name__ == "__main__":
     unittest.main()

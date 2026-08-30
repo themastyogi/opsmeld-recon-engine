@@ -45,6 +45,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
             email="admin@opsmeld.com",
             display_name="Vikas Kumar (CRONUS IN)",
             roles=["ENTERPRISE_ADMIN"],
+            organization_id="org_abc_001",
             allowed_companies=admin_companies.union({
                 "GUID-COMP-01", "GUID-COMP-02", "GUID-COMP-03",
                 "GUID-COMP-A", "GUID-COMP-B", "GUID-COMP-C",

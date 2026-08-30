@@ -132,7 +132,7 @@ class AuthManager:
         email: str,
         display_name: str,
         roles: List[str],
-        organization_id: Optional[str] = "org_abc_001",
+        organization_id: Optional[str],
         allowed_companies: Optional[Set[str]] = None,
         direct_permissions: Optional[List[str]] = None,
         permissions: Optional[Set[str]] = None,
@@ -179,8 +179,14 @@ class AuthManager:
         Resolves Entra Identity (email/oid) -> User -> OrganizationUser -> Organization.
         If user is not provisioned, creates an unprovisioned session (provisioned=False).
         """
-        user_email = email or self.admin_user
-        name = display_name or "Vikas Kumar (CRONUS IN)"
+        if not email and not entra_oid:
+            raise ValueError(
+                "login_entra_user requires a verified identity; "
+                "use start_device_flow() for unauthenticated login."
+            )
+
+        user_email = email
+        name = display_name or email
 
         from core.models import get_datastore
         ds = get_datastore()

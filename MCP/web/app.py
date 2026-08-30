@@ -656,47 +656,54 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         if path in ["/api/auth/login", "/api/auth/login_app"]:
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else ""
-            token = None
-            username = "admin@opsmeld.com"
-            display_name = "Vikas Kumar (CRONUS IN)"
-
+            data = {}
             if body:
                 try:
                     data = json.loads(body)
-                    if "username" in data or "email" in data:
-                        u = data.get("username") or data.get("email")
-                        p = data.get("password")
-                        if u and p:
-                            token = get_auth_manager().authenticate(u, p)
-                        elif u and u not in ("admin", "admin@opsmeld.com"):
-                            token = None
-                        else:
-                            token = get_auth_manager().login_entra_user(data.get("email"), data.get("display_name"))
-                    else:
-                        token = get_auth_manager().login_entra_user()
                 except Exception:
                     post_data = urllib.parse.parse_qs(body)
                     u = post_data.get("username", [""])[0] or post_data.get("email", [""])[0]
                     p = post_data.get("password", [""])[0]
-                    if u and p:
-                        token = get_auth_manager().authenticate(u, p)
-                    elif u:
-                        token = None
+                    if u:
+                        data = {"email": u, "password": p}
                     else:
                         self._set_headers("application/json", 400)
-                        self._write_response(json.dumps({"error": "Bad Request: Invalid payload"}).encode("utf-8"))
+                        self._write_response(json.dumps({"error": "Bad Request: Invalid JSON payload"}).encode("utf-8"))
                         return
-            else:
-                token = get_auth_manager().login_entra_user()
 
-            if token:
-                res = {"status": "success", "token": token, "username": display_name, "email": username}
+            email = data.get("email") or data.get("username")
+            password = data.get("password")
+
+            if path == "/api/auth/login" and not email and not password:
+                # Unauthenticated entry point -> Start Entra Device Flow (returns verification_uri/user_code, NO token)
+                client_key = self._get_client_key(parsed_url)
+                config = load_client_config(client_key)
+                client = BCMCPClient(config)
+                flow = client.start_device_flow()
+                global CURRENT_DEVICE_FLOW
+                CURRENT_DEVICE_FLOW = flow
+                self._set_headers("application/json", 200)
+                self._write_response(json.dumps(flow).encode("utf-8"))
+                return
+
+            if password:
+                token = get_auth_manager().authenticate(email, password)
+            else:
+                token = get_auth_manager().login_entra_user(email, data.get("display_name"))
+
+            sess = get_auth_manager().get_session(token) if token else None
+            if sess and getattr(sess, "provisioned", True):
+                res = {
+                    "status": "success",
+                    "token": token,
+                    "username": sess.display_name,
+                    "email": sess.email
+                }
                 self._set_headers("application/json", 200, cookie=token)
                 self._write_response(json.dumps(res).encode("utf-8"))
             else:
-                res = {"error": "Invalid credentials. Please check your provisioned email and password."}
                 self._set_headers("application/json", 401)
-                self._write_response(json.dumps(res).encode("utf-8"))
+                self._write_response(json.dumps({"error": "Invalid credentials or account not provisioned."}).encode("utf-8"))
             return
 
         elif path == "/api/auth/logout":
@@ -768,7 +775,11 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
             data = json.loads(body)
-            org_id = data.get("organization_id", "org_abc_001")
+            org_id = data.get("organization_id")
+            if not org_id:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "organization_id required"}).encode("utf-8"))
+                return
             new_status = data.get("status")
             modules = data.get("modules")
 
