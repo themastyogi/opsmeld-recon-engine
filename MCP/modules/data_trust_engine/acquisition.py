@@ -4,6 +4,7 @@ Enforces fail-closed live data boundaries (returns DATA_UNAVAILABLE with zero fi
 Includes tenant-scoped CompanyResolver for exact Business Central company GUID resolution.
 """
 import re
+import hashlib
 import logging
 from typing import Optional, Dict, Any, List, Tuple
 from core.bc_mcp_client import BCMCPClient
@@ -355,12 +356,8 @@ class DataAcquirer:
     def _get_fixture_inventory_cost_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns synthetic inventory costing transactions for offline testing & demo modes."""
         comp = company_id or "FIXTURE_COMPANY"
-        comp_prefix = "IN"
-        if company_id:
-            if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
-                comp_prefix = "US"
-            elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
-                comp_prefix = "SB"
+        comp_hash = hashlib.md5(str(comp).encode("utf-8")).hexdigest()
+        comp_prefix = comp_hash[:4].upper()
 
         base_records = []
         
@@ -559,12 +556,8 @@ class DataAcquirer:
     def _get_fixture_payment_transactions(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns isolated fixture payment transactions for offline testing and demo mode."""
         comp = company_id or "FIXTURE_COMPANY"
-        comp_prefix = "IN"
-        if company_id:
-            if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
-                comp_prefix = "US"
-            elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
-                comp_prefix = "SB"
+        comp_hash = hashlib.md5(str(comp).encode("utf-8")).hexdigest()
+        comp_prefix = comp_hash[:4].upper()
 
         return [
             {

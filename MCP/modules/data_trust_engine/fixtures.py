@@ -4,22 +4,17 @@ Isolated fixture data generator for offline preview, integration testing, and de
 Production acquisition code must NEVER depend on fixture builders.
 """
 from datetime import date, timedelta
+import hashlib
 from typing import Any, Dict, List, Optional
 
 
 def get_sample_transactions(company_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    comp_prefix = "IN"
-    multiplier = 1.0
-    comp_name = "CRONUS IN"
-    if company_id:
-        if "c37ac1c0" in company_id or "US" in company_id or "My Company" in company_id:
-            comp_prefix = "US"
-            multiplier = 1.8
-            comp_name = "My Company"
-        elif "c4e0106b" in company_id or "Sandbox" in company_id or "Europe" in company_id:
-            comp_prefix = "SB"
-            multiplier = 0.6
-            comp_name = "Sandbox"
+    comp_str = str(company_id or "DEFAULT_COMPANY")
+    comp_hash = hashlib.md5(comp_str.encode("utf-8")).hexdigest()
+    comp_prefix = comp_hash[:4].upper()
+    seed_num = int(comp_hash[:4], 16)
+    multiplier = round(0.5 + (seed_num % 250) / 100.0, 2)
+    comp_name = comp_str[:20]
 
     today_str = date.today().isoformat()
     past_str = (date.today() - timedelta(days=15)).isoformat()
