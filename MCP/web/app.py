@@ -1117,9 +1117,19 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
 
 from http.server import ThreadingHTTPServer
+import socket
 
 class ReusableHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
+
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except Exception:
+                pass
+        super().server_bind()
 
 
 def create_server(host: str = "0.0.0.0", port: int = 8000) -> HTTPServer:

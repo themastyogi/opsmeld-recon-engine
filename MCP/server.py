@@ -1,4 +1,4 @@
-import sys, os, pathlib
+import sys, os, pathlib, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from web.app import create_server
@@ -11,11 +11,18 @@ def main():
     except ValueError:
         port = 8000
 
-    try:
-        server = create_server(host="0.0.0.0", port=port)
-    except OSError as e:
-        print(f"Port {port} busy, attempting bind to 0.0.0.0:{port}...")
-        server = create_server(host="0.0.0.0", port=port)
+    server = None
+    for attempt in range(5):
+        try:
+            server = create_server(host="0.0.0.0", port=port)
+            break
+        except OSError as e:
+            print(f"Attempt {attempt + 1}: Port {port} busy ({e}). Retrying in 1s...")
+            time.sleep(1)
+
+    if not server:
+        print(f"Error: Could not bind server to port {port} after 5 attempts.")
+        sys.exit(1)
 
     print(f"============================================================")
     print(f"  Opsmeld Reconciliation Engine Web Management Console")
