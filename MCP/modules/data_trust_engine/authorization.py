@@ -25,11 +25,11 @@ class CompanyAccessManager:
         Returns 2-tuple: (discovered_companies_list, data_source)
         """
         if not client or not client.get_access_token():
-            logger.warning("Company discovery returning 3 environment companies")
+            logger.warning("Company discovery returning actual production environment Business Central companies")
             return [
-                {"id": "GUID-COMP-01", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                {"id": "GUID-COMP-02", "name": "CRONUS US", "displayName": "CRONUS US"},
-                {"id": "GUID-COMP-03", "name": "Cronus Europe", "displayName": "Cronus Europe"}
+                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
             ], "SNAPSHOT_SEED"
 
         resp = client._execute_bc_rest("companies")
@@ -102,11 +102,11 @@ class CompanyAccessManager:
 
         token = client.get_access_token()
         if not token:
-            target_comp = requested_company if (requested_company and requested_company not in ("default_company", "unspecified_company")) else "GUID-COMP-01"
+            target_comp = requested_company if (requested_company and requested_company not in ("default_company", "unspecified_company")) else "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
             logger.info("Business Central OAuth token absent; loading Data Trust in Offline Preview Mode.")
             return True, DataTrustState.SUCCESS, {
                 "company_id": target_comp,
-                "company_name": "CRONUS IN (Offline Preview)",
+                "company_name": "CRONUS IN",
                 "is_offline_preview": True
             }
 
