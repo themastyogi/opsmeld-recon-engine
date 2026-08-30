@@ -136,6 +136,7 @@ class DataAcquirer:
 
         if self.client:
             token = self.client.get_access_token()
+            comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
                 return self._get_fixture_payment_transactions(company_id), "SNAPSHOT_SEED"
 
