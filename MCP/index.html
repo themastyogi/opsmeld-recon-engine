@@ -2991,9 +2991,6 @@
                             })
                             .catch(err => console.error('Poll error:', err));
                     }, 3000);
-                } else if (data.token) {
-                    localStorage.setItem('opsmeld_token', data.token);
-                    switchMainView('portal-landing');
                 } else {
                     alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
                 }
