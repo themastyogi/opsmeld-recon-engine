@@ -1115,11 +1115,10 @@
                     <div style="display: flex; align-items: center; gap: 16px;">
                         <span>🌐 Environment: <strong style="color: #4F46E5;">Production</strong></span>
                         <span>🏢 Company: 
-                            <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 4px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; font-weight: 700; background: white; color: #0F172A;">
+                            <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 5px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.85rem; font-weight: 700; background: white; color: #0F172A;">
                                 <option value="">Loading authorized companies...</option>
                             </select>
-                            <button class="btn-btn" onclick="loadAuthorizedCompanies()" style="background:#2563EB; color:white; padding:4px 10px; border-radius:6px; font-size:0.78rem; font-weight:700; cursor:pointer; margin-left:8px;">🔄 Refresh Companies</button>
-                            <button id="dt-auth-btn" onclick="OpsmeldAuth.startEntraFlow()" style="display:none; background:#059669; color:white; border:none; padding:4px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to View Companies</button>
+                            <button id="dt-auth-btn" onclick="OpsmeldAuth.startEntraFlow()" style="display:none; background:#059669; color:white; border:none; padding:5px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to Sync Live Companies</button>
                         </span>
                     </div>
                     <div style="font-size: 0.78rem; color: #64748B;">
