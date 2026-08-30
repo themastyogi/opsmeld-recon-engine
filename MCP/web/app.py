@@ -476,7 +476,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self._write_response(json.dumps(debug_info).encode("utf-8"))
 
-        elif path == "/api/auth/login":
+        elif path in ("/api/auth/login", "/api/auth/entra/device-flow"):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             client = BCMCPClient(config)
