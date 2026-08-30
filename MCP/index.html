@@ -339,7 +339,7 @@
                     Opsmeld unifies receivables management, financial data assurance and compliance intelligence in one secure platform.
                 </p>
                 <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 32px;">
-                    <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 14px 30px; font-size: 1rem; font-weight: 700; border-radius: 8px; cursor: pointer;" onclick="switchMainView('control-tower')">Explore the Platform →</button>
+                    <button class="btn-btn" style="background: #10B981; color: white; border: none; padding: 14px 30px; font-size: 1rem; font-weight: 700; border-radius: 8px; cursor: pointer;" onclick="openAppLoginModal()">Explore the Platform →</button>
                     <button class="btn-btn" style="background: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 14px 26px; font-size: 0.95rem; font-weight: 600; border-radius: 8px; cursor: pointer;" onclick="alert('▶ Opsmeld Product Demo video streaming...')">▶ Watch Demo</button>
                 </div>
                 <div style="display: flex; gap: 24px; font-size: 0.82rem; color: #94A3B8; font-weight: 600;">
@@ -431,7 +431,7 @@
                             Prioritize collections, identify customer risk, manage collection workflows and accelerate cash recovery.
                         </p>
                     </div>
-                    <button class="btn-btn" style="background: transparent; color: #059669; border: none; padding: 0; font-size: 0.95rem; font-weight: 800; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="switchMainView('control-tower')">
+                    <button class="btn-btn" style="background: transparent; color: #059669; border: none; padding: 0; font-size: 0.95rem; font-weight: 800; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="openAppLoginModal()">
                         Explore AR Control Tower →
                     </button>
                 </div>
@@ -1520,7 +1520,8 @@
 
     <script>
     function getAuthHeaders() {
-        const token = localStorage.getItem('opsmeld_token');
+        const cookieToken = (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
+        const token = localStorage.getItem('opsmeld_token') || cookieToken;
         return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
@@ -1630,7 +1631,19 @@
             return;
         }
 
-        // Render App Shell synchronously for requested application view
+        // Fail-Closed Guard: Unauthenticated requests for application views cannot render the App Shell
+        const cookieToken = (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
+        const token = localStorage.getItem('opsmeld_token') || cookieToken;
+        if (!token) {
+            if (publicLanding) publicLanding.style.display = 'block';
+            if (signinWall) signinWall.style.display = 'none';
+            if (authDenied) authDenied.style.display = 'none';
+            if (notProvisioned) notProvisioned.style.display = 'none';
+            if (appShell) appShell.style.display = 'none';
+            return;
+        }
+
+        // Render App Shell synchronously ONLY after token presence is verified
         if (publicLanding) publicLanding.style.display = 'none';
         if (signinWall) signinWall.style.display = 'none';
         if (authDenied) authDenied.style.display = 'none';
@@ -1661,6 +1674,7 @@
             .then(r => r.json())
             .then(data => {
                 if (!data.authenticated) {
+                    localStorage.removeItem('opsmeld_token');
                     switchMainView('public');
                     return;
                 }
@@ -2938,34 +2952,65 @@
 
 
 
+    let loginPollTimer = null;
+
     function openAppLoginModal() {
-        const emailEl = document.getElementById('app-login-email');
-        const passEl = document.getElementById('app-login-password');
-        const email = emailEl ? emailEl.value : '';
-        const password = passEl ? passEl.value : '';
-        fetch('/api/auth/login_app', {
+        fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, password: password }),
+            body: JSON.stringify({}),
             credentials: 'same-origin'
         })
             .then(res => res.json())
             .then(data => {
-                if (data.token) {
+                if (data.user_code) {
+                    const codeEl = document.getElementById('login-user-code');
+                    const linkEl = document.getElementById('login-link');
+                    const modalEl = document.getElementById('login-modal');
+                    if (codeEl) codeEl.innerText = data.user_code;
+                    if (linkEl) linkEl.href = data.verification_uri || 'https://login.microsoft.com/device';
+                    if (modalEl) modalEl.style.display = 'flex';
+
+                    if (loginPollTimer) clearInterval(loginPollTimer);
+                    loginPollTimer = setInterval(() => {
+                        fetch('/api/auth/poll')
+                            .then(res => res.json())
+                            .then(pollRes => {
+                                if (pollRes.status === 'success' && pollRes.token) {
+                                    clearInterval(loginPollTimer);
+                                    loginPollTimer = null;
+                                    localStorage.setItem('opsmeld_token', pollRes.token);
+                                    closeLoginModal();
+                                    switchMainView('portal-landing');
+                                } else if (pollRes.error === 'ACCOUNT_NOT_PROVISIONED' || pollRes.status === 'pending_approval') {
+                                    clearInterval(loginPollTimer);
+                                    loginPollTimer = null;
+                                    closeLoginModal();
+                                    switchMainView('account-not-provisioned');
+                                }
+                            })
+                            .catch(err => console.error('Poll error:', err));
+                    }, 3000);
+                } else if (data.token) {
                     localStorage.setItem('opsmeld_token', data.token);
+                    switchMainView('portal-landing');
+                } else {
+                    alert('Unable to initiate login: ' + (data.error || JSON.stringify(data)));
                 }
-                switchMainView('control-tower');
             })
             .catch(err => {
                 console.error('Auth login error:', err);
-                switchMainView('control-tower');
+                alert('Authentication service error: ' + err.message);
             });
     }
 
     function closeLoginModal() {
+        if (loginPollTimer) {
+            clearInterval(loginPollTimer);
+            loginPollTimer = null;
+        }
         const modal = document.getElementById('login-modal');
         if (modal) modal.style.display = 'none';
-        switchMainView('control-tower');
     }
 
     function performAppLogout() {

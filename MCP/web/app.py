@@ -452,7 +452,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/auth/poll":
             if not CURRENT_DEVICE_FLOW:
                 self._set_headers("application/json")
-                self._write_response(json.dumps({"status": "error", "message": "No active device flow"}).encode("utf-8"))
+                self._write_response(json.dumps({"status": "error", "message": "No active device authorization flow"}).encode("utf-8"))
             else:
                 client_key = self._get_client_key(parsed_url)
                 config = load_client_config(client_key)
@@ -460,6 +460,20 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 result = client.complete_device_flow(CURRENT_DEVICE_FLOW)
                 if result and result.get("status") == "success":
                     CURRENT_DEVICE_FLOW = None
+                    email = result.get("email") or result.get("username") or "user@company.com"
+                    display_name = result.get("name") or result.get("display_name") or email
+                    entra_oid = result.get("oid")
+                    token = get_auth_manager().login_entra_user(email=email, display_name=display_name, entra_oid=entra_oid)
+                    session = get_auth_manager().get_session(token)
+                    if session and getattr(session, "provisioned", False):
+                        result["token"] = token
+                        result["email"] = session.email
+                        result["username"] = session.display_name
+                    else:
+                        result["status"] = "pending_approval"
+                        result["error"] = "ACCOUNT_NOT_PROVISIONED"
+                        result["message"] = "Entra authentication succeeded, but account is not provisioned for an Opsmeld organization."
+                        result.pop("token", None)
                 self._set_headers("application/json")
                 self._write_response(json.dumps(result).encode("utf-8"))
 
@@ -653,7 +667,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        if path in ["/api/auth/login", "/api/auth/login_app"]:
+        if path == "/api/auth/login":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else ""
             data = {}
@@ -674,7 +688,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             email = data.get("email") or data.get("username")
             password = data.get("password")
 
-            if path == "/api/auth/login" and not email and not password:
+            if not password:
                 # Unauthenticated entry point -> Start Entra Device Flow (returns verification_uri/user_code, NO token)
                 client_key = self._get_client_key(parsed_url)
                 config = load_client_config(client_key)
@@ -682,15 +696,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 flow = client.start_device_flow()
                 global CURRENT_DEVICE_FLOW
                 CURRENT_DEVICE_FLOW = flow
+                res_flow = dict(flow) if isinstance(flow, dict) else {}
+                res_flow["status"] = "device_authorization_required"
                 self._set_headers("application/json", 200)
-                self._write_response(json.dumps(flow).encode("utf-8"))
+                self._write_response(json.dumps(res_flow).encode("utf-8"))
                 return
 
-            if password:
-                token = get_auth_manager().authenticate(email, password)
-            else:
-                token = get_auth_manager().login_entra_user(email, data.get("display_name"))
-
+            token = get_auth_manager().authenticate(email, password)
             sess = get_auth_manager().get_session(token) if token else None
             if sess and getattr(sess, "provisioned", True):
                 res = {

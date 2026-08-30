@@ -90,7 +90,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         """Invalid login: Validates 400/401 error response simulation."""
         self._open_page()
         res = self.page.evaluate("""
-            fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: 'bad@user.com' }) }).then(r => r.status)
+            fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: 'bad@user.com', password: 'wrongpassword' }) }).then(r => r.status)
         """)
         self.assertIn(res, [400, 401])
 
