@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Opsmeld - Enterprise AR Collections & Cash Recovery Suite</title>
+    <script src="/static/js/session.js"></script>
+    <script src="/static/js/auth.js"></script>
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap');
 
@@ -522,17 +524,37 @@
 
     <!-- 2. COMMON STANDALONE SIGN-IN WALL VIEW -->
     <div id="view-signin-wall" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
-        <div style="background: #1E293B; border: 1px solid #334155; border-radius: 16px; padding: 40px; width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+        <!-- Container A: Unauthenticated State -->
+        <div id="signin-unauth-container" style="background: #1E293B; border: 1px solid #334155; border-radius: 16px; padding: 40px; width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: block;">
             <div style="font-size: 1.8rem; font-weight: 900; color: white; margin-bottom: 8px;">🟢 opsmeld</div>
             <h2 style="font-size: 1.3rem; font-weight: 800; color: white; margin: 0 0 8px 0;">Sign In to Opsmeld Platform</h2>
             <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 28px 0;">
                 Authenticate with your Microsoft Entra ID / Business Central account to access your authorized financial intelligence applications.
             </p>
-            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 16px;" onclick="openAppLoginModal()">
+            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 16px; cursor: pointer;" onclick="openAppLoginModal()">
                 🔑 Continue with Microsoft Entra ID
             </button>
             <div style="font-size: 0.78rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
                 ← Back to Opsmeld Platform
+            </div>
+        </div>
+
+        <!-- Container B: Returning User Welcome Back State -->
+        <div id="signin-welcome-container" style="background: #1E293B; border: 1px solid #10B981; border-radius: 16px; padding: 40px; width: 460px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: none;">
+            <div style="font-size: 1.8rem; font-weight: 900; color: white; margin-bottom: 8px;">🟢 opsmeld</div>
+            <h2 style="font-size: 1.4rem; font-weight: 800; color: white; margin: 0 0 4px 0;">Welcome back</h2>
+            <div id="welcome-user-email" style="font-size: 1rem; color: #10B981; font-weight: 700; margin-bottom: 24px;">user@company.com</div>
+            
+            <button class="btn-btn" style="background: #10B981; color: white; width: 100%; font-size: 1rem; font-weight: 800; padding: 14px; border-radius: 8px; margin-bottom: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onclick="switchMainView('control-tower')">
+                🚀 Continue to Opsmeld Portal
+            </button>
+            
+            <button class="btn-btn" style="background: rgba(255,255,255,0.06); color: #E2E8F0; width: 100%; font-size: 0.88rem; font-weight: 600; padding: 10px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;" onclick="switchAccountAndLogin()">
+                🔄 Sign in with another account
+            </button>
+
+            <div style="font-size: 0.82rem; color: #94A3B8; cursor: pointer; text-decoration: underline;" onclick="performAppLogout()">
+                🚪 Sign Out
             </div>
         </div>
     </div>
@@ -1567,19 +1589,24 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        fetch('/api/auth/me', { headers: getAuthHeaders(), credentials: 'same-origin' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.authenticated && data.provisioned !== false) {
-                    switchMainView('control-tower');
-                } else if (data.authenticated && data.provisioned === false) {
-                    switchMainView('account-not-provisioned');
-                } else {
-                    switchMainView('public');
-                }
-            })
-            .catch(() => switchMainView('public'));
+        // HARD RULE: DOMContentLoaded always defaults to Public Landing Page and NEVER auto-opens dashboard
+        switchMainView('public');
     });
+
+    function switchAccountAndLogin() {
+        if (window.OpsmeldSession) {
+            window.OpsmeldSession.switchAccount().then(() => {
+                const unauthContainer = document.getElementById('signin-unauth-container');
+                const welcomeContainer = document.getElementById('signin-welcome-container');
+                if (unauthContainer) unauthContainer.style.display = 'block';
+                if (welcomeContainer) welcomeContainer.style.display = 'none';
+                openAppLoginModal();
+            });
+        } else {
+            localStorage.removeItem('opsmeld_token');
+            openAppLoginModal();
+        }
+    }
 
     let currentInspectedFindingId = null;
 
@@ -1623,10 +1650,29 @@
 
         if (viewName === 'signin') {
             if (publicLanding) publicLanding.style.display = 'none';
-            if (signinWall) signinWall.style.display = 'flex';
             if (authDenied) authDenied.style.display = 'none';
             if (notProvisioned) notProvisioned.style.display = 'none';
             if (appShell) appShell.style.display = 'none';
+            if (signinWall) signinWall.style.display = 'flex';
+
+            const unauthContainer = document.getElementById('signin-unauth-container');
+            const welcomeContainer = document.getElementById('signin-welcome-container');
+            const welcomeEmail = document.getElementById('welcome-user-email');
+
+            if (window.OpsmeldSession) {
+                window.OpsmeldSession.resolveState().then(state => {
+                    if (state.status === 'AUTHENTICATED_PROVISIONED') {
+                        if (welcomeEmail) welcomeEmail.innerText = state.user ? (state.user.email || state.user.display_name) : 'Authorized User';
+                        if (unauthContainer) unauthContainer.style.display = 'none';
+                        if (welcomeContainer) welcomeContainer.style.display = 'block';
+                    } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
+                        switchMainView('account-not-provisioned');
+                    } else {
+                        if (unauthContainer) unauthContainer.style.display = 'block';
+                        if (welcomeContainer) welcomeContainer.style.display = 'none';
+                    }
+                });
+            }
             return;
         }
 
@@ -2993,7 +3039,7 @@
                                     loginPollTimer = null;
                                     localStorage.setItem('opsmeld_token', pollRes.token);
                                     closeLoginModal();
-                                    switchMainView('portal-landing');
+                                    switchMainView('signin');
                                 } else if (pollRes.error === 'ACCOUNT_NOT_PROVISIONED' || pollRes.status === 'pending_approval') {
                                     clearInterval(loginPollTimer);
                                     loginPollTimer = null;
@@ -3025,15 +3071,21 @@
     }
 
     function performAppLogout() {
-        localStorage.removeItem('opsmeld_token');
-        fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
-            .then(() => switchMainView('signin'))
-            .catch(() => switchMainView('signin'));
+        if (window.OpsmeldSession) {
+            window.OpsmeldSession.logout().then(() => {
+                switchMainView('public');
+            });
+        } else {
+            localStorage.removeItem('opsmeld_token');
+            switchMainView('public');
+        }
     }
 
     function performAppLogin(e) {
         if (e) e.preventDefault();
-        switchMainView('control-tower');
+        const appModal = document.getElementById('opsmeld-app-login-modal');
+        if (appModal) appModal.style.display = 'none';
+        openAppLoginModal();
     }
 
     // loadAuthorizedCompanies is called only when entering an authenticated application workspace

@@ -71,6 +71,10 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         for _ in range(5):
             try:
                 self.page.goto(self.base_url)
+                # State Machine Entry: Click Sign In -> Welcome Back -> Continue to Portal
+                self.page.evaluate("switchMainView('signin')")
+                time.sleep(0.2)
+                self.page.evaluate("switchMainView('control-tower')")
                 self.page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
                 return
             except Exception:
@@ -101,9 +105,9 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         signout_btn = self.page.locator("button:has-text('Sign Out 🚪')")
         self.assertTrue(signout_btn.is_visible())
         signout_btn.click()
-        self.page.wait_for_selector("#view-signin-wall", state="visible")
-        wall_display = self.page.evaluate("document.getElementById('view-signin-wall').style.display")
-        self.assertEqual(wall_display, "flex")
+        self.page.wait_for_selector("#view-public-landing", state="visible")
+        landing_display = self.page.evaluate("document.getElementById('view-public-landing').style.display")
+        self.assertEqual(landing_display, "block")
 
     # -------------------------------------------------------------------------
     # 2. Navigation Area (2 Tests)

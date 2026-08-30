@@ -159,6 +159,20 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        elif path.startswith("/static/js/"):
+            js_name = path.replace("/static/js/", "")
+            js_file = Path(__file__).resolve().parent / "static" / "js" / js_name
+            if js_file.exists() and js_file.is_file():
+                content = js_file.read_text(encoding="utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript")
+                self.end_headers()
+                self.wfile.write(content.encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         elif path in ["/", "/index.html", "/dashboard", "/collections"]:
             candidates = [
                 Path(__file__).resolve().parent.parent / "index.html",
