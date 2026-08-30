@@ -1617,8 +1617,21 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        // HARD RULE: DOMContentLoaded always defaults to Public Landing Page and NEVER auto-opens dashboard
-        switchMainView('public');
+        if (window.location.search.includes('login=success') || window.location.hash === '#view-app-shell') {
+            if (window.OpsmeldSession) {
+                window.OpsmeldSession.resolveState().then(state => {
+                    if (state.status === 'AUTHENTICATED_PROVISIONED') {
+                        switchMainView('control-tower');
+                    } else {
+                        switchMainView('public');
+                    }
+                });
+            } else {
+                switchMainView('control-tower');
+            }
+        } else {
+            switchMainView('public');
+        }
     });
 
     function switchAccountAndLogin() {

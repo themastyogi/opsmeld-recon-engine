@@ -749,7 +749,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid)
 
             self.send_response(302)
-            self.send_header("Location", "/#view-app-shell")
+            self.send_header("Location", "/?login=success#view-app-shell")
             self.send_header("Set-Cookie", f"session={token}; Path=/; SameSite=Lax")
             self.send_header("Set-Cookie", f"opsmeld_token={token}; Path=/; SameSite=Lax")
             self.end_headers()
