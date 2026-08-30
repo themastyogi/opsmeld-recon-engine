@@ -1627,7 +1627,6 @@
             if (notProvisioned) notProvisioned.style.display = 'none';
             if (appShell) appShell.style.display = 'none';
             if (topPortal) topPortal.classList.add('active');
-            loadOpsmeldPortalInfo();
             return;
         }
 
@@ -1708,53 +1707,43 @@
         fetch('/api/auth/me', { credentials: 'same-origin' })
             .then(res => res.json())
             .then(data => {
-                if (data.authenticated && data.user) {
-                    const badge = document.getElementById('portal-user-badge');
-                    if (badge) {
-                        badge.textContent = `👤 ${data.user.display_name} (${(data.roles || []).join(', ') || 'USER'})`;
-                    }
-                    const greetingTitle = document.getElementById('user-greeting-title');
-                    if (greetingTitle) {
-                        greetingTitle.textContent = `Good day, ${data.user.display_name} 👋`;
-                    }
+                if (!data.authenticated || !data.user) return;
+
+                const badge = document.getElementById('portal-user-badge');
+                if (badge) {
+                    badge.textContent = `👤 ${data.user.display_name} (${(data.roles || []).join(', ') || 'USER'})`;
                 }
+                const greetingTitle = document.getElementById('user-greeting-title');
+                if (greetingTitle) {
+                    greetingTitle.textContent = `Good day, ${data.user.display_name} 👋`;
+                }
+
+                fetch('/api/portal/modules', { credentials: 'same-origin' })
+                    .then(res => res.json())
+                    .then(modData => {
+                        if (modData.modules) {
+                            modData.modules.forEach(mod => {
+                                const bEl = document.getElementById('badge-' + mod.id);
+                                const btnEl = document.getElementById('btn-' + mod.id);
+                                if (bEl && btnEl) {
+                                    if (mod.enabled) {
+                                        bEl.className = 'badge badge-green';
+                                        bEl.textContent = '✓ Available';
+                                        btnEl.disabled = false;
+                                    } else if (mod.state === 'NOT_PERMITTED') {
+                                        bEl.className = 'badge badge-yellow';
+                                        bEl.textContent = '🔒 Available to your organization';
+                                    } else {
+                                        bEl.className = 'badge badge-gray';
+                                        bEl.textContent = '○ Not in your plan';
+                                    }
+                                }
+                            });
+                        }
+                    })
+                    .catch(err => console.error('Error fetching portal modules:', err));
             })
             .catch(err => console.error('Error fetching auth me info:', err));
-
-        fetch('/api/portal/modules', { credentials: 'same-origin' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.modules) {
-                    data.modules.forEach(mod => {
-                        const badge = document.getElementById('badge-' + mod.id);
-                        const btn = document.getElementById('btn-' + mod.id);
-                        if (badge && btn) {
-                            if (mod.enabled) {
-                                badge.textContent = 'AUTHORIZED';
-                                badge.style.background = '#D1FAE5';
-                                badge.style.color = '#047857';
-                                btn.disabled = false;
-                                btn.style.opacity = '1';
-                                btn.style.cursor = 'pointer';
-                                if (mod.id === 'ar_control_tower') {
-                                    btn.textContent = 'Launch AR Control Tower ➔';
-                                } else if (mod.id === 'data_trust') {
-                                    btn.textContent = 'Launch Data Trust Expert ➔';
-                                }
-                            } else {
-                                badge.textContent = 'NOT ASSIGNED';
-                                badge.style.background = '#FEE2E2';
-                                badge.style.color = '#DC2626';
-                                btn.disabled = true;
-                                btn.style.opacity = '0.7';
-                                btn.style.cursor = 'not-allowed';
-                                btn.textContent = 'Request Access 🔒';
-                            }
-                        }
-                    });
-                }
-            })
-            .catch(err => console.error('Error fetching portal modules:', err));
     }
 
     function loadDataTrustFindings() {
@@ -3081,10 +3070,7 @@
         switchMainView('control-tower');
     }
 
-    // Call loadAuthorizedCompanies on window load
-    window.addEventListener('DOMContentLoaded', () => {
-        loadAuthorizedCompanies();
-    });
+    // loadAuthorizedCompanies is called only when entering an authenticated application workspace
 
     </script>
 <div id="guided-work-modal" class="modal-overlay" style="display:none; z-index: 3500;">

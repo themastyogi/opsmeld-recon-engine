@@ -154,7 +154,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        if path in ["/", "/index.html", "/dashboard", "/collections"]:
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
+
+        elif path in ["/", "/index.html", "/dashboard", "/collections"]:
             candidates = [
                 Path(__file__).resolve().parent.parent / "index.html",
                 Path.cwd() / "MCP" / "index.html",
