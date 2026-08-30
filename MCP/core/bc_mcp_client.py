@@ -19,14 +19,17 @@ class BCMCPClient:
     Manages OAuth2 token acquisition via MSAL and executes live JSON-RPC 2.0 tool requests.
     """
 
-    def __init__(self, config: Optional[ClientConfig] = None):
+    def __init__(self, config: Optional[ClientConfig] = None, user_token: Optional[str] = None):
         self.config = config or load_client_config()
         self.token_cache_path = self.config.get_absolute_cache_path()
+        self.user_access_token = user_token or os.environ.get("BC_ACCESS_TOKEN", "")
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
     def get_access_token(self) -> str:
-        """Acquires OAuth2 token via MSAL (silent cache persistence or Client Secret flow)."""
+        """Acquires OAuth2 token via explicit user_access_token, MSAL token cache, or Client Secret flow."""
+        if self.user_access_token:
+            return self.user_access_token
         try:
             import msal
         except ImportError:

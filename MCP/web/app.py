@@ -525,7 +525,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token)
             mgr = CompanyAccessManager()
             discovered, data_source = mgr.get_discovered_companies_with_provenance(client)
             status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(discovered) > 0 else "DATA_UNAVAILABLE"
@@ -552,7 +553,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token)
 
             # Anti-BOLA/IDOR Guard for run-recon
             mgr = CompanyAccessManager()
@@ -595,7 +597,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token)
 
             # Anti-BOLA/IDOR Guard: Validate company authorization BEFORE loading snapshot or reading storage
             mgr = CompanyAccessManager()
@@ -659,7 +662,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token)
 
             # Anti-BOLA/IDOR Guard for finding-detail
             mgr = CompanyAccessManager()
