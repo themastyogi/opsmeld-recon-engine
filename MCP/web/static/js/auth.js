@@ -40,11 +40,18 @@
      *   onUnprovisioned(): Entra verified but account is NOT provisioned.
      *   onError(errMessage): Polling or authentication error.
      */
+    let consecutiveNetworkErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
+
     function startEntraPolling(onSuccess, onUnprovisioned, onError) {
         stopPolling();
+        consecutiveNetworkErrors = 0;
         loginPollTimer = setInterval(() => {
             fetch('/api/auth/poll', { credentials: 'same-origin' })
-                .then(res => res.json())
+                .then(res => {
+                    consecutiveNetworkErrors = 0;
+                    return res.json();
+                })
                 .then(pollRes => {
                     if (pollRes.status === 'success' && pollRes.token) {
                         stopPolling();
@@ -60,9 +67,13 @@
                     }
                 })
                 .catch(err => {
-                    console.error('[AuthExecutor] Poll error:', err);
-                    if (typeof onError === 'function') {
-                        onError(err.message || 'Authentication polling error');
+                    consecutiveNetworkErrors++;
+                    console.warn(`[AuthExecutor] Poll network warning (${consecutiveNetworkErrors}/${MAX_CONSECUTIVE_ERRORS}):`, err);
+                    if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        stopPolling();
+                        if (typeof onError === 'function') {
+                            onError(err.message || 'Connection lost. Please check network connection and retry.');
+                        }
                     }
                 });
         }, 3000);
