@@ -19,40 +19,56 @@ class CompanyAccessManager:
     def __init__(self):
         pass
 
-    def get_discovered_companies_with_provenance(self, client: Optional[BCMCPClient]) -> Tuple[List[Dict[str, Any]], str]:
+    def get_discovered_companies_with_provenance(self, client: Optional[BCMCPClient]) -> Tuple[List[Dict[str, Any]], str, Optional[str]]:
         """
         Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies.
-        Returns 2-tuple: (discovered_companies_list, data_source)
+        Returns 3-tuple: (discovered_companies_list, data_source, error_detail)
         """
-        if client and client.get_access_token():
-            resp = client._execute_bc_rest("companies")
-            if isinstance(resp, dict) and not resp.get("is_error") and "error" not in resp:
-                raw_list = resp.get("value", []) if isinstance(resp.get("value"), list) else []
-                if raw_list:
-                    discovered = []
-                    for c in raw_list:
-                        if isinstance(c, dict) and c.get("id"):
-                            comp_id = c.get("id")
-                            comp_name = str(c.get("name") or comp_id)
-                            display_name = str(c.get("displayName") or comp_name)
-                            discovered.append({
-                                "id": comp_id,
-                                "name": comp_name,
-                                "displayName": display_name
-                            })
-                    if discovered:
-                        return discovered, "LIVE_BUSINESS_CENTRAL"
+        if not client:
+            return [
+                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+            ], "SNAPSHOT_SEED", "No BCMCPClient available"
 
-        logger.warning("Company discovery returning preview Business Central environment companies")
+        token = client.get_access_token()
+        if not token:
+            logger.warning("BC OAuth access token missing on server.")
+            return [
+                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+            ], "SNAPSHOT_SEED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
+
+        resp = client._execute_bc_rest("companies")
+        if isinstance(resp, dict) and not resp.get("is_error") and "error" not in resp:
+            raw_list = resp.get("value", []) if isinstance(resp.get("value"), list) else []
+            if raw_list:
+                discovered = []
+                for c in raw_list:
+                    if isinstance(c, dict) and c.get("id"):
+                        comp_id = c.get("id")
+                        comp_name = str(c.get("name") or comp_id)
+                        display_name = str(c.get("displayName") or comp_name)
+                        discovered.append({
+                            "id": comp_id,
+                            "name": comp_name,
+                            "displayName": display_name
+                        })
+                if discovered:
+                    return discovered, "LIVE_BUSINESS_CENTRAL", None
+
+        err_msg = resp.get("error") if isinstance(resp, dict) else "Unknown BC REST error"
+        logger.warning(f"Live Business Central company discovery failed: {err_msg}")
         return [
             {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
             {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
             {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-        ], "SNAPSHOT_SEED"
+        ], "SNAPSHOT_SEED", f"Live BC /companies query failed: {err_msg}"
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
         """Retrieves company list from Business Central REST API /companies endpoint."""
-        companies, _ = self.get_discovered_companies_with_provenance(client)
+        companies, _, _ = self.get_discovered_companies_with_provenance(client)
         return companies
 
     def validate_company_access(

@@ -2950,19 +2950,18 @@
             .then(data => {
                 if (!data) return;
                 const authBtn = document.getElementById('dt-auth-btn');
-                if (authBtn) authBtn.style.display = 'none';
+                if (data.data_source === 'LIVE_BUSINESS_CENTRAL') {
+                    if (authBtn) authBtn.style.display = 'none';
+                } else {
+                    if (authBtn) {
+                        authBtn.style.display = 'inline-block';
+                        authBtn.title = data.error_detail || 'Sign in to fetch live companies from Business Central';
+                    }
+                    console.warn("Live Business Central Discovery:", data.error_detail);
+                }
                 const select = document.getElementById('dt-company-select');
                 if (select && data.companies) {
                     select.innerHTML = '';
-                    if (data.companies.length === 0) {
-                        const opt = document.createElement('option');
-                        opt.value = '';
-                        opt.textContent = data.data_source === 'DATA_UNAVAILABLE'
-                            ? 'Data Unavailable (BC Session Offline)'
-                            : 'No authorized companies available';
-                        select.appendChild(opt);
-                        return;
-                    }
                     data.companies.forEach(c => {
                         const opt = document.createElement('option');
                         opt.value = c.id; // Real Business Central GUID or ID
