@@ -533,7 +533,7 @@
             </p>
             
             <!-- 1. Microsoft Entra SSO Button -->
-            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="OpsmeldAuth.startEntraFlow()">
+            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
                 🔑 Continue with Microsoft Entra ID
             </button>
 
@@ -1118,7 +1118,7 @@
                             <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 5px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.85rem; font-weight: 700; background: white; color: #0F172A;">
                                 <option value="">Loading authorized companies...</option>
                             </select>
-                            <button id="dt-auth-btn" onclick="OpsmeldAuth.startEntraFlow()" style="display:none; background:#059669; color:white; border:none; padding:5px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to Sync Live Companies</button>
+                            <button id="dt-auth-btn" onclick="openAppLoginModal()" style="display:none; background:#059669; color:white; border:none; padding:5px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to Sync Live Companies</button>
                         </span>
                     </div>
                     <div style="font-size: 0.78rem; color: #64748B;">
@@ -1577,6 +1577,70 @@
     </div>
 
     <script>
+    window.OpsmeldAuth = {
+        openModal: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'flex';
+            this.startEntraFlow();
+        },
+        closeModal: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'none';
+        },
+        startEntraFlow: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'flex';
+            const codeEl = document.getElementById('login-user-code');
+            const linkEl = document.getElementById('login-link');
+            if (codeEl) codeEl.innerText = 'GENERATING CODE...';
+            
+            fetch('/api/auth/entra/device-flow', { credentials: 'same-origin' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.user_code && codeEl) {
+                        codeEl.innerText = data.user_code;
+                        if (linkEl && data.verification_uri) {
+                            linkEl.href = data.verification_uri;
+                        }
+                    } else if (data.message && codeEl) {
+                        codeEl.innerText = data.message;
+                    } else if (data.error && codeEl) {
+                        codeEl.innerText = data.error;
+                    }
+                })
+                .catch(err => {
+                    console.error("Device flow error:", err);
+                    if (codeEl) codeEl.innerText = 'HTTPS ENTRA ONLINE';
+                });
+        },
+        handlePasswordLogin: function(e) {
+            if (e) e.preventDefault();
+            const email = document.getElementById('app-login-email').value;
+            const pass = document.getElementById('app-login-pass').value;
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, password: pass }),
+                credentials: 'same-origin'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'SUCCESS' || data.authenticated) {
+                    location.reload();
+                } else {
+                    const errEl = document.getElementById('app-login-error');
+                    if (errEl) errEl.style.display = 'block';
+                }
+            });
+        }
+    };
+
+    function openAppLoginModal() {
+        if (window.OpsmeldAuth) {
+            window.OpsmeldAuth.startEntraFlow();
+        }
+    }
+
     function getAuthHeaders() {
         const cookieToken = (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
         const token = localStorage.getItem('opsmeld_token') || cookieToken;
@@ -1812,68 +1876,6 @@
         } else {
             if (publicLanding) publicLanding.style.display = 'block';
         }
-    }
-
-    window.OpsmeldAuth = {
-        openModal: function() {
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'flex';
-            this.startEntraFlow();
-        },
-        closeModal: function() {
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'none';
-        },
-        startEntraFlow: function() {
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'flex';
-            const codeEl = document.getElementById('login-user-code');
-            const linkEl = document.getElementById('login-link');
-            if (codeEl) codeEl.innerText = 'GENERATING CODE...';
-            
-            fetch('/api/auth/entra/device-flow', { credentials: 'same-origin' })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.user_code && codeEl) {
-                        codeEl.innerText = data.user_code;
-                        if (linkEl && data.verification_uri) {
-                            linkEl.href = data.verification_uri;
-                        }
-                    } else if (data.message && codeEl) {
-                        codeEl.innerText = data.message;
-                    } else if (data.error && codeEl) {
-                        codeEl.innerText = data.error;
-                    }
-                })
-                .catch(err => {
-                    console.error("Device flow error:", err);
-                    if (codeEl) codeEl.innerText = 'HTTPS ENTRA ONLINE';
-                });
-        },
-        handlePasswordLogin: function(e) {
-            if (e) e.preventDefault();
-            const email = document.getElementById('app-login-email').value;
-            const pass = document.getElementById('app-login-pass').value;
-            fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, password: pass }),
-                credentials: 'same-origin'
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'SUCCESS' || data.authenticated) {
-                    location.reload();
-                } else {
-                    const errEl = document.getElementById('app-login-error');
-                    if (errEl) errEl.style.display = 'block';
-                }
-            });
-        }
-    };
-
-    function openAppLoginModal() {
-        window.OpsmeldAuth.startEntraFlow();
     }
 
     function loadOpsmeldPortalInfo() {
