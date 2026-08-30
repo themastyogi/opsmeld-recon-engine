@@ -1881,7 +1881,16 @@
         if (q) url += `&search=${encodeURIComponent(q)}`;
 
         fetch(url)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(errData => {
+                        throw new Error(errData.error || ('HTTP ' + res.status));
+                    }).catch(() => {
+                        throw new Error('HTTP ' + res.status + ' - Unable to load findings');
+                    });
+                }
+                return res.json();
+            })
             .then(data => {
                 if (data.summary) {
                     document.getElementById('dt-summary-total').innerText = data.summary.total_findings || 0;
