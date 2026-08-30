@@ -1653,6 +1653,8 @@
             const welcomeContainer = document.getElementById('signin-welcome-container');
             const welcomeEmail = document.getElementById('welcome-user-email');
 
+            const token = localStorage.getItem('opsmeld_token') || (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
+
             if (window.OpsmeldSession) {
                 window.OpsmeldSession.resolveState().then(state => {
                     if (state.status === 'AUTHENTICATED_PROVISIONED') {
@@ -1668,7 +1670,6 @@
                     } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
                         switchMainView('account-not-provisioned');
                     } else {
-                        // Unauthenticated: Keep landing page visible and trigger Microsoft Entra login modal directly
                         if (publicLanding) publicLanding.style.display = 'block';
                         if (signinWall) signinWall.style.display = 'none';
                         if (authDenied) authDenied.style.display = 'none';
@@ -1677,6 +1678,23 @@
                         openAppLoginModal();
                     }
                 });
+            } else {
+                if (!token) {
+                    if (publicLanding) publicLanding.style.display = 'block';
+                    if (signinWall) signinWall.style.display = 'none';
+                    if (authDenied) authDenied.style.display = 'none';
+                    if (notProvisioned) notProvisioned.style.display = 'none';
+                    if (appShell) appShell.style.display = 'none';
+                    openAppLoginModal();
+                } else {
+                    if (publicLanding) publicLanding.style.display = 'none';
+                    if (authDenied) authDenied.style.display = 'none';
+                    if (notProvisioned) notProvisioned.style.display = 'none';
+                    if (appShell) appShell.style.display = 'none';
+                    if (signinWall) signinWall.style.display = 'flex';
+                    if (unauthContainer) unauthContainer.style.display = 'none';
+                    if (welcomeContainer) welcomeContainer.style.display = 'block';
+                }
             }
             return;
         }
