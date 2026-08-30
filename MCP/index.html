@@ -1119,7 +1119,7 @@
                                 <option value="">Loading authorized companies...</option>
                             </select>
                             <button class="btn-btn" onclick="loadAuthorizedCompanies()" style="background:#2563EB; color:white; padding:4px 10px; border-radius:6px; font-size:0.78rem; font-weight:700; cursor:pointer; margin-left:8px;">🔄 Refresh Companies</button>
-                            <button id="dt-auth-btn" onclick="openAppLoginModal()" style="display:none; background:#059669; color:white; border:none; padding:4px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to View Companies</button>
+                            <button id="dt-auth-btn" onclick="OpsmeldAuth.startEntraFlow()" style="display:none; background:#059669; color:white; border:none; padding:4px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to View Companies</button>
                         </span>
                     </div>
                     <div style="font-size: 0.78rem; color: #64748B;">
@@ -1813,6 +1813,68 @@
         } else {
             if (publicLanding) publicLanding.style.display = 'block';
         }
+    }
+
+    window.OpsmeldAuth = {
+        openModal: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'flex';
+            this.startEntraFlow();
+        },
+        closeModal: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'none';
+        },
+        startEntraFlow: function() {
+            const modal = document.getElementById('login-modal');
+            if (modal) modal.style.display = 'flex';
+            const codeEl = document.getElementById('login-user-code');
+            const linkEl = document.getElementById('login-link');
+            if (codeEl) codeEl.innerText = 'GENERATING CODE...';
+            
+            fetch('/api/auth/entra/device-flow', { credentials: 'same-origin' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.user_code && codeEl) {
+                        codeEl.innerText = data.user_code;
+                        if (linkEl && data.verification_uri) {
+                            linkEl.href = data.verification_uri;
+                        }
+                    } else if (data.message && codeEl) {
+                        codeEl.innerText = data.message;
+                    } else if (data.error && codeEl) {
+                        codeEl.innerText = data.error;
+                    }
+                })
+                .catch(err => {
+                    console.error("Device flow error:", err);
+                    if (codeEl) codeEl.innerText = 'HTTPS ENTRA ONLINE';
+                });
+        },
+        handlePasswordLogin: function(e) {
+            if (e) e.preventDefault();
+            const email = document.getElementById('app-login-email').value;
+            const pass = document.getElementById('app-login-pass').value;
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, password: pass }),
+                credentials: 'same-origin'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'SUCCESS' || data.authenticated) {
+                    location.reload();
+                } else {
+                    const errEl = document.getElementById('app-login-error');
+                    if (errEl) errEl.style.display = 'block';
+                }
+            });
+        }
+    };
+
+    function openAppLoginModal() {
+        window.OpsmeldAuth.startEntraFlow();
     }
 
     function loadOpsmeldPortalInfo() {
