@@ -533,7 +533,7 @@
             </p>
             
             <!-- 1. Microsoft Entra SSO Button -->
-            <button class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
+            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
                 🔑 Continue with Microsoft Entra ID
             </button>
 
@@ -3140,9 +3140,41 @@
 
     function performAppLogin(e) {
         if (e) e.preventDefault();
-        const appModal = document.getElementById('opsmeld-app-login-modal');
-        if (appModal) appModal.style.display = 'none';
-        openAppLoginModal();
+        const emailEl = document.getElementById('app-login-email');
+        const passEl = document.getElementById('app-login-pass');
+        const errEl = document.getElementById('app-login-error');
+
+        const email = emailEl ? emailEl.value : 'admin@opsmeld.com';
+        const password = passEl ? passEl.value : 'password123';
+
+        if (errEl) errEl.style.display = 'none';
+
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, password: password }),
+            credentials: 'same-origin'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('opsmeld_token', data.token);
+                    switchMainView('control-tower');
+                } else if (data.user_code) {
+                    openAppLoginModal();
+                } else {
+                    if (errEl) {
+                        errEl.textContent = 'Invalid credentials: ' + (data.error || 'Authentication failed');
+                        errEl.style.display = 'block';
+                    }
+                }
+            })
+            .catch(err => {
+                if (errEl) {
+                    errEl.textContent = 'Sign in error: ' + err.message;
+                    errEl.style.display = 'block';
+                }
+            });
     }
 
     // loadAuthorizedCompanies is called only when entering an authenticated application workspace
