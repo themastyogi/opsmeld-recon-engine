@@ -71,10 +71,10 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         for _ in range(5):
             try:
                 self.page.goto(self.base_url)
-                # State Machine Entry: Click Sign In -> Welcome Back -> Continue to Portal
-                self.page.evaluate("switchMainView('signin')")
-                time.sleep(0.2)
-                self.page.evaluate("switchMainView('control-tower')")
+                # Exercise real user DOM journey: Public Landing -> Click Sign In -> Click Continue to Opsmeld Portal
+                self.page.click("button:has-text('Sign In')")
+                self.page.wait_for_selector("#signin-welcome-container", state="visible", timeout=3000)
+                self.page.click("button:has-text('Continue to Opsmeld Portal')")
                 self.page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
                 return
             except Exception:
@@ -89,6 +89,23 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         user_label = self.page.locator("#user-company-label")
         self.assertTrue(user_label.is_visible())
         self.assertIn("CRONUS IN", user_label.text_content())
+
+    def test_returning_browser_does_not_auto_enter(self):
+        """Release Blocker Test 5: Returning browser with valid session MUST load public landing and NOT auto-enter dashboard."""
+        self.page.goto(self.base_url)
+        landing_visible = self.page.is_visible("#view-public-landing")
+        app_shell_visible = self.page.is_visible("#view-app-shell")
+        self.assertTrue(landing_visible, "Public landing page should be visible on load")
+        self.assertFalse(app_shell_visible, "App shell MUST NOT auto-enter on page load")
+
+        self.page.click("button:has-text('Sign In')")
+        self.page.wait_for_selector("#signin-welcome-container", state="visible", timeout=3000)
+        self.assertTrue(self.page.is_visible("#signin-welcome-container"), "Welcome back container should be visible")
+        self.assertFalse(self.page.is_visible("#view-app-shell"), "App shell MUST NOT auto-enter before clicking Continue")
+
+        self.page.click("button:has-text('Continue to Opsmeld Portal')")
+        self.page.wait_for_selector("#view-app-shell", state="visible", timeout=3000)
+        self.assertTrue(self.page.is_visible("#view-app-shell"), "App shell should be visible after explicit Continue click")
 
     def test_auth_invalid_login(self):
         """Invalid login: Validates 400/401 error response simulation."""
@@ -119,6 +136,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         dt_nav = self.page.locator("#nav-top-dt")
         self.assertTrue(dt_nav.is_visible())
         dt_nav.click()
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=3000)
         dt_view = self.page.locator("#view-data-trust")
         self.assertTrue(dt_view.is_visible())
 
@@ -128,8 +146,9 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         sidebar_item = self.page.locator("#sidebar-item-data-trust")
         self.assertTrue(sidebar_item.is_visible())
         sidebar_item.click()
-        dt_tbody = self.page.locator("#dt-findings-tbody")
-        self.assertIsNotNone(dt_tbody)
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=3000)
+        dt_view = self.page.locator("#view-data-trust")
+        self.assertTrue(dt_view.is_visible())
 
     # -------------------------------------------------------------------------
     # 3. Findings Area (8 Tests)
@@ -274,6 +293,7 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         """Inventory Costing visible: Validates Inventory Costing rule pack visibility."""
         self._open_page()
         self.page.evaluate("switchMainView('data-trust')")
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=3000)
         view = self.page.locator("#view-data-trust")
         self.assertTrue(view.is_visible())
 

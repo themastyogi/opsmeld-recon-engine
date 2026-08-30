@@ -1685,72 +1685,64 @@
             return;
         }
 
-        // Fail-Closed Guard: Unauthenticated requests for application views cannot render the App Shell
-        const cookieToken = (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
-        const token = localStorage.getItem('opsmeld_token') || cookieToken;
-        if (!token) {
-            if (publicLanding) publicLanding.style.display = 'block';
-            if (signinWall) signinWall.style.display = 'none';
-            if (authDenied) authDenied.style.display = 'none';
-            if (notProvisioned) notProvisioned.style.display = 'none';
-            if (appShell) appShell.style.display = 'none';
-            return;
-        }
-
-        // Render App Shell synchronously ONLY after token presence is verified
+        // Fail-Closed Guard: Unauthenticated or unprovisioned requests for application views cannot render the App Shell
         if (publicLanding) publicLanding.style.display = 'none';
         if (signinWall) signinWall.style.display = 'none';
         if (authDenied) authDenied.style.display = 'none';
         if (notProvisioned) notProvisioned.style.display = 'none';
-        if (appShell) appShell.style.display = 'block';
+        if (appShell) appShell.style.display = 'none';
 
-        if (viewName === 'control-tower' || viewName === 'portal-landing') {
-            if (topAr) topAr.classList.add('active');
-            if (ctView) ctView.style.display = 'block';
-            if (segView) segView.style.display = 'none';
-            if (dtView) dtView.style.display = 'none';
-            loadControlTowerData();
-        } else if (viewName === 'data-trust') {
-            if (topDt) topDt.classList.add('active');
-            if (dtView) dtView.style.display = 'block';
-            if (ctView) ctView.style.display = 'none';
-            if (segView) segView.style.display = 'none';
-            loadAuthorizedCompanies();
-        } else {
-            if (segView) segView.style.display = 'block';
-            if (ctView) ctView.style.display = 'none';
-            if (dtView) dtView.style.display = 'none';
-        }
-
-        // Verify session and module permission asynchronously in background
         const reqPerm = (viewName === 'data-trust') ? 'data-trust:read' : 'ar_control_tower:read';
-        fetch('/api/auth/me', { headers: getAuthHeaders(), credentials: 'same-origin' })
-            .then(r => r.json())
-            .then(data => {
-                if (!data.authenticated) {
-                    localStorage.removeItem('opsmeld_token');
-                    switchMainView('public');
+
+        if (window.OpsmeldSession) {
+            window.OpsmeldSession.resolveState().then(state => {
+                if (!state.authenticated) {
+                    if (publicLanding) publicLanding.style.display = 'block';
                     return;
                 }
-                if (data.provisioned === false || data.status === 'ACCOUNT_NOT_PROVISIONED') {
-                    switchMainView('account-not-provisioned');
+                if (!state.provisioned || state.status === 'AUTHENTICATED_UNPROVISIONED') {
+                    if (notProvisioned) notProvisioned.style.display = 'flex';
                     return;
                 }
-                const permissions = data.permissions || [];
-                const roles = data.roles || [];
+
+                const permissions = state.permissions || [];
+                const roles = state.roles || [];
                 const hasPerm = permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
+
                 if (!hasPerm) {
                     const msgEl = document.getElementById('auth-denied-message');
-                    if (msgEl && data.user) {
-                        msgEl.textContent = `Your account (${data.user.email}) is authenticated, but you do not currently have required permissions ('${reqPerm}') to access this module.`;
+                    if (msgEl && state.user) {
+                        msgEl.textContent = `Your account (${state.user.email}) is authenticated, but you do not currently have required permissions ('${reqPerm}') to access this module.`;
                     }
-                    if (publicLanding) publicLanding.style.display = 'none';
-                    if (signinWall) signinWall.style.display = 'none';
                     if (authDenied) authDenied.style.display = 'flex';
-                    if (appShell) appShell.style.display = 'none';
+                    return;
+                }
+
+                // Render App Shell ONLY after server-side session, provisioning, and permissions are verified
+                if (appShell) appShell.style.display = 'block';
+
+                if (viewName === 'control-tower' || viewName === 'portal-landing') {
+                    if (topAr) topAr.classList.add('active');
+                    if (ctView) ctView.style.display = 'block';
+                    if (segView) segView.style.display = 'none';
+                    if (dtView) dtView.style.display = 'none';
+                    loadControlTowerData();
+                } else if (viewName === 'data-trust') {
+                    if (topDt) topDt.classList.add('active');
+                    if (dtView) dtView.style.display = 'block';
+                    if (ctView) ctView.style.display = 'none';
+                    if (segView) segView.style.display = 'none';
+                    loadAuthorizedCompanies();
+                } else {
+                    if (segView) segView.style.display = 'block';
+                    if (ctView) ctView.style.display = 'none';
+                    if (dtView) dtView.style.display = 'none';
                 }
             })
             .catch(err => console.error('Module access check error:', err));
+        } else {
+            if (publicLanding) publicLanding.style.display = 'block';
+        }
     }
 
     function loadOpsmeldPortalInfo() {
