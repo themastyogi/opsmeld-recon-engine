@@ -102,7 +102,10 @@ class AuthManager:
         self.default_admin_companies = {
             "ac6b97ba-bc8f-f111-832d-7c1e5233db45", # CRONUS IN
             "c37ac1c0-bc8f-f111-832d-7c1e5233db45", # My Company
-            "c4e0106b-159e-f111-8072-7ced8d9f80ff"  # Sandbox
+            "c4e0106b-159e-f111-8072-7ced8d9f80ff", # Sandbox
+            "GUID-COMP-01",                        # CRONUS IN
+            "GUID-COMP-02",                        # CRONUS US
+            "GUID-COMP-03"                         # Cronus Europe
         }
 
     def _resolve_admin_password(self) -> str:

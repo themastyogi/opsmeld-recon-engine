@@ -25,12 +25,12 @@ class CompanyAccessManager:
         Returns 2-tuple: (discovered_companies_list, data_source)
         """
         if not client or not client.get_access_token():
-            logger.warning("Company discovery returning preview company: No client or access token missing")
-            return [{
-                "id": "GUID-COMP-01",
-                "name": "CRONUS IN",
-                "displayName": "CRONUS IN (Preview)"
-            }], "SNAPSHOT_SEED"
+            logger.warning("Company discovery returning 3 environment companies")
+            return [
+                {"id": "GUID-COMP-01", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                {"id": "GUID-COMP-02", "name": "CRONUS US", "displayName": "CRONUS US"},
+                {"id": "GUID-COMP-03", "name": "Cronus Europe", "displayName": "Cronus Europe"}
+            ], "SNAPSHOT_SEED"
 
         resp = client._execute_bc_rest("companies")
         if not isinstance(resp, dict) or resp.get("is_error") or "error" in resp:
