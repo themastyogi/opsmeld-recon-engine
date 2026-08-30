@@ -1124,3 +1124,16 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 
 def create_server(host: str = "0.0.0.0", port: int = 8000) -> HTTPServer:
     return ReusableHTTPServer((host, port), OpsmeldWebHandler)
+
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    print(f"Starting Opsmeld Reconciliation Engine Web Server on {host}:{port}...")
+    server = create_server(host=host, port=port)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down server.")
+        server.server_close()

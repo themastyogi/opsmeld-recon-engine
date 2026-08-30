@@ -7,23 +7,15 @@ from web.app import create_server
 def main():
     port_env = os.environ.get("PORT") or os.environ.get("WEBSITES_PORT") or "8000"
     try:
-        base_port = int(port_env)
+        port = int(port_env)
     except ValueError:
-        base_port = 8000
+        port = 8000
 
-    server = None
-    port = base_port
-    for try_port in range(base_port, base_port + 10):
-        try:
-            server = create_server(host="0.0.0.0", port=try_port)
-            port = try_port
-            break
-        except OSError:
-            continue
-
-    if not server:
-        print("Error: Could not bind server to any port in range 8000-8010.")
-        return
+    try:
+        server = create_server(host="0.0.0.0", port=port)
+    except OSError as e:
+        print(f"Port {port} busy, attempting bind to 0.0.0.0:{port}...")
+        server = create_server(host="0.0.0.0", port=port)
 
     print(f"============================================================")
     print(f"  Opsmeld Reconciliation Engine Web Management Console")
