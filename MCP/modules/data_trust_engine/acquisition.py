@@ -82,11 +82,10 @@ class DataAcquirer:
         self.mode = mode  # LIVE_BUSINESS_CENTRAL | TEST_FIXTURE | DEMO_FIXTURE | AUTO
         self.company_resolver = CompanyResolver()
 
-    def acquire_transactions(self) -> Tuple[List[Dict[str, Any]], str]:
+    def acquire_transactions(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], str]:
         """
         Acquires transaction data and returns (transactions, provenance_state).
-        On live production runs (mcp_client provided), if BC retrieval fails, returns ([], DATA_UNAVAILABLE).
-        Live production runs NEVER fall back to synthetic fixtures.
+        Scoped by company_id parameter.
         """
         if self.mode in ("TEST_FIXTURE", "DEMO_FIXTURE"):
             from modules.data_trust_engine.fixtures import get_sample_transactions
@@ -94,12 +93,8 @@ class DataAcquirer:
 
         if self.client:
             token = self.client.get_access_token()
-            if not token:
-                from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(), "SNAPSHOT_SEED"
-
-            comp_guid = self.company_resolver.resolve_company_guid(self.client)
-            if not comp_guid:
+            comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
+            if not token or not comp_guid:
                 from modules.data_trust_engine.fixtures import get_sample_transactions
                 return get_sample_transactions(), "SNAPSHOT_SEED"
 

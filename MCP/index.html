@@ -1990,9 +1990,12 @@
         document.getElementById('dt-modal-evidence-chain-box').innerHTML = '<div style="padding:12px; color:#6B7280; text-align:center;">⌛ Fetching originating evidence signals from engine...</div>';
         document.getElementById('dt-modal-impact-box').innerText = 'Loading business impact statement...';
 
-        modal.style.display = 'flex';
+        const compEl = document.getElementById('dt-company-select');
+        const compId = compEl ? compEl.value : '';
+        let detailUrl = `/api/data-trust/finding-detail?id=${encodeURIComponent(findingId)}`;
+        if (compId) detailUrl += `&company_id=${encodeURIComponent(compId)}`;
 
-        fetch(`/api/data-trust/finding-detail?id=${encodeURIComponent(findingId)}`)
+        fetch(detailUrl)
             .then(res => {
                 if (!res.ok) throw new Error(`HTTP ${res.status}: Server returned error ${res.statusText}`);
                 return res.json();

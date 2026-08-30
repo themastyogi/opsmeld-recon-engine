@@ -152,7 +152,7 @@ class DataTrustEngineOrchestrator:
                 elif r.rule_id == "subledger_bypass": rule_status["SUBLEDGER_BYPASS"] = RuleExecutionStatus.SUCCESS
                 elif r.rule_id == "narration_context": rule_status["NARRATION_CONTEXT"] = RuleExecutionStatus.SUCCESS
         elif gl_rules:
-            gl_txs, gl_provenance = self.acquirer.acquire_transactions()
+            gl_txs, gl_provenance = self.acquirer.acquire_transactions(company_id=target_comp_id)
             if gl_provenance == "DATA_UNAVAILABLE":
                 for r in gl_rules:
                     if r.rule_id == "posting_date_policy": rule_status["POSTING_DATE"] = RuleExecutionStatus.DATA_UNAVAILABLE
