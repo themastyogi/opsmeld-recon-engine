@@ -775,14 +775,22 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             try:
                 import msal
-                app = msal.ConfidentialClientApplication(
-                    config.app_client_id,
-                    client_credential=config.client_secret or None,
-                    authority=f"https://login.microsoftonline.com/{config.tenant_id}"
-                )
+                authority = f"https://login.microsoftonline.com/{config.tenant_id}"
+                if config.client_secret:
+                    app = msal.ConfidentialClientApplication(
+                        config.app_client_id,
+                        client_credential=config.client_secret,
+                        authority=authority
+                    )
+                else:
+                    app = msal.PublicClientApplication(
+                        config.app_client_id,
+                        authority=authority
+                    )
+
                 result = app.acquire_token_by_authorization_code(
                     code,
-                    scopes=["openid", "profile", "email", "offline_access", "https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
+                    scopes=["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
                     redirect_uri=redirect_uri
                 )
                 if isinstance(result, dict):
