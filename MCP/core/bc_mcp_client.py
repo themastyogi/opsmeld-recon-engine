@@ -29,6 +29,18 @@ class BCMCPClient:
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
+    def _get_tenant_id(self) -> str:
+        tid = getattr(self.config, "tenant_id", None)
+        if not tid or tid.startswith("test-tenant") or tid == "placeholder":
+            return os.environ.get("BC_TENANT_ID") or "common"
+        return tid
+
+    def _get_client_id(self) -> str:
+        cid = getattr(self.config, "app_client_id", None)
+        if not cid or cid.startswith("test-client") or cid == "placeholder":
+            return os.environ.get("BC_APP_CLIENT_ID") or "5accae97-5fc5-4a13-9600-2cbe0065d83a"
+        return cid
+
     def get_access_token(self) -> str:
         """Acquires OAuth2 token via explicit user_access_token, MSAL token cache, or Client Secret flow."""
         if self.user_access_token:
@@ -38,14 +50,17 @@ class BCMCPClient:
         except ImportError:
             return ""
 
+        tenant_id = self._get_tenant_id()
+        client_id = self._get_client_id()
+
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
             try:
                 with open(self.token_cache_path, "r", encoding="utf-8") as f:
                     cache.deserialize(f.read())
                 app = msal.PublicClientApplication(
-                    client_id=self.config.app_client_id,
-                    authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                    client_id=client_id,
+                    authority=f"https://login.microsoftonline.com/{tenant_id}",
                     token_cache=cache,
                 )
                 accounts = app.get_accounts()
@@ -68,9 +83,9 @@ class BCMCPClient:
         if client_secret:
             try:
                 app = msal.ConfidentialClientApplication(
-                    client_id=self.config.app_client_id,
+                    client_id=client_id,
                     client_credential=client_secret,
-                    authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                    authority=f"https://login.microsoftonline.com/{tenant_id}",
                 )
                 result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
                 if result and "access_token" in result:
@@ -84,10 +99,12 @@ class BCMCPClient:
         """Initiates MSAL Device Code Flow for 1-click user authentication."""
         try:
             import msal
+            tenant_id = self._get_tenant_id()
+            client_id = self._get_client_id()
             cache = msal.SerializableTokenCache()
             app = msal.PublicClientApplication(
-                client_id=self.config.app_client_id,
-                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                client_id=client_id,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
                 token_cache=cache
             )
             scopes = ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"]
@@ -103,10 +120,12 @@ class BCMCPClient:
         """Completes device code flow and persists token cache."""
         try:
             import msal
+            tenant_id = self._get_tenant_id()
+            client_id = self._get_client_id()
             cache = msal.SerializableTokenCache()
             app = msal.PublicClientApplication(
-                client_id=self.config.app_client_id,
-                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                client_id=client_id,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
                 token_cache=cache
             )
             result = app.acquire_token_by_device_flow(flow)
