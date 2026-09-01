@@ -22,14 +22,17 @@ class BCMCPClient:
     Manages OAuth2 token acquisition via MSAL and executes live JSON-RPC 2.0 tool requests.
     """
 
-    def __init__(self, config: Optional[ClientConfig] = None, user_token: Optional[str] = None):
+    def __init__(self, config: Optional[ClientConfig] = None, user_token: Optional[str] = None, user_tenant_id: Optional[str] = None):
         self.config = config or load_client_config()
         self.token_cache_path = self.config.get_absolute_cache_path()
         self.user_access_token = user_token or os.environ.get("BC_ACCESS_TOKEN", "")
+        self.user_tenant_id = user_tenant_id or os.environ.get("BC_TENANT_ID")
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
     def _get_tenant_id(self) -> Optional[str]:
+        if self.user_tenant_id and not self.user_tenant_id.startswith("test-tenant") and self.user_tenant_id != "placeholder":
+            return self.user_tenant_id
         tid = getattr(self.config, "tenant_id", None) or os.environ.get("BC_TENANT_ID")
         if not tid or tid.startswith("test-tenant") or tid == "placeholder":
             return None

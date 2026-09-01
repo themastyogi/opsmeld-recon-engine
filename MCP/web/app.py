@@ -526,7 +526,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token)
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
             mgr = CompanyAccessManager()
             discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
             status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(discovered) > 0 else "DATA_UNAVAILABLE"
@@ -768,6 +769,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             email = "admin@opsmeld.com"
             name = "Vikas Kumar (Microsoft Entra)"
             oid = None
+            access_token = None
+            tenant_id = None
 
             try:
                 import msal
@@ -781,15 +784,18 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     scopes=["openid", "profile", "email"],
                     redirect_uri=redirect_uri
                 )
-                if "id_token_claims" in result:
-                    claims = result["id_token_claims"]
-                    email = claims.get("preferred_username") or claims.get("email") or claims.get("upn") or email
-                    name = claims.get("name") or name
-                    oid = claims.get("oid")
+                if isinstance(result, dict):
+                    access_token = result.get("access_token")
+                    if "id_token_claims" in result:
+                        claims = result["id_token_claims"]
+                        email = claims.get("preferred_username") or claims.get("email") or claims.get("upn") or email
+                        name = claims.get("name") or name
+                        oid = claims.get("oid")
+                        tenant_id = claims.get("tid")
             except Exception as e:
                 print(f"[OAuthCallback] Code exchange notice: {e}")
 
-            token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid)
+            token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid, access_token=access_token, tenant_id=tenant_id)
 
             self.send_response(302)
             self.send_header("Location", "/?login=success")

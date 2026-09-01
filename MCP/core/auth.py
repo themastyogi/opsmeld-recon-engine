@@ -28,7 +28,9 @@ class OpsmeldUserSession:
         allowed_companies: Optional[Set[str]] = None,
         provisioned: bool = True,
         created_at: Optional[float] = None,
-        expires_at: Optional[float] = None
+        expires_at: Optional[float] = None,
+        access_token: Optional[str] = None,
+        tenant_id: Optional[str] = None
     ):
         self.token = token
         self.user_id = user_id
@@ -42,6 +44,8 @@ class OpsmeldUserSession:
         self.provisioned = provisioned
         self.created_at = created_at or time.time()
         self.expires_at = expires_at or (self.created_at + SESSION_TTL_SECONDS)
+        self.access_token = access_token
+        self.tenant_id = tenant_id
 
     def is_expired(self) -> bool:
         return time.time() > self.expires_at
@@ -82,6 +86,8 @@ class OpsmeldUserSession:
             "roles": sorted(self.roles),
             "permissions": sorted(list(self.permissions)),
             "allowed_companies": sorted(list(self.allowed_companies)),
+            "access_token": self.access_token,
+            "tenant_id": self.tenant_id,
             "created_at": self.created_at,
             "expires_at": self.expires_at
         }
@@ -178,7 +184,9 @@ class AuthManager:
         allowed_companies: Optional[Set[str]] = None,
         direct_permissions: Optional[List[str]] = None,
         permissions: Optional[Set[str]] = None,
-        provisioned: bool = True
+        provisioned: bool = True,
+        access_token: Optional[str] = None,
+        tenant_id: Optional[str] = None
     ) -> str:
         """Creates an authenticated session token with explicit multitenant organization and company entitlements."""
         token = secrets.token_hex(32)
@@ -192,7 +200,9 @@ class AuthManager:
             roles=roles,
             permissions=resolved_perms,
             allowed_companies=allowed_companies,
-            provisioned=provisioned
+            provisioned=provisioned,
+            access_token=access_token,
+            tenant_id=tenant_id
         )
         _ACTIVE_SESSIONS[token] = session
         if token in _REVOKED_TOKENS:
@@ -216,7 +226,14 @@ class AuthManager:
             )
         return None
 
-    def login_entra_user(self, email: Optional[str] = None, display_name: Optional[str] = None, entra_oid: Optional[str] = None) -> str:
+    def login_entra_user(
+        self,
+        email: Optional[str] = None,
+        display_name: Optional[str] = None,
+        entra_oid: Optional[str] = None,
+        access_token: Optional[str] = None,
+        tenant_id: Optional[str] = None
+    ) -> str:
         """
         Resolves Entra Identity (email/oid) -> User -> OrganizationUser -> Organization.
         If user is not provisioned, creates an unprovisioned session (provisioned=False).
@@ -247,7 +264,9 @@ class AuthManager:
                 roles=roles,
                 permissions=user_perms,
                 allowed_companies=user_companies,
-                provisioned=True
+                provisioned=True,
+                access_token=access_token,
+                tenant_id=tenant_id
             )
 
         # Grant provisioned session to all authenticated Microsoft Entra users
@@ -258,7 +277,9 @@ class AuthManager:
             organization_id="org_abc_001",
             roles=["ENTERPRISE_ADMIN"],
             allowed_companies=self.default_admin_companies,
-            provisioned=True
+            provisioned=True,
+            access_token=access_token,
+            tenant_id=tenant_id
         )
 
     def get_session(self, session_token: Optional[str]) -> Optional[OpsmeldUserSession]:
