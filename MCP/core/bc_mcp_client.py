@@ -5,12 +5,15 @@ Strictly queries live Business Central endpoints with zero mock/stub fallback da
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
 from core.config_loader import ClientConfig, load_client_config
+
+logger = logging.getLogger("OpsmeldReconEngine.BCMCPClient")
 
 
 class BCMCPClient:
@@ -37,40 +40,43 @@ class BCMCPClient:
 
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
-            with open(self.token_cache_path, "r", encoding="utf-8") as f:
-                try:
+            try:
+                with open(self.token_cache_path, "r", encoding="utf-8") as f:
                     cache.deserialize(f.read())
-                    app = msal.PublicClientApplication(
-                        client_id=self.config.app_client_id,
-                        authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
-                        token_cache=cache,
-                    )
-                    accounts = app.get_accounts()
-                    if accounts:
-                        for sc in [
-                            ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
-                            ["https://api.businesscentral.dynamics.com/user_impersonation"],
-                            self.config.scopes
-                        ]:
-                            result = app.acquire_token_silent(sc, account=accounts[0])
-                            if result and "access_token" in result:
-                                if cache.has_state_changed:
-                                    with open(self.token_cache_path, "w", encoding="utf-8") as cf:
-                                        cf.write(cache.serialize())
-                                return result["access_token"]
-                except Exception as e:
-                    logger.warning(f"MSAL silent cache acquisition failed: {e}")
+                app = msal.PublicClientApplication(
+                    client_id=self.config.app_client_id,
+                    authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                    token_cache=cache,
+                )
+                accounts = app.get_accounts()
+                if accounts:
+                    for sc in [
+                        ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
+                        ["https://api.businesscentral.dynamics.com/user_impersonation"],
+                        self.config.scopes
+                    ]:
+                        result = app.acquire_token_silent(sc, account=accounts[0])
+                        if result and "access_token" in result:
+                            if cache.has_state_changed:
+                                with open(self.token_cache_path, "w", encoding="utf-8") as cf:
+                                    cf.write(cache.serialize())
+                            return result["access_token"]
+            except Exception as e:
+                logger.warning(f"MSAL silent cache acquisition failed: {e}")
 
         client_secret = getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
         if client_secret:
-            app = msal.ConfidentialClientApplication(
-                client_id=self.config.app_client_id,
-                client_credential=client_secret,
-                authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
-            )
-            result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
-            if result and "access_token" in result:
-                return result["access_token"]
+            try:
+                app = msal.ConfidentialClientApplication(
+                    client_id=self.config.app_client_id,
+                    client_credential=client_secret,
+                    authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
+                )
+                result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
+                if result and "access_token" in result:
+                    return result["access_token"]
+            except Exception as e:
+                logger.warning(f"MSAL client secret acquisition failed: {e}")
 
         return ""
 
