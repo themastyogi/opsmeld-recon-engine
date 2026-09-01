@@ -70,8 +70,15 @@ def load_client_config(client_key: Optional[str] = None) -> ClientConfig:
 
     client_data = clients_map.get(target_key, {}) if isinstance(clients_map, dict) else {}
 
-    tenant_id = os.environ.get("BC_TENANT_ID") or client_data.get("tenant_id") or "db961cfa-b4ab-42c5-9ab4-90b82e0da387"
-    app_client_id = os.environ.get("BC_CLIENT_ID") or client_data.get("app_client_id") or "5accae97-5fc5-4a13-9600-2cbe0065d83a"
+    raw_tenant = client_data.get("tenant_id")
+    if raw_tenant and (raw_tenant.startswith("test-tenant") or raw_tenant == "placeholder"):
+        raw_tenant = None
+    tenant_id = os.environ.get("BC_TENANT_ID") or os.environ.get("TENANT_ID") or raw_tenant or ""
+
+    raw_client = client_data.get("app_client_id")
+    if raw_client and (raw_client.startswith("test-client") or raw_client == "placeholder"):
+        raw_client = None
+    app_client_id = os.environ.get("BC_CLIENT_ID") or os.environ.get("BC_APP_CLIENT_ID") or raw_client or ""
     client_secret = os.environ.get("BC_CLIENT_SECRET") or client_data.get("client_secret") or ""
     name = client_data.get("name") or "opsmeld-dev"
     environment = client_data.get("environment") or "Production"
