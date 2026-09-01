@@ -47,11 +47,19 @@ class BCMCPClient:
                     )
                     accounts = app.get_accounts()
                     if accounts:
-                        result = app.acquire_token_silent(self.config.scopes, account=accounts[0])
-                        if result and "access_token" in result:
-                            return result["access_token"]
-                except Exception:
-                    pass
+                        for sc in [
+                            ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
+                            ["https://api.businesscentral.dynamics.com/user_impersonation"],
+                            self.config.scopes
+                        ]:
+                            result = app.acquire_token_silent(sc, account=accounts[0])
+                            if result and "access_token" in result:
+                                if cache.has_state_changed:
+                                    with open(self.token_cache_path, "w", encoding="utf-8") as cf:
+                                        cf.write(cache.serialize())
+                                return result["access_token"]
+                except Exception as e:
+                    logger.warning(f"MSAL silent cache acquisition failed: {e}")
 
         client_secret = getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
         if client_secret:
@@ -60,7 +68,7 @@ class BCMCPClient:
                 client_credential=client_secret,
                 authority=f"https://login.microsoftonline.com/{self.config.tenant_id}",
             )
-            result = app.acquire_token_for_client(scopes=self.config.scopes)
+            result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
             if result and "access_token" in result:
                 return result["access_token"]
 
