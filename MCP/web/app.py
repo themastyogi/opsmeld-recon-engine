@@ -725,8 +725,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
 
             host = self.headers.get("Host", "ar.opsmeld.com")
-            scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
-            redirect_uri = f"{scheme}://{host}/api/auth/callback"
+            redirect_uri = f"https://{host}/api/auth/callback"
             
             bc_scope = "openid profile email offline_access https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"
             auth_url = (
