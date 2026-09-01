@@ -258,20 +258,45 @@ class BCMCPClient:
         return []
 
     def _execute_bc_rest(self, path: str) -> Dict[str, Any]:
-        """Executes a direct GET request against standard Business Central v2.0 REST API."""
+        """Executes a direct GET request against standard Business Central v2.0 REST API with OData pagination support."""
         token = self.get_access_token()
         if not token:
             return {"error": "Authentication token missing."}
-        url = f"https://api.businesscentral.dynamics.com/v2.0/{self.config.tenant_id}/{self.config.environment}/api/v2.0/{path}"
+        tenant_id = self._get_tenant_id()
+        if not tenant_id:
+            return {"error": "Business Central tenant_id unconfigured."}
+        url = f"https://api.businesscentral.dynamics.com/v2.0/{tenant_id}/{self.config.environment}/api/v2.0/{path}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if self.config.company_name:
             headers["Company"] = self.config.company_name
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            return {"error": str(e)}
+        
+        all_values = []
+        next_url = url
+        last_resp_dict = {}
+
+        while next_url:
+            req = urllib.request.Request(next_url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    if isinstance(resp_data, dict):
+                        last_resp_dict = resp_data
+                        if "value" in resp_data and isinstance(resp_data["value"], list):
+                            all_values.extend(resp_data["value"])
+                            next_url = resp_data.get("@odata.nextLink")
+                        else:
+                            break
+                    else:
+                        break
+            except Exception as e:
+                if not all_values:
+                    return {"error": str(e)}
+                break
+
+        if all_values:
+            last_resp_dict["value"] = all_values
+            return last_resp_dict
+        return last_resp_dict
 
     def _execute_bc_rest_url(self, url: str) -> Dict[str, Any]:
         """Executes a direct GET request against an absolute OData @odata.nextLink URL."""
