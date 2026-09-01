@@ -532,10 +532,10 @@
                 Authenticate with your Microsoft Entra ID or your provisioned Opsmeld credentials.
             </p>
             
-            <!-- 1. Microsoft Entra SSO Button -->
-            <button class="btn-btn" type="button" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAppLoginModal()">
+            <!-- 1. Microsoft Entra SSO Button (Canonical Browser SSO) -->
+            <a href="/api/auth/entra/authorize" class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
                 🔑 Continue with Microsoft Entra ID
-            </button>
+            </a>
 
             <!-- Divider -->
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
@@ -1118,7 +1118,7 @@
                             <select id="dt-company-select" onchange="onCompanySelectChange(this.value)" style="padding: 5px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.85rem; font-weight: 700; background: white; color: #0F172A;">
                                 <option value="">Loading authorized companies...</option>
                             </select>
-                            <button id="dt-auth-btn" onclick="openAppLoginModal()" style="display:none; background:#059669; color:white; border:none; padding:5px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px;">🔑 Sign In to Sync Live Companies</button>
+                            <a id="dt-auth-btn" href="/api/auth/entra/authorize" style="display:none; background:#059669; color:white; border:none; padding:5px 12px; border-radius:6px; font-size:0.82rem; font-weight:800; cursor:pointer; margin-left:8px; text-decoration:none;">🔑 Sign In to Sync Live Companies</a>
                         </span>
                     </div>
                     <div style="font-size: 0.78rem; color: #64748B;">

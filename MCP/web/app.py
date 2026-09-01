@@ -710,13 +710,26 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         elif path == "/api/auth/entra/authorize":
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
+
+            tenant_id = config.tenant_id
+            client_id = config.app_client_id
+            if not tenant_id or tenant_id.startswith("test-tenant") or tenant_id == "placeholder" or not client_id or client_id.startswith("test-client") or client_id == "placeholder":
+                self._set_headers("text/html", 412)
+                self._write_response(
+                    "<h3>Microsoft Entra Authentication Unconfigured</h3>"
+                    "<p>Your Opsmeld instance does not have a configured Microsoft Entra App Registration tenant_id or app_client_id in config/clients.json.</p>"
+                    "<p>Please configure valid Azure App Registration credentials in config/clients.json or environment variables (BC_TENANT_ID, BC_APP_CLIENT_ID).</p>"
+                    "<br><a href='/'>Return to Opsmeld Platform</a>".encode("utf-8")
+                )
+                return
+
             host = self.headers.get("Host", "ar.opsmeld.com")
             scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
             redirect_uri = f"{scheme}://{host}/api/auth/callback"
             
             auth_url = (
-                f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/authorize"
-                f"?client_id={config.app_client_id}"
+                f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+                f"?client_id={client_id}"
                 f"&response_type=code"
                 f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
                 f"&response_mode=query"

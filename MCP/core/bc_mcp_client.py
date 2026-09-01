@@ -29,16 +29,16 @@ class BCMCPClient:
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
-    def _get_tenant_id(self) -> str:
-        tid = getattr(self.config, "tenant_id", None)
+    def _get_tenant_id(self) -> Optional[str]:
+        tid = getattr(self.config, "tenant_id", None) or os.environ.get("BC_TENANT_ID")
         if not tid or tid.startswith("test-tenant") or tid == "placeholder":
-            return os.environ.get("BC_TENANT_ID") or "common"
+            return None
         return tid
 
-    def _get_client_id(self) -> str:
-        cid = getattr(self.config, "app_client_id", None)
+    def _get_client_id(self) -> Optional[str]:
+        cid = getattr(self.config, "app_client_id", None) or os.environ.get("BC_APP_CLIENT_ID")
         if not cid or cid.startswith("test-client") or cid == "placeholder":
-            return os.environ.get("BC_APP_CLIENT_ID") or "5accae97-5fc5-4a13-9600-2cbe0065d83a"
+            return None
         return cid
 
     def get_access_token(self) -> str:
@@ -52,6 +52,9 @@ class BCMCPClient:
 
         tenant_id = self._get_tenant_id()
         client_id = self._get_client_id()
+        if not tenant_id or not client_id:
+            logger.info("Entra configuration unconfigured or placeholder; failing closed for live OAuth token acquisition.")
+            return ""
 
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
@@ -101,6 +104,8 @@ class BCMCPClient:
             import msal
             tenant_id = self._get_tenant_id()
             client_id = self._get_client_id()
+            if not tenant_id or not client_id:
+                return {"error": "CONFIGURATION_MISSING: Entra tenant_id or app_client_id unconfigured in clients.json"}
             cache = msal.SerializableTokenCache()
             app = msal.PublicClientApplication(
                 client_id=client_id,
@@ -122,6 +127,8 @@ class BCMCPClient:
             import msal
             tenant_id = self._get_tenant_id()
             client_id = self._get_client_id()
+            if not tenant_id or not client_id:
+                return {"error": "CONFIGURATION_MISSING: Entra tenant_id or app_client_id unconfigured in clients.json"}
             cache = msal.SerializableTokenCache()
             app = msal.PublicClientApplication(
                 client_id=client_id,
