@@ -1578,16 +1578,25 @@
 
     <script>
     window.OpsmeldAuth = {
+        pollInterval: null,
         openModal: function() {
             const modal = document.getElementById('login-modal');
             if (modal) modal.style.display = 'flex';
             this.startEntraFlow();
         },
         closeModal: function() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
             const modal = document.getElementById('login-modal');
             if (modal) modal.style.display = 'none';
         },
         startEntraFlow: function() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
             const modal = document.getElementById('login-modal');
             if (modal) modal.style.display = 'flex';
             const codeEl = document.getElementById('login-user-code');
@@ -1602,6 +1611,25 @@
                         if (linkEl && data.verification_uri) {
                             linkEl.href = data.verification_uri;
                         }
+                        // Start polling /api/auth/poll every 3 seconds to complete Entra sign-in automatically
+                        this.pollInterval = setInterval(() => {
+                            fetch('/api/auth/poll', { credentials: 'same-origin' })
+                                .then(res => res.json())
+                                .then(pollRes => {
+                                    if (pollRes.status === 'success' || pollRes.token) {
+                                        clearInterval(this.pollInterval);
+                                        this.pollInterval = null;
+                                        if (pollRes.token) {
+                                            localStorage.setItem('opsmeld_token', pollRes.token);
+                                            document.cookie = `session=${pollRes.token}; path=/; max-age=86400; SameSite=Lax`;
+                                        }
+                                        this.closeModal();
+                                        switchMainView('data-trust');
+                                        loadAuthorizedCompanies();
+                                    }
+                                })
+                                .catch(err => console.error("Auth poll error:", err));
+                        }, 3000);
                     } else if (data.message && codeEl) {
                         codeEl.innerText = data.message;
                     } else if (data.error && codeEl) {
@@ -1626,6 +1654,10 @@
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'SUCCESS' || data.authenticated) {
+                    if (data.token) {
+                        localStorage.setItem('opsmeld_token', data.token);
+                        document.cookie = `session=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+                    }
                     location.reload();
                 } else {
                     const errEl = document.getElementById('app-login-error');
