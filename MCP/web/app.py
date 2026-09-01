@@ -728,14 +728,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
             redirect_uri = f"{scheme}://{host}/api/auth/callback"
             
-            bc_scope = urllib.parse.quote("openid profile email offline_access https://api.businesscentral.dynamics.com/Financials.ReadWrite.All", safe="")
+            bc_scope = "openid profile email offline_access https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"
             auth_url = (
                 f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
                 f"?client_id={client_id}"
                 f"&response_type=code"
                 f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
                 f"&response_mode=query"
-                f"&scope={bc_scope}"
+                f"&scope={urllib.parse.quote(bc_scope)}"
                 f"&prompt=select_account"
             )
             
