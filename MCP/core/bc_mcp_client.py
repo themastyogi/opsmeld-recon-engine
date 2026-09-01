@@ -30,18 +30,18 @@ class BCMCPClient:
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
-    def _get_tenant_id(self) -> Optional[str]:
+    def _get_tenant_id(self) -> str:
         if self.user_tenant_id and not self.user_tenant_id.startswith("test-tenant") and self.user_tenant_id != "placeholder":
             return self.user_tenant_id
         tid = getattr(self.config, "tenant_id", None) or os.environ.get("BC_TENANT_ID")
         if not tid or tid.startswith("test-tenant") or tid == "placeholder":
-            return None
+            return os.environ.get("BC_TENANT_ID") or "common"
         return tid
 
-    def _get_client_id(self) -> Optional[str]:
+    def _get_client_id(self) -> str:
         cid = getattr(self.config, "app_client_id", None) or os.environ.get("BC_APP_CLIENT_ID")
         if not cid or cid.startswith("test-client") or cid == "placeholder":
-            return None
+            return os.environ.get("BC_APP_CLIENT_ID") or "5accae97-5fc5-4a13-9600-2cbe0065d83a"
         return cid
 
     def get_access_token(self) -> str:
@@ -55,9 +55,6 @@ class BCMCPClient:
 
         tenant_id = self._get_tenant_id()
         client_id = self._get_client_id()
-        if not tenant_id or not client_id:
-            logger.info("Entra configuration unconfigured or placeholder; failing closed for live OAuth token acquisition.")
-            return ""
 
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
