@@ -1976,18 +1976,29 @@
         if (st) url += `&status=${encodeURIComponent(st)}`;
         if (q) url += `&search=${encodeURIComponent(q)}`;
 
+        clearDataTrustStateDisplay();
+
         fetch(url)
             .then(res => {
                 if (!res.ok) {
-                    return res.json().then(errData => {
-                        throw new Error(errData.error || ('HTTP ' + res.status));
-                    }).catch(() => {
-                        throw new Error('HTTP ' + res.status + ' - Unable to load findings');
-                    });
+                    clearDataTrustStateDisplay();
+                    const tbody = document.getElementById('dt-findings-tbody');
+                    if (res.status === 403) {
+                        renderPlatformStateBanner('ACCESS_DENIED', 'Access Denied: Selected company is unauthorized for your user session.');
+                        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#DC2626; font-weight:700;">🔒 Access Denied: User session is not authorized to access this company. (0 findings)</td></tr>`;
+                    } else if (res.status === 401) {
+                        renderPlatformStateBanner('AUTHENTICATION_UNAVAILABLE', 'Business Central authentication unavailable. Please sign in again.');
+                        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#DC2626; font-weight:700;">🔌 Authentication Offline: Please sign in again. (0 findings)</td></tr>`;
+                    } else {
+                        renderPlatformStateBanner('DATA_UNAVAILABLE', 'Data Trust retrieval error: HTTP ' + res.status);
+                        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#92400E; font-weight:700;">⚠️ Data Unavailable: HTTP ${res.status} (0 findings)</td></tr>`;
+                    }
+                    return null;
                 }
                 return res.json();
             })
             .then(data => {
+                if (!data) return;
                 if (data.summary) {
                     document.getElementById('dt-summary-total').innerText = data.summary.total_findings || 0;
                     document.getElementById('dt-summary-violations').innerText = data.summary.policy_violations || 0;

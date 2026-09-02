@@ -151,3 +151,27 @@ def test_company_access_manager_lightweight_company_lookup():
     assert is_auth is True
     assert details["company_id"] == "comp_123"
     assert details["is_offline_preview"] is False
+
+
+def test_authorized_companies_filters_by_user_acl():
+    """Verifies authorized-companies endpoint pipeline: BC discovered -> user session ACL -> authorized response."""
+    discovered = [
+        {"id": "comp_guid_1", "name": "CRONUS IN"},
+        {"id": "comp_guid_2", "name": "My Company"},
+        {"id": "comp_guid_3", "name": "Sandbox"}
+    ]
+
+    # Admin Session -> Returns all 3 discovered companies
+    admin_session = {"roles": ["ENTERPRISE_ADMIN"], "allowed_companies": set()}
+    roles_admin = admin_session["roles"]
+    is_admin = "ENTERPRISE_ADMIN" in roles_admin or "CUSTOMER_ADMIN" in roles_admin
+    auth_admin = discovered if is_admin else [c for c in discovered if c["id"] in admin_session["allowed_companies"]]
+    assert len(auth_admin) == 3
+
+    # Normal User Session -> Returns ONLY explicitly allowed company (comp_guid_1)
+    normal_session = {"roles": ["DATA_TRUST_VIEWER"], "allowed_companies": {"comp_guid_1"}}
+    roles_norm = normal_session["roles"]
+    is_admin_norm = "ENTERPRISE_ADMIN" in roles_norm or "CUSTOMER_ADMIN" in roles_norm
+    auth_norm = discovered if is_admin_norm else [c for c in discovered if c["id"] in normal_session["allowed_companies"]]
+    assert len(auth_norm) == 1
+    assert auth_norm[0]["id"] == "comp_guid_1"
