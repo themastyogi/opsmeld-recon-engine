@@ -90,6 +90,50 @@ class TestCompanyResolutionAndErrorHandling(unittest.TestCase):
         self.assertEqual(pt_txs, [])
         self.assertEqual(pt_prov, "DATA_UNAVAILABLE")
 
+    def test_dynamic_company_discovery_addition_and_removal(self):
+        """Dynamic BC /companies discovery discovers 4 -> 5 -> 4 companies without config changes."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        mgr = CompanyAccessManager()
+        self.mock_client.get_access_token.return_value = "VALID_TOKEN"
+
+        # Mock 4 companies from live BC
+        self.mock_client._execute_bc_rest.return_value = {
+            "value": [
+                {"id": "G1", "name": "C1", "displayName": "Company 1"},
+                {"id": "G2", "name": "C2", "displayName": "Company 2"},
+                {"id": "G3", "name": "C3", "displayName": "Company 3"},
+                {"id": "G4", "name": "C4", "displayName": "Company 4"}
+            ]
+        }
+        comps, source, err = mgr.get_discovered_companies_with_provenance(self.mock_client)
+        self.assertEqual(len(comps), 4)
+        self.assertEqual(source, "LIVE_BUSINESS_CENTRAL")
+
+        # Mock 5 companies dynamically added in BC
+        self.mock_client._execute_bc_rest.return_value = {
+            "value": [
+                {"id": "G1", "name": "C1", "displayName": "Company 1"},
+                {"id": "G2", "name": "C2", "displayName": "Company 2"},
+                {"id": "G3", "name": "C3", "displayName": "Company 3"},
+                {"id": "G4", "name": "C4", "displayName": "Company 4"},
+                {"id": "G5", "name": "C5", "displayName": "Company 5"}
+            ]
+        }
+        comps_5, source_5, _ = mgr.get_discovered_companies_with_provenance(self.mock_client)
+        self.assertEqual(len(comps_5), 5)
+        self.assertEqual(source_5, "LIVE_BUSINESS_CENTRAL")
+
+    def test_production_missing_token_does_not_silently_fallback_to_snapshot(self):
+        """In production, missing BC access token returns AUTHENTICATION_REQUIRED, NOT SNAPSHOT_SEED."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        mgr = CompanyAccessManager()
+        self.mock_client.get_access_token.return_value = ""
+
+        comps, source, err = mgr.get_discovered_companies_with_provenance(self.mock_client)
+        self.assertEqual(comps, [])
+        self.assertEqual(source, "AUTHENTICATION_REQUIRED")
+        self.assertIn("Business Central OAuth access token missing", err)
+
 
 if __name__ == "__main__":
     unittest.main()

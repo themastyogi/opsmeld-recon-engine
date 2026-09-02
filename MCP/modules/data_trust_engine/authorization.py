@@ -4,6 +4,7 @@ Enforces that Data Trust never exposes Business Central data outside the authori
 Integrates real company-scoped Business Central access verification as the final authorization gate.
 """
 import logging
+import os
 from typing import Optional, Dict, Any, List, Tuple
 from core.bc_mcp_client import BCMCPClient
 from modules.data_trust_engine.company_context import DataTrustState, build_user_message, map_http_error
@@ -24,21 +25,27 @@ class CompanyAccessManager:
         Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies.
         Returns 3-tuple: (discovered_companies_list, data_source, error_detail)
         """
+        is_fixture_mode = os.environ.get("OPSMELD_MODE") in ("TEST_FIXTURE", "DEMO_MODE") or (client and getattr(client.config, "client_key", "") == "fixture")
+
         if not client:
-            return [
-                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-            ], "SNAPSHOT_SEED", "No BCMCPClient available"
+            if is_fixture_mode:
+                return [
+                    {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                    {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                    {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+                ], "SNAPSHOT_SEED", "No BCMCPClient available"
+            return [], "AUTHENTICATION_REQUIRED", "No Business Central client configured."
 
         token = client.get_access_token()
         if not token:
             logger.warning("BC OAuth access token missing on server.")
-            return [
-                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-            ], "SNAPSHOT_SEED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
+            if is_fixture_mode:
+                return [
+                    {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                    {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                    {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+                ], "SNAPSHOT_SEED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
+            return [], "AUTHENTICATION_REQUIRED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
 
         resp = client._execute_bc_rest("companies")
         if isinstance(resp, dict) and not resp.get("is_error") and "error" not in resp:
@@ -60,11 +67,13 @@ class CompanyAccessManager:
 
         err_msg = resp.get("error") if isinstance(resp, dict) else "Unknown BC REST error"
         logger.warning(f"Live Business Central company discovery failed: {err_msg}")
-        return [
-            {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-            {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-            {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-        ], "SNAPSHOT_SEED", f"Live BC /companies query failed: {err_msg}"
+        if is_fixture_mode:
+            return [
+                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
+            ], "SNAPSHOT_SEED", f"Live BC /companies query failed: {err_msg}"
+        return [], "AUTHENTICATION_FAILED", f"Live BC /companies query failed: {err_msg}"
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
         """Retrieves company list from Business Central REST API /companies endpoint."""
