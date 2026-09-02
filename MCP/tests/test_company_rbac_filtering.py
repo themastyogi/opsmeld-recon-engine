@@ -175,3 +175,25 @@ def test_authorized_companies_filters_by_user_acl():
     auth_norm = discovered if is_admin_norm else [c for c in discovered if c["id"] in normal_session["allowed_companies"]]
     assert len(auth_norm) == 1
     assert auth_norm[0]["id"] == "comp_guid_1"
+
+
+def test_bc_mcp_client_execute_jsonrpc_http_error_path_no_nameerror(monkeypatch):
+    """Verifies that _execute_jsonrpc handles HTTPError without NameError and returns endpoint=method."""
+    import urllib.error
+    import io
+
+    def mock_urlopen(req, timeout=15):
+        fp = io.BytesIO(b'{"error": {"code": "Unauthorized", "message": "Access denied"}}')
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
+
+    monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+    config = load_client_config()
+    client = BCMCPClient(config)
+    monkeypatch.setattr(client, "get_access_token", lambda: "fake_jwt")
+
+    res = client._execute_jsonrpc("tools/call", {"name": "customers_get_list"})
+    assert res["is_error"] is True
+    assert res["http_status"] == 401
+    assert res["endpoint"] == "tools/call"
+    assert res["error_code"] == "Unauthorized"
