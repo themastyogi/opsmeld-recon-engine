@@ -793,9 +793,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 )
                 if isinstance(result, dict):
                     if "error" in result:
-                        print(f"[OAuthCallback] MSAL token exchange error: {result.get('error')} - {result.get('error_description')}")
+                        print(f"[OAuthCallback] MSAL token exchange error: {result.get('error')} - {result.get('error_description')}", flush=True)
                     else:
-                        print(f"[OAuthCallback] MSAL token exchange SUCCESS: scope={result.get('scope')}, token_type={result.get('token_type')}, has_access_token={bool(result.get('access_token'))}")
+                        print(f"[OAuthCallback] MSAL token exchange SUCCESS: scope={result.get('scope')}, token_type={result.get('token_type')}, has_access_token={bool(result.get('access_token'))}", flush=True)
                     access_token = result.get("access_token")
                     if "id_token_claims" in result:
                         claims = result["id_token_claims"]
@@ -804,7 +804,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                         oid = claims.get("oid")
                         tenant_id = claims.get("tid")
             except Exception as e:
-                print(f"[OAuthCallback] Code exchange notice: {e}")
+                print(f"[OAuthCallback] Code exchange notice: {e}", flush=True)
 
             token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid, access_token=access_token, tenant_id=tenant_id)
 
