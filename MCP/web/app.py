@@ -762,8 +762,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             host = self.headers.get("Host", "ar.opsmeld.com")
-            scheme = "https" if "opsmeld.com" in host or self.headers.get("X-Forwarded-Proto") == "https" else "http"
-            redirect_uri = f"{scheme}://{host}/api/auth/callback"
+            redirect_uri = f"https://{host}/api/auth/callback"
 
             auth_mgr = get_auth_manager()
             email = "admin@opsmeld.com"
@@ -793,6 +792,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     redirect_uri=redirect_uri
                 )
                 if isinstance(result, dict):
+                    if "error" in result:
+                        print(f"[OAuthCallback] MSAL token exchange error: {result.get('error')} - {result.get('error_description')}")
+                    else:
+                        print(f"[OAuthCallback] MSAL token exchange SUCCESS: scope={result.get('scope')}, token_type={result.get('token_type')}, has_access_token={bool(result.get('access_token'))}")
                     access_token = result.get("access_token")
                     if "id_token_claims" in result:
                         claims = result["id_token_claims"]
