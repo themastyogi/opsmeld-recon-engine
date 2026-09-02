@@ -3079,9 +3079,12 @@
     }
 
     function runDataTrustRecon(company_id) {
+        const compId = company_id || (document.getElementById('dt-company-select') ? document.getElementById('dt-company-select').value : '');
+        if (!compId) {
+            return;
+        }
         clearDataTrustStateDisplay();
         renderPlatformStateBanner('LOADING', 'Running live Data Trust audit engine against Business Central...');
-        const compId = company_id || (document.getElementById('dt-company-select') ? document.getElementById('dt-company-select').value : '');
         
         fetch(`/api/data-trust/run-recon?company_id=${encodeURIComponent(compId)}`, { method: 'POST', credentials: 'same-origin' })
             .then(res => {
