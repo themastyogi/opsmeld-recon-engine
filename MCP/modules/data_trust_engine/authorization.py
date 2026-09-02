@@ -180,23 +180,33 @@ class CompanyAccessManager:
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
 
         # Step B: Final Real Company-Scoped BC Access Verification Gate
-        scope_test_resp = client._execute_bc_rest(f"companies({target_comp_guid})/generalLedgerEntries?$top=1")
-        if isinstance(scope_test_resp, dict) and (scope_test_resp.get("is_error") or "error" in scope_test_resp):
-            status_code = scope_test_resp.get("http_status", 500)
-            bc_err = scope_test_resp.get("error", f"HTTP {status_code} on generalLedgerEntries")
-            detail_msg = f"Business Central G/L entry query failed for company '{target_comp_name}' ({bc_err})"
-            if status_code == 403:
+        endpoints_to_probe = ["generalLedgerEntries", "customers", "accounts"]
+        scope_test_resp = None
+        last_error_code = 500
+        last_error_msg = ""
+
+        for ep in endpoints_to_probe:
+            probe_res = client._execute_bc_rest(f"companies({target_comp_guid})/{ep}?$top=1")
+            if isinstance(probe_res, dict) and not probe_res.get("is_error") and "error" not in probe_res:
+                scope_test_resp = probe_res
+                break
+            elif isinstance(probe_res, dict):
+                last_error_code = probe_res.get("http_status", 500)
+                last_error_msg = probe_res.get("error", f"HTTP {last_error_code} on {ep}")
+                if last_error_code in (401, 403):
+                    break
+
+        if scope_test_resp is None:
+            detail_msg = f"Business Central query failed for company '{target_comp_name}' ({last_error_msg})"
+            if last_error_code == 403:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id, detail=detail_msg)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
-            elif status_code == 401:
+            elif last_error_code == 401:
                 msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id, detail=detail_msg)
                 return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
-            elif status_code == 404:
-                err_mapped = map_http_error(404, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id, detail=detail_msg)
-                return False, DataTrustState.DATA_REQUEST_INVALID, {"message": err_mapped["message"], "http_status": 404}
             else:
-                err_mapped = map_http_error(status_code, is_company_resolution=False, endpoint="generalLedgerEntries", run_id=run_id, detail=detail_msg)
-                return False, err_mapped["status"], {"message": err_mapped["message"], "http_status": status_code}
+                err_mapped = map_http_error(last_error_code, is_company_resolution=False, endpoint="probe", run_id=run_id, detail=detail_msg)
+                return False, err_mapped["status"], {"message": err_mapped["message"], "http_status": last_error_code}
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,

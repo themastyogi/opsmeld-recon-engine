@@ -625,7 +625,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token)
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
 
             # Anti-BOLA/IDOR Guard for run-recon
             mgr = CompanyAccessManager()
@@ -669,7 +671,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token)
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
 
             # Anti-BOLA/IDOR Guard: Validate company authorization BEFORE loading snapshot or reading storage
             mgr = CompanyAccessManager()
