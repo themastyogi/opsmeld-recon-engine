@@ -729,7 +729,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             
             bc_scope = "openid profile email offline_access https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"
             auth_url = (
-                f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+                f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
                 f"?client_id={client_id}"
                 f"&response_type=code"
                 f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
@@ -773,7 +773,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             try:
                 import msal
-                authority = f"https://login.microsoftonline.com/{config.tenant_id}"
+                authority = "https://login.microsoftonline.com/common"
                 if config.client_secret:
                     app = msal.ConfidentialClientApplication(
                         config.app_client_id,
