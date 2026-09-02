@@ -286,7 +286,7 @@ class BCMCPClient:
                 "http_status": e.code,
                 "error_code": err_code,
                 "error_message": err_body,
-                "endpoint": path,
+                "endpoint": method,
                 "tenant_id": self.config.tenant_id,
                 "environment": self.config.environment,
                 "error": f"HTTP {e.code}: {err_body}",
