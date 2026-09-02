@@ -22,15 +22,41 @@ class BCMCPClient:
     Manages OAuth2 token acquisition via MSAL and executes live JSON-RPC 2.0 tool requests.
     """
 
-    def __init__(self, config: Optional[ClientConfig] = None, user_token: Optional[str] = None, user_tenant_id: Optional[str] = None):
+    def __init__(self, config: Optional[ClientConfig] = None, user_token: Optional[str] = None, user_tenant_id: Optional[str] = None, customer_id: Optional[str] = None):
         self.config = config or load_client_config()
-        self.token_cache_path = self.config.get_absolute_cache_path()
+        self.customer_id = customer_id or getattr(self.config, "customer_id", None) or "default_customer"
+        self.token_cache_path = self._resolve_isolated_cache_path()
         self.user_access_token = user_token or os.environ.get("BC_ACCESS_TOKEN", "")
         self.user_tenant_id = user_tenant_id or os.environ.get("BC_TENANT_ID")
         self._available_tools: Optional[List[Dict[str, Any]]] = None
         self._mcp_session_id: Optional[str] = None
 
+    def _resolve_isolated_cache_path(self) -> Path:
+        """Resolves customer & tenant isolated cache path to prevent token cross-contamination."""
+        try:
+            from core.customer_connection import get_customer_connection_repo
+            repo = get_customer_connection_repo()
+            conn = repo.get_connection(self.customer_id)
+            if conn:
+                return conn.get_isolated_cache_path()
+        except Exception:
+            pass
+        tenant_id = getattr(self.config, "tenant_id", "default_tenant")
+        safe_cust = str(self.customer_id).replace("/", "_").replace("\\", "_")
+        safe_tenant = str(tenant_id).replace("/", "_").replace("\\", "_")
+        cache_dir = Path(__file__).resolve().parent.parent / "token_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / f"{safe_cust}_{safe_tenant}.bin"
+
     def _get_tenant_id(self) -> str:
+        try:
+            from core.customer_connection import get_customer_connection_repo
+            repo = get_customer_connection_repo()
+            conn = repo.get_connection(self.customer_id)
+            if conn and conn.entra_tenant_id:
+                return conn.entra_tenant_id
+        except Exception:
+            pass
         if self.user_tenant_id and not self.user_tenant_id.startswith("test-tenant") and self.user_tenant_id != "placeholder":
             return self.user_tenant_id
         tid = getattr(self.config, "tenant_id", None) or os.environ.get("BC_TENANT_ID")
@@ -39,10 +65,31 @@ class BCMCPClient:
         return tid
 
     def _get_client_id(self) -> str:
+        try:
+            from core.customer_connection import get_customer_connection_repo
+            repo = get_customer_connection_repo()
+            conn = repo.get_connection(self.customer_id)
+            if conn and conn.oauth_client_id:
+                return conn.oauth_client_id
+        except Exception:
+            pass
         cid = getattr(self.config, "app_client_id", None) or os.environ.get("BC_APP_CLIENT_ID")
         if not cid or cid.startswith("test-client") or cid == "placeholder":
             return os.environ.get("BC_APP_CLIENT_ID") or "5accae97-5fc5-4a13-9600-2cbe0065d83a"
         return cid
+
+    def _get_client_secret(self) -> str:
+        try:
+            from core.customer_connection import get_customer_connection_repo
+            repo = get_customer_connection_repo()
+            conn = repo.get_connection(self.customer_id)
+            if conn:
+                sec = conn.get_resolved_secret()
+                if sec:
+                    return sec
+        except Exception:
+            pass
+        return getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET", "")
 
     def get_access_token(self) -> str:
         """Acquires OAuth2 token via explicit user_access_token, MSAL token cache, or Client Secret flow."""
@@ -82,7 +129,7 @@ class BCMCPClient:
             except Exception as e:
                 logger.warning(f"MSAL silent cache acquisition failed: {e}")
 
-        client_secret = getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET")
+        client_secret = self._get_client_secret()
         if client_secret:
             try:
                 app = msal.ConfidentialClientApplication(

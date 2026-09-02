@@ -25,7 +25,9 @@ class CompanyAccessManager:
         Retrieves company list from Business Central REST API /companies endpoint and filters to authorized companies.
         Returns 3-tuple: (discovered_companies_list, data_source, error_detail)
         """
-        is_fixture_mode = os.environ.get("OPSMELD_MODE") in ("TEST_FIXTURE", "DEMO_MODE") or (client and getattr(client.config, "client_key", "") == "fixture")
+        cfg = getattr(client, "config", None) if client else None
+        client_key = getattr(cfg, "client_key", "") if cfg else ""
+        is_fixture_mode = os.environ.get("OPSMELD_MODE") in ("TEST_FIXTURE", "DEMO_MODE") or client_key == "fixture"
 
         if not client:
             if is_fixture_mode:
