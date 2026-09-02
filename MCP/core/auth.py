@@ -69,10 +69,13 @@ class OpsmeldUserSession:
     def is_company_allowed(self, company_id: Optional[str]) -> bool:
         """
         Validates explicit company entitlement.
-        Fail-closed rule: If company_id is None, empty, or not in allowed_companies, return False.
+        - Administrative access (ENTERPRISE_ADMIN / CUSTOMER_ADMIN / "*") permits all companies in tenant.
+        - Non-admin access strictly enforces company_id presence in self.allowed_companies.
         """
         if not company_id:
             return False
+        if "ENTERPRISE_ADMIN" in self.roles or "CUSTOMER_ADMIN" in self.roles or "*" in self.allowed_companies:
+            return True
         return company_id in self.allowed_companies
 
     def to_dict(self) -> Dict[str, Any]:

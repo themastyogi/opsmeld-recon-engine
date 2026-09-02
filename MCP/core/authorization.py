@@ -85,8 +85,24 @@ class CentralAuthorizationEngine:
 
         # Gate 5: User Company ACL
         if company_id:
+            roles = getattr(session, "roles", [])
+            is_admin = "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles
             user_companies = session.allowed_companies if hasattr(session, "allowed_companies") else datastore.get_user_allowed_companies(session.user_id, org_id)
-            if company_id not in user_companies:
+
+            is_permitted = (
+                is_admin or
+                "*" in user_companies or
+                company_id in user_companies
+            )
+
+            logger.info(
+                f"[Gate 5 Company ACL] user_id={session.user_id}, org_id={org_id}, "
+                f"tenant_id={getattr(session, 'tenant_id', None)}, selected_company={company_id}, "
+                f"is_admin={is_admin}, user_allowed_companies={list(user_companies)}, "
+                f"decision={'ALLOW' if is_permitted else 'COMPANY_NOT_PERMITTED'}"
+            )
+
+            if not is_permitted:
                 logger.warning(f"Authorization Denied: User '{session.user_id}' ACL does not grant access to company GUID '{company_id}'")
                 return False, DenialReason.COMPANY_NOT_PERMITTED
 

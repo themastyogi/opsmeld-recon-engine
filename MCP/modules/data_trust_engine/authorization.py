@@ -167,7 +167,7 @@ class CompanyAccessManager:
             # Match requested company GUID strictly against discovered list (GUID-only enforcement)
             matched = [
                 c for c in discovered
-                if c["id"] == requested_company
+                if c["id"] == requested_company or c["name"] == requested_company
             ]
             if len(matched) == 1:
                 target_comp_guid = matched[0]["id"]
