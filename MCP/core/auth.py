@@ -179,14 +179,12 @@ class AuthManager:
                 provisioned=True
             )
 
-        # Fallback to Admin User (accepts standard admin email aliases & passwords)
-        admin_emails = {self.admin_user.lower(), "admin@opsmeld.com", "info@opsmeld.com"}
-        valid_passwords = {self.admin_pass, "password123", "OpsmeldPreview2026!", "OpsmeldAdmin2026!"}
-        if email.lower() in admin_emails and password in valid_passwords:
+        # Fallback to Admin User
+        if email.lower() == self.admin_user.lower() and password == self.admin_pass:
             return self.create_session(
                 user_id="usr_admin_001",
-                email=email,
-                display_name="User (CRONUS IN)",
+                email=self.admin_user,
+                display_name="Admin User",
                 roles=["ENTERPRISE_ADMIN"],
                 organization_id="org_abc_001",
                 allowed_companies=self.default_admin_companies,
