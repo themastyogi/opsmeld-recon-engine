@@ -52,6 +52,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         self.send_header("Expires", "0")
         if cookie:
             self.send_header("Set-Cookie", f"session={cookie}; Path=/; HttpOnly; SameSite=Lax")
+            self.send_header("Set-Cookie", f"opsmeld_session={cookie}; Path=/; SameSite=Lax")
+            self.send_header("Set-Cookie", f"opsmeld_token={cookie}; Path=/; SameSite=Lax")
         self.end_headers()
 
     def _get_session_token(self) -> Optional[str]:
@@ -62,12 +64,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if val:
                 return val
         cookie_header = self.headers.get("Cookie", "")
-        if "session=" in cookie_header:
+        if cookie_header:
             for part in cookie_header.split(";"):
-                if part.strip().startswith("session="):
-                    val = part.strip().split("=")[1]
-                    if val:
-                        return val
+                part_s = part.strip()
+                for prefix in ("opsmeld_session=", "opsmeld_token=", "session="):
+                    if part_s.startswith(prefix):
+                        val = part_s[len(prefix):].strip()
+                        if val:
+                            return val
         return None
 
     def _get_client_key(self, parsed_url) -> str:
