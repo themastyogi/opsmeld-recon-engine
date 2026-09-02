@@ -379,6 +379,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if not session_info:
                 return
             client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            rules = load_engine_rules()
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
             user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
             client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
