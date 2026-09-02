@@ -379,9 +379,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if not session_info:
                 return
             client_key = self._get_client_key(parsed_url)
-            config = load_client_config(client_key)
-            rules = load_engine_rules()
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
             report = ARManagerReport(client, rules)
             ct_data = report.get_control_tower_data()
             self._set_headers("application/json")
@@ -404,7 +404,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             rules = load_engine_rules()
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
             report = ARManagerReport(client, rules)
             collections_data = report.get_collections_workload_page(page=page, page_size=page_size)
             self._set_headers("application/json")
