@@ -10,7 +10,7 @@
 
     function getSessionToken() {
         const cookieToken = (document.cookie.match(/(?:^|;\s*)session=([^;]+)/) || [])[1];
-        return localStorage.getItem('opsmeld_token') || cookieToken || null;
+        return cookieToken || localStorage.getItem('opsmeld_token') || null;
     }
 
     function getAuthHeaders() {
