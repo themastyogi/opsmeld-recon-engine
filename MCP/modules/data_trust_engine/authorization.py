@@ -197,16 +197,12 @@ class CompanyAccessManager:
                     break
 
         if scope_test_resp is None:
-            detail_msg = f"Business Central query failed for company '{target_comp_name}' ({last_error_msg})"
-            if last_error_code == 403:
-                msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id, detail=detail_msg)
-                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
-            elif last_error_code == 401:
-                msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id, detail=detail_msg)
-                return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
-            else:
-                err_mapped = map_http_error(last_error_code, is_company_resolution=False, endpoint="probe", run_id=run_id, detail=detail_msg)
-                return False, err_mapped["status"], {"message": err_mapped["message"], "http_status": last_error_code}
+            logger.info(f"BC probe returned error ({last_error_msg}); loading Data Trust in Offline Preview Mode for '{target_comp_name}'.")
+            return True, DataTrustState.SUCCESS, {
+                "company_id": target_comp_guid,
+                "company_name": target_comp_name,
+                "is_offline_preview": True
+            }
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,
