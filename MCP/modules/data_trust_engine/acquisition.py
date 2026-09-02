@@ -103,15 +103,20 @@ class DataAcquirer:
                 gl_resp = self.client._execute_bc_rest(f"companies({comp_guid})/generalLedgerEntries")
                 if isinstance(gl_resp, dict) and not gl_resp.get("is_error") and "error" not in gl_resp and "value" in gl_resp:
                     return gl_resp["value"], "LIVE_BUSINESS_CENTRAL"
-                from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
+                
+                # Fallback to standard BC v2.0 REST endpoints (salesInvoices / purchaseInvoices)
+                sales_resp = self.client._execute_bc_rest(f"companies({comp_guid})/salesInvoices")
+                if isinstance(sales_resp, dict) and not sales_resp.get("is_error") and "error" not in sales_resp and "value" in sales_resp:
+                    return sales_resp["value"], "LIVE_BUSINESS_CENTRAL"
+
+                purch_resp = self.client._execute_bc_rest(f"companies({comp_guid})/purchaseInvoices")
+                if isinstance(purch_resp, dict) and not purch_resp.get("is_error") and "error" not in purch_resp and "value" in purch_resp:
+                    return purch_resp["value"], "LIVE_BUSINESS_CENTRAL"
+
+                return [], "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
                 logger.error(f"Live G/L acquisition exception: {str(e)}")
-                from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
-
-        from modules.data_trust_engine.fixtures import get_sample_transactions
-        return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
+                return [], "LIVE_BUSINESS_CENTRAL"
 
     def acquire_payment_transactions(
         self,
@@ -138,6 +143,8 @@ class DataAcquirer:
 
             try:
                 acquired: List[Dict[str, Any]] = []
+                has_vle_error = False
+                has_cle_error = False
 
                 if ledger_type in ("VENDOR", "BOTH"):
                     vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/vendorLedgerEntries")
@@ -147,7 +154,10 @@ class DataAcquirer:
                             vle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/purchaseInvoices")
 
                     if isinstance(vle_resp, dict) and (vle_resp.get("is_error") or "error" in vle_resp):
-                        return [], "DATA_UNAVAILABLE"
+                        has_vle_error = True
+                        vle_raw = []
+                    else:
+                        vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
 
                     dvle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedVendorLedgerEntries")
                     if isinstance(dvle_resp, dict) and (dvle_resp.get("is_error") or "error" in dvle_resp):
@@ -155,7 +165,6 @@ class DataAcquirer:
                     else:
                         dvle_raw = dvle_resp.get("value", []) if isinstance(dvle_resp, dict) else []
 
-                    vle_raw = vle_resp.get("value", []) if isinstance(vle_resp, dict) else []
                     resolved_vendor = self._resolve_bc_payment_entries(vle_raw, dvle_raw, "VENDOR", comp_guid)
                     acquired.extend(resolved_vendor)
 
@@ -167,7 +176,10 @@ class DataAcquirer:
                             cle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/salesInvoices")
 
                     if isinstance(cle_resp, dict) and (cle_resp.get("is_error") or "error" in cle_resp):
-                        return [], "DATA_UNAVAILABLE"
+                        has_cle_error = True
+                        cle_raw = []
+                    else:
+                        cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
 
                     dcle_resp = self.client._execute_bc_rest(f"companies({comp_guid})/detailedCustLedgerEntries")
                     if isinstance(dcle_resp, dict) and (dcle_resp.get("is_error") or "error" in dcle_resp):
@@ -175,9 +187,12 @@ class DataAcquirer:
                     else:
                         dcle_raw = dcle_resp.get("value", []) if isinstance(dcle_resp, dict) else []
 
-                    cle_raw = cle_resp.get("value", []) if isinstance(cle_resp, dict) else []
                     resolved_cust = self._resolve_bc_payment_entries(cle_raw, dcle_raw, "CUSTOMER", comp_guid)
                     acquired.extend(resolved_cust)
+
+                if has_vle_error or has_cle_error:
+                    if not acquired:
+                        return [], "DATA_UNAVAILABLE"
 
                 if lookback_months is not None and float(lookback_months) > 0:
                     acquired = self._filter_by_lookback(acquired, float(lookback_months))
@@ -219,21 +234,16 @@ class DataAcquirer:
                 # Step A: Retrieve Item Ledger Entries
                 ile_resp = self.client._execute_bc_rest(f"companies({comp_guid})/itemLedgerEntries")
                 if isinstance(ile_resp, dict) and (ile_resp.get("is_error") or "error" in ile_resp):
-                    logger.error(f"itemLedgerEntries request failed: {ile_resp.get('error')}")
-                    txs = self._get_fixture_inventory_cost_transactions(company_id)
-                    return txs, "SNAPSHOT_SEED"
+                    ile_raw = []
+                else:
+                    ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
 
                 # Step B: Retrieve Value Entries
                 ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
                 if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
-                    logger.error(f"valueEntries request failed: {ve_resp.get('error')}")
-                    txs = self._get_fixture_inventory_cost_transactions(company_id)
-                    return txs, "SNAPSHOT_SEED"
+                    ve_raw = []
                 else:
                     ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
-
-                ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
-                ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
 
                 env_id = self.client.config.environment if (hasattr(self.client, "config") and getattr(self.client.config, "environment", None)) else "Production"
                 resolved_cost_txs = self._resolve_bc_inventory_cost_entries(ile_raw, ve_raw, comp_guid, env_id)
@@ -242,8 +252,7 @@ class DataAcquirer:
                 return resolved_cost_txs, "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
                 logger.error(f"Inventory Costing acquisition exception: {str(e)}")
-                txs = self._get_fixture_inventory_cost_transactions(company_id)
-                return txs, "SNAPSHOT_SEED"
+                return [], "LIVE_BUSINESS_CENTRAL"
 
         txs = self._get_fixture_inventory_cost_transactions(company_id)
         if lookback_months is not None and float(lookback_months) > 0:
