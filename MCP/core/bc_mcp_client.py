@@ -92,17 +92,35 @@ class BCMCPClient:
         return getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET", "")
 
     def get_access_token(self) -> str:
-        """Acquires OAuth2 token via explicit user_access_token, MSAL token cache, or Client Secret flow."""
-        if self.user_access_token:
-            return self.user_access_token
+        """Acquires OAuth2 token via Client Secret flow, MSAL token cache, or explicit user_access_token."""
         try:
             import msal
         except ImportError:
-            return ""
+            return self.user_access_token or ""
 
         tenant_id = self._get_tenant_id()
         client_id = self._get_client_id()
 
+        # 1. Confidential Client Secret Flow (Primary for Business Central API)
+        client_secret = self._get_client_secret()
+        if client_secret and tenant_id and client_id:
+            try:
+                app = msal.ConfidentialClientApplication(
+                    client_id=client_id,
+                    client_credential=client_secret,
+                    authority=f"https://login.microsoftonline.com/{tenant_id}",
+                )
+                result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
+                if result and "access_token" in result:
+                    return result["access_token"]
+            except Exception as e:
+                logger.warning(f"MSAL client secret acquisition failed: {e}")
+
+        # 2. Explicit User Access Token
+        if self.user_access_token:
+            return self.user_access_token
+
+        # 3. Public Client Token Cache
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
             try:
@@ -128,20 +146,6 @@ class BCMCPClient:
                             return result["access_token"]
             except Exception as e:
                 logger.warning(f"MSAL silent cache acquisition failed: {e}")
-
-        client_secret = self._get_client_secret()
-        if client_secret:
-            try:
-                app = msal.ConfidentialClientApplication(
-                    client_id=client_id,
-                    client_credential=client_secret,
-                    authority=f"https://login.microsoftonline.com/{tenant_id}",
-                )
-                result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
-                if result and "access_token" in result:
-                    return result["access_token"]
-            except Exception as e:
-                logger.warning(f"MSAL client secret acquisition failed: {e}")
 
         return ""
 
