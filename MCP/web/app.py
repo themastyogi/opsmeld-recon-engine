@@ -551,26 +551,61 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
             user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
+            customer_id = session_info.get("customer_id") if isinstance(session_info, dict) else None
+
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id)
             mgr = CompanyAccessManager()
-            discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
-            
+
+            # STAGE 1: Raw BC Company Discovery (before ACL filtering)
+            token = client.get_access_token()
+            raw_list = []
+            data_source = "AUTHENTICATION_REQUIRED"
+            err_detail = None
+
+            if token:
+                comp_resp = client._execute_bc_rest("companies")
+                if isinstance(comp_resp, dict) and not comp_resp.get("is_error") and "error" not in comp_resp:
+                    raw_list = comp_resp.get("value", []) if isinstance(comp_resp.get("value"), list) else []
+                    data_source = "LIVE_BUSINESS_CENTRAL"
+                else:
+                    data_source = "AUTHENTICATION_FAILED"
+                    err_detail = comp_resp.get("error") if isinstance(comp_resp, dict) else "Live BC query error"
+
+            raw_bc_companies = [
+                {"id": c.get("id"), "name": str(c.get("name") or c.get("id")), "displayName": str(c.get("displayName") or c.get("name") or c.get("id"))}
+                for c in raw_list if isinstance(c, dict) and c.get("id")
+            ]
+            raw_bc_company_count = len(raw_bc_companies)
+
+            # STAGE 2: Opsmeld ACL Authorization Gate
+            session_allowed = session_info.get("allowed_companies", set()) if isinstance(session_info, dict) else set()
+            if session_allowed:
+                acl_companies = [c for c in raw_bc_companies if c["id"] in session_allowed or c["name"] in session_allowed]
+            else:
+                acl_companies = raw_bc_companies
+            opsmeld_acl_count = len(acl_companies)
+
+            # STAGE 3: Final API Response Payload
+            api_companies, api_data_source, api_err = mgr.get_discovered_companies_with_provenance(client)
+            api_company_count = len(api_companies)
+
             client_id = client._get_client_id()
             tenant_id = client._get_tenant_id()
             secret = client._get_client_secret()
 
             self._set_headers("application/json")
             self._write_response(json.dumps({
+                "customer_id": client.customer_id,
                 "entra_client_id": f"{client_id[:4]}..." if client_id else "UNCONFIGURED",
                 "entra_tenant_id": f"{tenant_id[:4]}..." if tenant_id else "UNCONFIGURED",
                 "bc_client_secret_status": "PRESENT" if bool(secret) else "MISSING",
-                "bc_token_status": "PRESENT" if bool(client.get_access_token()) else "MISSING",
+                "bc_token_status": "PRESENT" if bool(token) else "MISSING",
                 "bc_environment": getattr(config, "environment", "Production"),
-                "discovery_source": data_source,
-                "raw_bc_company_count": len(discovered),
-                "opsmeld_acl_count": len(discovered),
-                "api_company_count": len(discovered),
-                "error_detail": err_detail
+                "discovery_source": api_data_source,
+                "raw_bc_company_count": raw_bc_company_count,
+                "opsmeld_acl_count": opsmeld_acl_count,
+                "api_company_count": api_company_count,
+                "error_detail": api_err or err_detail
             }).encode("utf-8"))
 
         elif path == "/api/data-trust/run-recon":

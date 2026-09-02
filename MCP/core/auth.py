@@ -30,7 +30,8 @@ class OpsmeldUserSession:
         created_at: Optional[float] = None,
         expires_at: Optional[float] = None,
         access_token: Optional[str] = None,
-        tenant_id: Optional[str] = None
+        tenant_id: Optional[str] = None,
+        customer_id: Optional[str] = None
     ):
         self.token = token
         self.user_id = user_id
@@ -39,13 +40,25 @@ class OpsmeldUserSession:
         self.roles = roles or []
         self.organization_id = organization_id
         self.permissions = set(permissions) if permissions is not None else RBACResolver.resolve_permissions(self.roles)
-        # Fail closed: allowed_companies is strictly an explicit Set[str]. None or empty fails closed.
         self.allowed_companies = set(allowed_companies) if allowed_companies is not None else set()
         self.provisioned = provisioned
         self.created_at = created_at or time.time()
         self.expires_at = expires_at or (self.created_at + SESSION_TTL_SECONDS)
         self.access_token = access_token
         self.tenant_id = tenant_id
+
+        if customer_id:
+            self.customer_id = customer_id
+        elif tenant_id:
+            try:
+                from core.customer_connection import get_customer_connection_repo
+                repo = get_customer_connection_repo()
+                conn = repo.get_connection_by_tenant(tenant_id)
+                self.customer_id = conn.customer_id if conn else tenant_id
+            except Exception:
+                self.customer_id = tenant_id
+        else:
+            self.customer_id = "default_customer"
 
     def is_expired(self) -> bool:
         return time.time() > self.expires_at
@@ -78,6 +91,9 @@ class OpsmeldUserSession:
             },
             "provisioned": self.provisioned,
             "status": "ACTIVE" if self.provisioned else "ACCOUNT_NOT_PROVISIONED",
+            "customer_id": self.customer_id,
+            "tenant_id": self.tenant_id,
+            "has_access_token": bool(self.access_token),
             "organization": {
                 "id": self.organization_id,
                 "name": org_name,
