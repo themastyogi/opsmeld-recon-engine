@@ -539,6 +539,36 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "error_detail": err_detail
             }).encode("utf-8"))
 
+        elif path == "/api/data-trust/diagnostics":
+            session_info = self._require_auth(required_permission="data_trust:read")
+            if not session_info:
+                return
+            client_key = self._get_client_key(parsed_url)
+            config = load_client_config(client_key)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
+            mgr = CompanyAccessManager()
+            discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
+            
+            client_id = client._get_client_id()
+            tenant_id = client._get_tenant_id()
+            secret = client._get_client_secret()
+
+            self._set_headers("application/json")
+            self._write_response(json.dumps({
+                "entra_client_id": f"{client_id[:4]}..." if client_id else "UNCONFIGURED",
+                "entra_tenant_id": f"{tenant_id[:4]}..." if tenant_id else "UNCONFIGURED",
+                "bc_client_secret_status": "PRESENT" if bool(secret) else "MISSING",
+                "bc_token_status": "PRESENT" if bool(client.get_access_token()) else "MISSING",
+                "bc_environment": getattr(config, "environment", "Production"),
+                "discovery_source": data_source,
+                "raw_bc_company_count": len(discovered),
+                "opsmeld_acl_count": len(discovered),
+                "api_company_count": len(discovered),
+                "error_detail": err_detail
+            }).encode("utf-8"))
+
         elif path == "/api/data-trust/run-recon":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             company_id = query_params.get("company_id", [None])[0]
@@ -774,10 +804,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             try:
                 import msal
                 authority = "https://login.microsoftonline.com/common"
-                if config.client_secret:
+                client_secret = getattr(config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET", "")
+                has_secret_log = "PRESENT" if bool(client_secret) else "MISSING"
+                print(f"[OAuthCallback] BC_CLIENT_SECRET status: {has_secret_log}", flush=True)
+
+                if client_secret:
                     app = msal.ConfidentialClientApplication(
                         config.app_client_id,
-                        client_credential=config.client_secret,
+                        client_credential=client_secret,
                         authority=authority
                     )
                 else:
