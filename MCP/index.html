@@ -2060,8 +2060,13 @@
                     </tr>`;
                 });
                 tbody.innerHTML = html;
-            })
-            .catch(err => alert("❌ Data Trust Connection Error: " + err.message));
+            .catch(err => {
+                console.error("Data Trust findings error:", err);
+                const tbody = document.getElementById('dt-findings-tbody');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#DC2626;">⚠️ Unable to load findings: ${escapeHtml(err.message)}</td></tr>`;
+                }
+            });
     }
 
         function openDataTrustModal(findingId) {

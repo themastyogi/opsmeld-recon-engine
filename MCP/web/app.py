@@ -95,10 +95,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         auth_mgr = get_auth_manager()
         session = auth_mgr.get_session(token)
 
-        if company_id is not None and (not company_id or not GUID_REGEX.match(company_id)):
+        if company_id is not None and (not company_id or company_id in ("default_company", "unspecified_company")):
             self._set_headers("application/json", 400)
             self._write_response(json.dumps({
-                "error": "Missing or invalid company_id. Please provide a valid Business Central company GUID.",
+                "error": "Missing or invalid company_id. Please provide a valid Business Central company identifier.",
                 "status": "CONFIGURATION_MISSING"
             }).encode("utf-8"))
             return None
