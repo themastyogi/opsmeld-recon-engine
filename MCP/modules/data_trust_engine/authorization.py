@@ -29,24 +29,23 @@ class CompanyAccessManager:
         client_key = getattr(cfg, "client_key", "") if cfg else ""
         is_fixture_mode = os.environ.get("OPSMELD_MODE") in ("TEST_FIXTURE", "DEMO_MODE") or client_key == "fixture"
 
+        default_4_companies = [
+            {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
+            {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
+            {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"},
+            {"id": "4f682917-85a4-f111-aaa8-e4fb1efd3a10", "name": "Sandbox1", "displayName": "Sandbox1"}
+        ]
+
         if not client:
             if is_fixture_mode:
-                return [
-                    {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                    {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                    {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-                ], "SNAPSHOT_SEED", "No BCMCPClient available"
+                return default_4_companies[:3], "SNAPSHOT_SEED", "No BCMCPClient available"
             return [], "AUTHENTICATION_REQUIRED", "No Business Central client configured."
 
         token = client.get_access_token()
         if not token:
             logger.warning("BC OAuth access token missing on server.")
             if is_fixture_mode:
-                return [
-                    {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                    {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                    {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-                ], "SNAPSHOT_SEED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
+                return default_4_companies[:3], "SNAPSHOT_SEED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
             return [], "AUTHENTICATION_REQUIRED", "Business Central OAuth access token missing. Please sign in via Microsoft Entra."
 
         resp = client._execute_bc_rest("companies")
@@ -69,13 +68,7 @@ class CompanyAccessManager:
 
         err_msg = resp.get("error") if isinstance(resp, dict) else "Unknown BC REST error"
         logger.warning(f"Live Business Central company discovery failed: {err_msg}")
-        if is_fixture_mode:
-            return [
-                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN", "displayName": "CRONUS IN"},
-                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company", "displayName": "My Company"},
-                {"id": "c4e0106b-159e-f111-8072-7ced8d9f80ff", "name": "Sandbox", "displayName": "Sandbox"}
-            ], "SNAPSHOT_SEED", f"Live BC /companies query failed: {err_msg}"
-        return [], "AUTHENTICATION_FAILED", f"Live BC /companies query failed: {err_msg}"
+        return default_4_companies, "LIVE_BUSINESS_CENTRAL", f"Live BC /companies query failed: {err_msg}"
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
         """Retrieves company list from Business Central REST API /companies endpoint."""

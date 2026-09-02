@@ -531,7 +531,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
             user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id)
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             mgr = CompanyAccessManager()
             discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
             status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(discovered) > 0 else "DATA_UNAVAILABLE"
