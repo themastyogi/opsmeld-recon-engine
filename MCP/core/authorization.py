@@ -109,11 +109,27 @@ class CentralAuthorizationEngine:
         # Gate 6: Business Central backend authorization probe
         if bc_client and company_id:
             try:
-                # Execute probe
-                probe_res = bc_client._execute_bc_rest(f"companies({company_id})/generalLedgerEntries?$top=1")
+                # Lightweight Authoritative Company Lookup Probe
+                probe_res = bc_client._execute_bc_rest(f"companies({company_id})")
+                
+                rest_url = f"https://api.businesscentral.dynamics.com/v2.0/{getattr(bc_client.config, 'tenant_id', 'N/A')}/{getattr(bc_client.config, 'environment', 'Production')}/api/v2.0/companies({company_id})"
+                has_comp_hdr = not (company_id or "companies" in f"companies({company_id})")
+                
+                logger.info(
+                    f"[CentralAuthTrace] selected_company_id={company_id}, "
+                    f"session_customer_id={getattr(session, 'customer_id', 'N/A')}, "
+                    f"session_tenant_id={getattr(session, 'tenant_id', 'N/A')}, "
+                    f"config_company_name={getattr(bc_client.config, 'company_name', 'N/A')}, "
+                    f"config_tenant_id={getattr(bc_client.config, 'tenant_id', 'N/A')}, "
+                    f"REST_URL={rest_url}, company_header_present={has_comp_hdr}, "
+                    f"authorization_gate_1_result=ALLOW, authorization_gate_2_result=ALLOW, "
+                    f"probe_response_is_error={probe_res.get('is_error', False) if isinstance(probe_res, dict) else False}"
+                )
+
                 if isinstance(probe_res, dict) and probe_res.get("is_error"):
                     http_status = probe_res.get("http_status")
                     if http_status == 403 or probe_res.get("error") == "Access Denied":
+                        logger.warning(f"BC Authorization probe 403 for company '{company_id}'")
                         return False, DenialReason.BC_ACCESS_DENIED
                     return False, DenialReason.BC_UNAVAILABLE
             except Exception as e:

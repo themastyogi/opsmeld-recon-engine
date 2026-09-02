@@ -99,3 +99,55 @@ def test_customer_tenant_boundary_isolation():
 
     assert session_tenant_a.customer_id == "tenant_a_guid"
     assert session_tenant_a.tenant_id == "tenant_a_guid"
+
+
+def test_company_header_excluded_for_company_scoped_rest_urls(monkeypatch):
+    import urllib.request
+    captured_headers = {}
+
+    def mock_urlopen(req, timeout=15):
+        nonlocal captured_headers
+        captured_headers = req.headers
+        class DummyResp:
+            def read(self):
+                return b'{"value": []}'
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+        return DummyResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+
+    config = load_client_config()
+    client = BCMCPClient(config)
+    monkeypatch.setattr(client, "get_access_token", lambda: "fake_jwt")
+    monkeypatch.setattr(client, "_get_tenant_id", lambda: "tenant_guid_123")
+
+    # 1. Company-scoped URL (companies) -> Should NOT have Company header
+    client._execute_bc_rest("companies(ac6b97ba-bc8f-f111-832d-7c1e5233db45)/customers")
+    assert "Company" not in captured_headers
+
+    # 2. Base discovery URL (companies) -> Should NOT have Company header
+    client._execute_bc_rest("companies")
+    assert "Company" not in captured_headers
+
+
+def test_company_access_manager_lightweight_company_lookup():
+    class DummyBCClient:
+        def get_access_token(self):
+            return "fake_token"
+        def _execute_bc_rest(self, path):
+            if path == "companies":
+                return {"value": [{"id": "comp_123", "name": "CRONUS IN"}]}
+            if path == "companies(comp_123)":
+                return {"id": "comp_123", "name": "CRONUS IN"}
+            return {"is_error": True, "http_status": 404, "error": "Not found"}
+
+    client = DummyBCClient()
+    mgr = CompanyAccessManager()
+
+    is_auth, state, details = mgr.validate_company_access(client, requested_company="comp_123")
+    assert is_auth is True
+    assert details["company_id"] == "comp_123"
+    assert details["is_offline_preview"] is False

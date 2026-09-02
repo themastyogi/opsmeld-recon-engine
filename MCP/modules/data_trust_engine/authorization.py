@@ -179,30 +179,25 @@ class CompanyAccessManager:
                 msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id)
                 return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
 
-        # Step B: Final Real Company-Scoped BC Access Verification Gate
-        endpoints_to_probe = ["generalLedgerEntries", "customers", "accounts"]
-        scope_test_resp = None
-        last_error_code = 500
-        last_error_msg = ""
-
-        for ep in endpoints_to_probe:
-            probe_res = client._execute_bc_rest(f"companies({target_comp_guid})/{ep}?$top=1")
-            if isinstance(probe_res, dict) and not probe_res.get("is_error") and "error" not in probe_res:
-                scope_test_resp = probe_res
-                break
-            elif isinstance(probe_res, dict):
-                last_error_code = probe_res.get("http_status", 500)
-                last_error_msg = probe_res.get("error", f"HTTP {last_error_code} on {ep}")
-                if last_error_code in (401, 403):
-                    break
-
-        if scope_test_resp is None:
-            logger.info(f"BC probe returned error ({last_error_msg}); loading Data Trust in Offline Preview Mode for '{target_comp_name}'.")
-            return True, DataTrustState.SUCCESS, {
-                "company_id": target_comp_guid,
-                "company_name": target_comp_name,
-                "is_offline_preview": True
-            }
+        # Step B: Lightweight Authoritative Company Lookup Gate
+        # Query GET /companies(<requested_guid>) directly to prove company accessibility
+        comp_lookup = client._execute_bc_rest(f"companies({target_comp_guid})")
+        if isinstance(comp_lookup, dict) and (comp_lookup.get("is_error") or "error" in comp_lookup):
+            status_code = comp_lookup.get("http_status", 500)
+            err_msg = comp_lookup.get("error", f"HTTP {status_code}")
+            if status_code == 403:
+                msg = build_user_message(DataTrustState.ACCESS_DENIED, run_id=run_id, detail=f"Company GUID '{target_comp_name}' unauthorized: {err_msg}")
+                return False, DataTrustState.ACCESS_DENIED, {"message": msg, "http_status": 403}
+            elif status_code == 401:
+                msg = build_user_message(DataTrustState.AUTHENTICATION_UNAVAILABLE, run_id=run_id, detail=f"Authentication offline for company '{target_comp_name}': {err_msg}")
+                return False, DataTrustState.AUTHENTICATION_UNAVAILABLE, {"message": msg, "http_status": 401}
+            else:
+                logger.info(f"BC company lookup returned status {status_code} ({err_msg}); loading Data Trust in Offline Preview Mode for '{target_comp_name}'.")
+                return True, DataTrustState.SUCCESS, {
+                    "company_id": target_comp_guid,
+                    "company_name": target_comp_name,
+                    "is_offline_preview": True
+                }
 
         return True, DataTrustState.SUCCESS, {
             "company_id": target_comp_guid,

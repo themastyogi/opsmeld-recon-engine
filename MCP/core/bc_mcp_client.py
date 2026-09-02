@@ -311,7 +311,10 @@ class BCMCPClient:
             return {"error": "Business Central tenant_id unconfigured."}
         url = f"https://api.businesscentral.dynamics.com/v2.0/{tenant_id}/{self.config.environment}/api/v2.0/{path}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        if self.config.company_name:
+        
+        # Explicit Company Header Scope Fix: For company-scoped REST URLs ('companies' or 'companies(<GUID>)...'),
+        # do NOT send the stale configured Company header. The URL path is the authoritative company context.
+        if self.config.company_name and not (path.startswith("companies") or "companies(" in path):
             headers["Company"] = self.config.company_name
         
         all_values = []
@@ -348,7 +351,7 @@ class BCMCPClient:
         if not token:
             return {"error": "Authentication token missing."}
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        if self.config.company_name:
+        if self.config.company_name and not ("/companies" in url or "companies(" in url):
             headers["Company"] = self.config.company_name
         req = urllib.request.Request(url, headers=headers)
         try:
