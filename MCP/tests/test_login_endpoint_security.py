@@ -1,13 +1,14 @@
 """
 Opsmeld Unit Tests for Login Endpoint Security (Tests B & E)
 Verifies:
-- Test B: Empty POST /api/auth/login returns verification_uri & user_code (Device Flow) and NO session token.
+- Test B: Empty POST /api/auth/login returns HTTP 400 Bad Request and NO session token.
 - Test E: Admin status endpoint POST /api/admin/organizations/status without organization_id returns HTTP 400 Bad Request.
 """
 
 import json
 import threading
 import urllib.request
+import urllib.error
 import unittest
 from web.app import create_server
 from core.auth import get_auth_manager
@@ -27,16 +28,17 @@ class TestLoginEndpointSecurity(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
 
-    def test_b_empty_login_post_returns_device_flow_and_no_token(self):
+    def test_b_empty_login_post_returns_400_and_no_token(self):
         url = f"{self.base_url}/api/auth/login"
         req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode("utf-8"))
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req)
 
-        # Crucial security invariant: Empty login MUST NEVER return an authenticated session token
+        # Crucial security invariant: Empty login MUST return 400 Bad Request and NEVER return a session token
+        self.assertEqual(ctx.exception.code, 400)
+        data = json.loads(ctx.exception.read().decode("utf-8"))
         self.assertNotIn("token", data)
-        self.assertTrue("user_code" in data or "error" in data)
+        self.assertIn("error", data)
 
     def test_e_admin_status_without_org_id_returns_400(self):
         auth_mgr = get_auth_manager()

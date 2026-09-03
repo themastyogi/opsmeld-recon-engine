@@ -35,14 +35,17 @@ logger = logging.getLogger(__name__)
 
 
 def filter_companies_for_session(discovered: list, session) -> list:
-    """Filters discovered companies by session company ACL. Fails closed (empty list) on empty allowed_companies."""
+    """Filters discovered companies by session company ACL. Fails closed (empty list) on empty allowed_companies.
+    Only ENTERPRISE_ADMIN bypasses filtering."""
+    if not session or not getattr(session, "provisioned", True):
+        return []
     roles = getattr(session, "roles", [])
-    if "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles:
+    if "ENTERPRISE_ADMIN" in roles:
         return discovered
-    user_allowed = getattr(session, "allowed_companies", set())
+    user_allowed = getattr(session, "allowed_companies", None) or set()
     if not user_allowed:
-        return []  # resolved decision: fail closed, not fail open
-    return [c for c in discovered if c.get("id") in user_allowed]
+        return []  # Fail closed: non-admin with empty or None allowed_companies gets empty list
+    return [c for c in discovered if c.get("id") in user_allowed or c.get("name") in user_allowed]
 
 
 
@@ -295,7 +298,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"status": "success", "organizations": orgs, "subscriptions": subs}).encode("utf-8"))
             return
 
-        elif path == "/api/org/companies":
+        elif path in ("/api/org/companies", "/api/bc/companies"):
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
             if not session or not getattr(session, "provisioned", True):
@@ -506,7 +509,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
             client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             mgr = CompanyAccessManager()
-            discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
+            prov_res = mgr.get_discovered_companies_with_provenance(client)
+            discovered = prov_res[0] if len(prov_res) > 0 else []
+            data_source = prov_res[1] if len(prov_res) > 1 else "DATA_UNAVAILABLE"
+            err_detail = prov_res[2] if len(prov_res) > 2 else None
 
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
@@ -556,11 +562,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             raw_bc_company_count = len(raw_bc_companies)
 
             # STAGE 2: Opsmeld ACL Authorization Gate
-            session_allowed = session_info.get("allowed_companies", set()) if isinstance(session_info, dict) else set()
-            if session_allowed:
-                acl_companies = [c for c in raw_bc_companies if c["id"] in session_allowed or c["name"] in session_allowed]
-            else:
-                acl_companies = raw_bc_companies
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            acl_companies = filter_companies_for_session(raw_bc_companies, session)
             opsmeld_acl_count = len(acl_companies)
 
             # STAGE 3: Final API Response Payload

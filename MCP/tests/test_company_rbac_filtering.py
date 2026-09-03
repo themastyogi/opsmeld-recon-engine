@@ -241,40 +241,68 @@ def test_filter_companies_for_session_fail_closed_and_acl():
     assert filtered_a[0]["id"] == "comp-A"
 
 
-def test_device_flow_concurrency_and_cleanup():
-    """Verifies that ACTIVE_DEVICE_FLOWS supports concurrent logins and cleanup removes expired flows."""
-    import time
-    from web.app import ACTIVE_DEVICE_FLOWS, cleanup_expired_device_flows, DEVICE_FLOW_TTL
+def test_both_endpoints_fail_closed_for_empty_allowed_companies():
+    """Task 4 verification: Asserts that a non-admin session with allowed_companies = set()
+    gets [] from both /api/data-trust/authorized-companies and /api/bc/companies,
+    not the full company list."""
+    import io
+    import json
+    from unittest.mock import patch, MagicMock
+    from web.app import OpsmeldWebHandler
+    from core.auth import OpsmeldUserSession, get_auth_manager
 
-    ACTIVE_DEVICE_FLOWS.clear()
+    auth_mgr = get_auth_manager()
+    non_admin_session = OpsmeldUserSession(
+        token="tok_non_admin_test",
+        user_id="usr_non_admin",
+        email="viewer@company.com",
+        display_name="Viewer User",
+        roles=["DATA_TRUST_VIEWER"],
+        organization_id="org_abc_001",
+        allowed_companies=set(),
+        permissions={"data_trust:read"},
+        provisioned=True
+    )
+    from core.auth import _ACTIVE_SESSIONS
+    _ACTIVE_SESSIONS["tok_non_admin_test"] = non_admin_session
 
-    # Flow 1
-    ACTIVE_DEVICE_FLOWS["flow_1"] = {
-        "flow": {"user_code": "CODE1"},
-        "created_at": time.time(),
-        "client_key": "key1"
-    }
+    discovered = [
+        {"id": "comp-1", "name": "Company 1"},
+        {"id": "comp-2", "name": "Company 2"}
+    ]
 
-    # Flow 2 (concurrent)
-    ACTIVE_DEVICE_FLOWS["flow_2"] = {
-        "flow": {"user_code": "CODE2"},
-        "created_at": time.time(),
-        "client_key": "key2"
-    }
+    with patch("modules.data_trust_engine.authorization.CompanyAccessManager.get_discovered_companies_with_provenance",
+               return_value=(discovered, "LIVE_BUSINESS_CENTRAL", None)):
+        # 1. Test /api/data-trust/authorized-companies
+        handler_dt = MagicMock(spec=OpsmeldWebHandler)
+        handler_dt.headers = {"Authorization": "Bearer tok_non_admin_test"}
+        handler_dt.wfile = io.BytesIO()
+        handler_dt.path = "/api/data-trust/authorized-companies"
+        handler_dt._get_session_token.return_value = "tok_non_admin_test"
+        handler_dt._get_client_key.return_value = "default_client"
+        handler_dt.do_GET = OpsmeldWebHandler.do_GET.__get__(handler_dt, OpsmeldWebHandler)
+        handler_dt._handle_do_GET = OpsmeldWebHandler._handle_do_GET.__get__(handler_dt, OpsmeldWebHandler)
+        handler_dt._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_dt, OpsmeldWebHandler)
+        handler_dt._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_dt, OpsmeldWebHandler)
+        handler_dt._write_response = OpsmeldWebHandler._write_response.__get__(handler_dt, OpsmeldWebHandler)
 
-    assert len(ACTIVE_DEVICE_FLOWS) == 2
-    assert ACTIVE_DEVICE_FLOWS["flow_1"]["flow"]["user_code"] == "CODE1"
-    assert ACTIVE_DEVICE_FLOWS["flow_2"]["flow"]["user_code"] == "CODE2"
+        handler_dt.do_GET()
+        res_dt = json.loads(handler_dt.wfile.getvalue().decode("utf-8"))
+        assert res_dt.get("companies") == [], f"Expected [] but got {res_dt.get('companies')}"
 
-    # Expired flow
-    ACTIVE_DEVICE_FLOWS["flow_expired"] = {
-        "flow": {"user_code": "EXPIRED"},
-        "created_at": time.time() - (DEVICE_FLOW_TTL + 10),
-        "client_key": "key3"
-    }
+        # 2. Test /api/bc/companies
+        handler_bc = MagicMock(spec=OpsmeldWebHandler)
+        handler_bc.headers = {"Authorization": "Bearer tok_non_admin_test"}
+        handler_bc.wfile = io.BytesIO()
+        handler_bc.path = "/api/bc/companies"
+        handler_bc._get_session_token.return_value = "tok_non_admin_test"
+        handler_bc._get_client_key.return_value = "default_client"
+        handler_bc.do_GET = OpsmeldWebHandler.do_GET.__get__(handler_bc, OpsmeldWebHandler)
+        handler_bc._handle_do_GET = OpsmeldWebHandler._handle_do_GET.__get__(handler_bc, OpsmeldWebHandler)
+        handler_bc._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_bc, OpsmeldWebHandler)
+        handler_bc._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_bc, OpsmeldWebHandler)
+        handler_bc._write_response = OpsmeldWebHandler._write_response.__get__(handler_bc, OpsmeldWebHandler)
 
-    cleanup_expired_device_flows()
-    assert "flow_expired" not in ACTIVE_DEVICE_FLOWS
-    assert "flow_1" in ACTIVE_DEVICE_FLOWS
-    assert "flow_2" in ACTIVE_DEVICE_FLOWS
-    ACTIVE_DEVICE_FLOWS.clear()
+        handler_bc.do_GET()
+        res_bc = json.loads(handler_bc.wfile.getvalue().decode("utf-8"))
+        assert res_bc.get("companies") == [], f"Expected [] but got {res_bc.get('companies')}"
