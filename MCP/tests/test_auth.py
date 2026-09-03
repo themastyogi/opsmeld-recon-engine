@@ -59,6 +59,23 @@ class TestAuthManager(unittest.TestCase):
         self.assertEqual(session.email, "realuser@company.com")
         self.assertTrue(session.provisioned)
 
+    def test_resolve_user_organization_fails_closed_on_empty_identity(self):
+        """Task 5: Asserts resolve_user_organization returns None on None, empty string, or whitespace."""
+        from core.models import get_datastore
+        ds = get_datastore()
+        self.assertIsNone(ds.resolve_user_organization(None))
+        self.assertIsNone(ds.resolve_user_organization(""))
+        self.assertIsNone(ds.resolve_user_organization("   "))
+        self.assertIsNone(ds.resolve_user_organization(None, entra_oid=None))
+        self.assertIsNone(ds.resolve_user_organization("nonexistent@domain.com"))
+
+        # Confirms legitimate admin identity still resolves properly
+        resolved = ds.resolve_user_organization("admin@opsmeld.com")
+        self.assertIsNotNone(resolved)
+        user, org = resolved
+        self.assertEqual(user.user_id, "usr_admin_001")
+        self.assertEqual(org.organization_id, "org_abc_001")
+
 
 if __name__ == "__main__":
     unittest.main()

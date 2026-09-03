@@ -270,12 +270,15 @@ class MultitenantDataStore:
         Returns (User, Organization) or None if user is not assigned to an organization.
         """
         email_clean = (email or "").strip().lower()
-        if not email_clean or email_clean in ("admin", "admin@opsmeld.com"):
+        if not email_clean and not entra_oid:
+            return None  # Fail closed: missing identity must never resolve to any user or tenant
+
+        if email_clean in ("admin", "admin@opsmeld.com"):
             matched_user = self.users.get("usr_admin_001")
         else:
             matched_user = None
             for u in self.users.values():
-                if u.email.strip().lower() == email_clean or (entra_oid and u.entra_oid == entra_oid):
+                if (email_clean and u.email.strip().lower() == email_clean) or (entra_oid and u.entra_oid == entra_oid):
                     matched_user = u
                     break
         if not matched_user:
