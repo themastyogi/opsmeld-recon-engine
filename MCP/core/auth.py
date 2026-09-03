@@ -3,6 +3,7 @@ Opsmeld Application Portal - Unified Authentication and RBAC Session Management
 Backed by Microsoft Entra ID / OIDC Provider Integration and Centralized RBAC Resolver.
 """
 
+import hashlib
 import json
 import os
 import pathlib
@@ -12,6 +13,31 @@ from typing import Dict, Any, Optional, Set, List
 from core.rbac import RBACResolver, get_module_registry
 
 SESSION_TTL_SECONDS = 86400  # 24 hours
+
+def hash_password(password: str, salt: Optional[str] = None) -> str:
+    """Hashes a password using PBKDF2-HMAC-SHA256 with a cryptographically secure salt."""
+    if not salt:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations=100_000
+    ).hex()
+    return f"{salt}${hashed}"
+
+def verify_password(password: str, stored_hash: Optional[str]) -> bool:
+    """Verifies a password against a stored salt$hashed format using constant-time comparison."""
+    if not stored_hash or "$" not in stored_hash or not password:
+        return False
+    salt, expected = stored_hash.split("$", 1)
+    computed = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations=100_000
+    ).hex()
+    return secrets.compare_digest(computed, expected)
 
 
 class OpsmeldUserSession:
@@ -123,6 +149,7 @@ class AuthManager:
     def __init__(self):
         self.admin_user = os.environ.get("OPSMELD_ADMIN_USER", "admin@opsmeld.com")
         self.admin_pass = self._resolve_admin_password()
+        self._user_passwords: Dict[str, str] = {}
         # Default authorized company GUIDs for admin session (matches production BC tenant)
         self.default_admin_companies = {
             "ac6b97ba-bc8f-f111-832d-7c1e5233db45", # CRONUS IN
@@ -154,17 +181,48 @@ class AuthManager:
         secret_file.write_text(json.dumps({"admin_password": new_secret}, indent=2), encoding="utf-8")
         return new_secret
 
+    def set_user_password(self, email: str, password: str) -> None:
+        """Sets a PBKDF2-HMAC-SHA256 hashed password for a user email."""
+        if email and password:
+            self._user_passwords[email.strip().lower()] = hash_password(password)
+
+    def verify_user_password(self, email: str, password: str) -> bool:
+        """Verifies a user password against the stored PBKDF2 hash."""
+        if not email or not password:
+            return False
+        stored = self._user_passwords.get(email.strip().lower())
+        return verify_password(password, stored)
+
     def authenticate(self, email: str, password: str) -> Optional[str]:
-        """Authenticates username/password credentials against datastore or admin user."""
+        """Authenticates credentials against datastore users (requiring verified password hash) or break-glass admin."""
         if not email or not password:
             return None
 
-        # Check Datastore Users
+        email_clean = email.strip().lower()
+
+        # 1. Break-Glass Platform Admin (checked first via timing-safe comparison)
+        admin_clean = self.admin_user.strip().lower()
+        if (email_clean == admin_clean or email_clean == "admin") and secrets.compare_digest(password, self.admin_pass):
+            return self.create_session(
+                user_id="usr_admin_001",
+                email=self.admin_user,
+                display_name="Platform Admin",
+                roles=["ENTERPRISE_ADMIN"],
+                organization_id="org_abc_001",
+                allowed_companies=self.default_admin_companies,
+                provisioned=True
+            )
+
+        # 2. Check Datastore Users (must verify real stored password hash)
         from core.models import get_datastore
         ds = get_datastore()
-        resolved = ds.resolve_user_organization(email)
+        resolved = ds.resolve_user_organization(email_clean)
         if resolved:
             user, org = resolved
+            stored_hash = getattr(user, "password_hash", None) or self._user_passwords.get(email_clean)
+            if not stored_hash or not verify_password(password, stored_hash):
+                return None  # Reject: invalid password or no password hash provisioned for user
+
             user_perms = ds.get_user_permissions(user.user_id, org.organization_id)
             user_companies = ds.get_user_allowed_companies(user.user_id, org.organization_id)
             roles = sorted(list(ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())))
@@ -176,18 +234,6 @@ class AuthManager:
                 roles=roles,
                 permissions=user_perms,
                 allowed_companies=user_companies,
-                provisioned=True
-            )
-
-        # Fallback to Admin User
-        if email.lower() == self.admin_user.lower() and password == self.admin_pass:
-            return self.create_session(
-                user_id="usr_admin_001",
-                email=self.admin_user,
-                display_name="Admin User",
-                roles=["ENTERPRISE_ADMIN"],
-                organization_id="org_abc_001",
-                allowed_companies=self.default_admin_companies,
                 provisioned=True
             )
 
@@ -227,23 +273,6 @@ class AuthManager:
         if token in _REVOKED_TOKENS:
             _REVOKED_TOKENS.remove(token)
         return token
-
-    def authenticate(self, username: str, password: str) -> Optional[str]:
-        """Validates provisioned credentials and returns session token with ENTERPRISE_ADMIN permissions."""
-        username_clean = (username or "").strip().lower()
-        admin_clean = self.admin_user.strip().lower()
-
-        if (username_clean == admin_clean or username_clean == "admin") and password == self.admin_pass:
-            return self.create_session(
-                user_id="usr_admin_001",
-                email=self.admin_user,
-                display_name="Platform Admin",
-                organization_id="org_abc_001",
-                roles=["ENTERPRISE_ADMIN"],
-                allowed_companies=self.default_admin_companies,
-                provisioned=True
-            )
-        return None
 
     def login_entra_user(
         self,

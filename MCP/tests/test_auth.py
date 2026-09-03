@@ -30,6 +30,35 @@ class TestAuthManager(unittest.TestCase):
         self.auth.revoke_session(token)
         self.assertFalse(self.auth.validate_session(token))
 
+    def test_authenticate_user_password_hash_verification(self):
+        """Asserts authenticate('realuser@company.com', 'wrong-password') returns None using a real stored hash."""
+        from core.models import get_datastore, User
+        ds = get_datastore()
+        test_user = User(
+            user_id="usr_real_001",
+            entra_oid="oid_real_001",
+            email="realuser@company.com",
+            display_name="Real User"
+        )
+        ds.users[test_user.user_id] = test_user
+        ds.org_users.setdefault("org_abc_001", set()).add(test_user.user_id)
+        ds.user_org[test_user.user_id] = "org_abc_001"
+
+        # Store real PBKDF2-HMAC-SHA256 hash for realuser@company.com
+        self.auth.set_user_password("realuser@company.com", "correct_secret_password_123")
+
+        # 1. Wrong password MUST return None (rejected)
+        wrong_token = self.auth.authenticate("realuser@company.com", "wrong-password")
+        self.assertIsNone(wrong_token)
+
+        # 2. Correct password MUST succeed and return valid session token
+        valid_token = self.auth.authenticate("realuser@company.com", "correct_secret_password_123")
+        self.assertIsNotNone(valid_token)
+        session = self.auth.get_session(valid_token)
+        self.assertIsNotNone(session)
+        self.assertEqual(session.email, "realuser@company.com")
+        self.assertTrue(session.provisioned)
+
 
 if __name__ == "__main__":
     unittest.main()
