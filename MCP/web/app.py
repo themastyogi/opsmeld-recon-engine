@@ -33,15 +33,6 @@ import time
 import secrets
 logger = logging.getLogger(__name__)
 
-ACTIVE_DEVICE_FLOWS: Dict[str, Dict[str, Any]] = {}
-DEVICE_FLOW_TTL = 900  # 15 minutes TTL
-
-def cleanup_expired_device_flows():
-    """Removes abandoned device code flows older than TTL."""
-    now = time.time()
-    expired = [fid for fid, data in ACTIVE_DEVICE_FLOWS.items() if now - data.get("created_at", now) > DEVICE_FLOW_TTL]
-    for fid in expired:
-        ACTIVE_DEVICE_FLOWS.pop(fid, None)
 
 def filter_companies_for_session(discovered: list, session) -> list:
     """Filters discovered companies by session company ACL. Fails closed (empty list) on empty allowed_companies."""
@@ -195,7 +186,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }).encode("utf-8"))
 
     def _handle_do_GET(self):
-        global CURRENT_DEVICE_FLOW
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
@@ -495,61 +485,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }
             self._set_headers("application/json")
             self._write_response(json.dumps(debug_info).encode("utf-8"))
-
-        elif path in ("/api/auth/login", "/api/auth/entra/device-flow"):
-            client_key = self._get_client_key(parsed_url)
-            config = load_client_config(client_key)
-            client = BCMCPClient(config)
-            flow = client.start_device_flow()
-            cleanup_expired_device_flows()
-            flow_id = secrets.token_urlsafe(16)
-            ACTIVE_DEVICE_FLOWS[flow_id] = {
-                "flow": flow,
-                "created_at": time.time(),
-                "client_key": client_key
-            }
-            res_flow = dict(flow) if isinstance(flow, dict) else {}
-            res_flow["flow_id"] = flow_id
-            self._set_headers("application/json")
-            self._write_response(json.dumps(res_flow).encode("utf-8"))
-
-        elif path == "/api/auth/poll":
-            cleanup_expired_device_flows()
-            query_params = urllib.parse.parse_qs(parsed_url.query)
-            flow_id = query_params.get("flow_id", [None])[0]
-            
-            # Also allow flow_id passed in header or cookie or fallback to only active flow
-            if not flow_id and len(ACTIVE_DEVICE_FLOWS) == 1:
-                flow_id = next(iter(ACTIVE_DEVICE_FLOWS.keys()))
-
-            flow_entry = ACTIVE_DEVICE_FLOWS.get(flow_id) if flow_id else None
-            if not flow_entry:
-                self._set_headers("application/json")
-                self._write_response(json.dumps({"status": "error", "message": "No active device authorization flow or flow expired"}).encode("utf-8"))
-            else:
-                flow = flow_entry["flow"]
-                client_key = flow_entry.get("client_key") or self._get_client_key(parsed_url)
-                config = load_client_config(client_key)
-                client = BCMCPClient(config)
-                result = client.complete_device_flow(flow)
-                if result and result.get("status") == "success":
-                    ACTIVE_DEVICE_FLOWS.pop(flow_id, None)
-                    email = result.get("email")
-                    display_name = result.get("name") or result.get("display_name") or email
-                    entra_oid = result.get("oid")
-                    token = get_auth_manager().login_entra_user(email=email, display_name=display_name, entra_oid=entra_oid)
-                    session = get_auth_manager().get_session(token)
-                    if session and getattr(session, "provisioned", False):
-                        result["token"] = token
-                        result["email"] = session.email
-                        result["username"] = session.display_name
-                    else:
-                        result["status"] = "pending_approval"
-                        result["error"] = "ACCOUNT_NOT_PROVISIONED"
-                        result["message"] = "Entra authentication succeeded, but account is not provisioned for an Opsmeld organization."
-                        result.pop("token", None)
-                self._set_headers("application/json")
-                self._write_response(json.dumps(result).encode("utf-8"))
 
         elif path == "/api/auth/session_status":
             token = self._get_session_token()
@@ -964,24 +899,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             email = data.get("email") or data.get("username")
             password = data.get("password")
 
-            if not password:
-                # Unauthenticated entry point -> Start Entra Device Flow (returns verification_uri/user_code, NO token)
-                client_key = self._get_client_key(parsed_url)
-                config = load_client_config(client_key)
-                client = BCMCPClient(config)
-                flow = client.start_device_flow()
-                cleanup_expired_device_flows()
-                flow_id = secrets.token_urlsafe(16)
-                ACTIVE_DEVICE_FLOWS[flow_id] = {
-                    "flow": flow,
-                    "created_at": time.time(),
-                    "client_key": client_key
-                }
-                res_flow = dict(flow) if isinstance(flow, dict) else {}
-                res_flow["flow_id"] = flow_id
-                res_flow["status"] = "device_authorization_required"
-                self._set_headers("application/json", 200)
-                self._write_response(json.dumps(res_flow).encode("utf-8"))
+            if not email or not password:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Email and password required for administrative login."}).encode("utf-8"))
                 return
 
             token = get_auth_manager().authenticate(email, password)

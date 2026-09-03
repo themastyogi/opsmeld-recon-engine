@@ -529,38 +529,13 @@
             <div style="font-size: 1.8rem; font-weight: 900; color: white; margin-bottom: 8px;">🟢 opsmeld</div>
             <h2 style="font-size: 1.3rem; font-weight: 800; color: white; margin: 0 0 8px 0;">Sign In to Opsmeld Platform</h2>
             <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 24px 0;">
-                Authenticate with your Microsoft Entra ID or your provisioned Opsmeld credentials.
+                Authenticate with your Microsoft Entra ID corporate account to access the Opsmeld platform.
             </p>
             
-            <!-- 1. Microsoft Entra SSO Button (Canonical Browser SSO) -->
-            <a href="/api/auth/entra/authorize" class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+            <!-- Canonical Microsoft Entra SSO (Browser Authorization Code Flow) -->
+            <a href="/api/auth/entra/authorize" class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
                 🔑 Continue with Microsoft Entra ID
             </a>
-
-            <!-- Divider -->
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
-                <div style="flex: 1; height: 1px; background: #334155;"></div>
-                <span style="font-size: 0.75rem; color: #64748B; font-weight: 700; text-transform: uppercase;">OR SIGN IN WITH PASSWORD</span>
-                <div style="flex: 1; height: 1px; background: #334155;"></div>
-            </div>
-
-            <!-- 2. Email / Password Form -->
-            <form onsubmit="OpsmeldAuth.handlePasswordLogin(event)">
-                <div style="text-align: left; margin-bottom: 14px;">
-                    <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Email / Username</label>
-                    <input type="text" id="app-login-email" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="user@company.com" required>
-                </div>
-                <div style="text-align: left; margin-bottom: 20px;">
-                    <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Password</label>
-                    <input type="password" id="app-login-pass" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="••••••••" required>
-                </div>
-
-                <div id="app-login-error" style="display: none; background: #FEE2E2; color: #DC2626; font-size: 0.78rem; font-weight: 600; padding: 8px; border-radius: 6px; margin-bottom: 14px;">
-                    Invalid credentials. Please check your provisioned email and password.
-                </div>
-
-                <button type="submit" class="btn-btn" style="width: 100%; background: #2563EB; color: white; font-weight: 800; font-size: 0.95rem; padding: 12px; border-radius: 8px; margin-bottom: 20px; cursor: pointer;">Sign In</button>
-            </form>
 
             <div style="font-size: 0.78rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
                 ← Back to Opsmeld Platform
@@ -1239,27 +1214,6 @@
         </div>
     </div>
 
-    <!-- Login Modal Popup -->
-    <div id="login-modal" class="modal-overlay" style="display:none; z-index: 2000;">
-        <div class="modal-box" style="width: 480px; text-align: center;">
-            <h2 style="font-size: 1.3rem; font-weight: 800; margin-top: 0; color: #1F2937;">🔑 Sign In with Microsoft Entra</h2>
-            <p style="color: #4B5563; font-size: 0.9rem; line-height: 1.5;">Authenticate with your Microsoft Entra ID / Business Central account using the code below:</p>
-            <div style="background: #F3F4F6; border: 1px solid #E5E7EB; padding: 20px; border-radius: 12px; margin: 20px 0;">
-                <div style="font-size: 0.82rem; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Your Entra Authentication Code</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #111827; letter-spacing: 0.1em; margin: 10px 0;" class="mono" id="login-user-code">GENERATING CODE...</div>
-                <div style="margin-top: 14px;">
-                    <a id="login-link" href="https://microsoft.com/devicelogin" target="_blank" class="btn-btn" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; text-decoration: none; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
-                        🚀 Open Microsoft Entra Login Page
-                    </a>
-                </div>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
-                <div style="font-size: 0.82rem; color: #6B7280;">⏳ Waiting for Microsoft authentication...</div>
-                <button class="modal-btn" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;" onclick="OpsmeldAuth.closeModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
-
     <div id="demo-modal" class="modal-overlay" style="display:none;">
         <div class="modal-box">
             <h2 style="font-size: 1.3rem; font-weight: 700; margin-top: 0; color: #1F2937;">A smarter way to recover cash and protect customer relationships.</h2>
@@ -1578,109 +1532,17 @@
 
     <script>
     window.OpsmeldAuth = {
-        pollInterval: null,
         openModal: function() {
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'flex';
-            this.startEntraFlow();
+            window.location.href = '/api/auth/entra/authorize';
         },
-        closeModal: function() {
-            if (this.pollInterval) {
-                clearInterval(this.pollInterval);
-                this.pollInterval = null;
-            }
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'none';
-        },
-        startEntraFlow: function() {
-            if (this.pollInterval) {
-                clearInterval(this.pollInterval);
-                this.pollInterval = null;
-            }
-            const modal = document.getElementById('login-modal');
-            if (modal) modal.style.display = 'flex';
-            const codeEl = document.getElementById('login-user-code');
-            const linkEl = document.getElementById('login-link');
-            if (codeEl) codeEl.innerText = 'GENERATING CODE...';
-            
-            fetch('/api/auth/entra/device-flow', { credentials: 'same-origin' })
-                .then(res => res.json())
-                .then(data => {
-                    const flowId = data.flow_id || '';
-                    if (data.user_code && codeEl) {
-                        codeEl.innerText = data.user_code;
-                        if (linkEl && data.verification_uri) {
-                            linkEl.href = data.verification_uri;
-                        }
-                        // Start polling /api/auth/poll with flow_id every 3 seconds to complete Entra sign-in
-                        this.pollInterval = setInterval(() => {
-                            const pollUrl = flowId ? `/api/auth/poll?flow_id=${encodeURIComponent(flowId)}` : '/api/auth/poll';
-                            fetch(pollUrl, { credentials: 'same-origin' })
-                                .then(res => res.json())
-                                .then(pollRes => {
-                                    if (pollRes.status === 'success' || pollRes.token) {
-                                        clearInterval(this.pollInterval);
-                                        this.pollInterval = null;
-                                        if (pollRes.token) {
-                                            localStorage.setItem('opsmeld_token', pollRes.token);
-                                            document.cookie = `session=${pollRes.token}; path=/; max-age=86400; SameSite=Lax`;
-                                            this.closeModal();
-                                            switchMainView('data-trust');
-                                            loadAuthorizedCompanies();
-                                        } else {
-                                            if (codeEl) codeEl.innerText = 'AUTHENTICATION FAILED';
-                                        }
-                                    } else if (pollRes.error && pollRes.error !== 'authorization_pending') {
-                                        clearInterval(this.pollInterval);
-                                        this.pollInterval = null;
-                                        if (codeEl) codeEl.innerText = pollRes.message || pollRes.error;
-                                    }
-                                })
-                                .catch(err => {
-                                    console.error("Auth poll error:", err);
-                                });
-                        }, 3000);
-                    } else if (data.message && codeEl) {
-                        codeEl.innerText = data.message;
-                    } else if (data.error && codeEl) {
-                        codeEl.innerText = data.error;
-                    }
-                })
-                .catch(err => {
-                    console.error("Device flow error:", err);
-                    if (codeEl) codeEl.innerText = 'AUTHENTICATION ERROR';
-                });
-        },
-        handlePasswordLogin: function(e) {
-            if (e) e.preventDefault();
-            const email = document.getElementById('app-login-email').value;
-            const pass = document.getElementById('app-login-pass').value;
-            fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, password: pass }),
-                credentials: 'same-origin'
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'SUCCESS' || data.authenticated) {
-                    if (data.token) {
-                        localStorage.setItem('opsmeld_token', data.token);
-                        document.cookie = `session=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-                    }
-                    location.reload();
-                } else {
-                    const errEl = document.getElementById('app-login-error');
-                    if (errEl) errEl.style.display = 'block';
-                }
-            });
+        closeModal: function() {},
+        login: function() {
+            window.location.href = '/api/auth/entra/authorize';
         }
     };
 
     function openAppLoginModal() {
-        if (window.OpsmeldAuth) {
-            window.OpsmeldAuth.startEntraFlow();
-        }
+        window.location.href = '/api/auth/entra/authorize';
     }
 
     function getAuthHeaders() {
@@ -3405,35 +3267,6 @@
     </div>
 
 
-    <!-- Application Sign In Login Wall Modal Overlay -->
-    <div id="opsmeld-app-login-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); backdrop-filter:blur(4px); z-index:999999; align-items:center; justify-content:center;">
-        <div style="background:white; border:1px solid #E5E7EB; border-radius:12px; width:400px; padding:36px; box-shadow:0 10px 25px rgba(0,0,0,0.08); text-align:center;">
-            <div style="font-weight:800; font-size:1.6rem; color:#059669; letter-spacing:-0.03em; margin-bottom:4px;">🟢 opsmeld</div>
-            <div style="font-weight:700; font-size:1.1rem; color:#111827; margin-bottom:4px;">AR CONTROL TOWER</div>
-            <div style="font-size:0.82rem; color:#6B7280; margin-bottom:24px;">Manage receivables better • Client Evaluation Preview</div>
-
-            <form onsubmit="performAppLogin(event)">
-                <div style="text-align:left; margin-bottom:14px;">
-                    <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Email / Username</label>
-                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="user@company.com" required>
-                </div>
-                <div style="text-align:left; margin-bottom:20px;">
-                    <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Password</label>
-                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" required>
-                </div>
-
-                <div id="app-login-error" style="display:none; background:#FEE2E2; color:#DC2626; font-size:0.78rem; font-weight:600; padding:8px; border-radius:6px; margin-bottom:14px;">
-                    Invalid credentials. Please check your provisioned email and password.
-                </div>
-
-                <button type="submit" class="btn-btn" style="width:100%; background:#059669; font-weight:800; font-size:0.95rem; padding:10px; border-radius:6px;">Sign In</button>
-            </form>
-
-            <div style="font-size:0.72rem; color:#9CA3AF; margin-top:20px;">
-                🔒 Provisioned preview access • No public registration
-            </div>
-        </div>
-    </div>
 
 
     <!-- Data Trust Subledger Bypass Anomaly Evidence Inspector Modal -->
