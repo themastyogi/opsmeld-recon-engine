@@ -40,7 +40,7 @@ def filter_companies_for_session(discovered: list, session) -> list:
     if not session or not getattr(session, "provisioned", True):
         return []
     roles = getattr(session, "roles", [])
-    if "ENTERPRISE_ADMIN" in roles:
+    if "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles:
         return discovered
     user_allowed = getattr(session, "allowed_companies", None) or set()
     if not user_allowed:
@@ -298,7 +298,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"status": "success", "organizations": orgs, "subscriptions": subs}).encode("utf-8"))
             return
 
-        elif path in ("/api/org/companies", "/api/bc/companies"):
+        elif path == "/api/org/companies":
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
             if not session or not getattr(session, "provisioned", True):

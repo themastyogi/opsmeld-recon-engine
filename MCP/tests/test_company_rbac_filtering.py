@@ -290,19 +290,19 @@ def test_both_endpoints_fail_closed_for_empty_allowed_companies():
         res_dt = json.loads(handler_dt.wfile.getvalue().decode("utf-8"))
         assert res_dt.get("companies") == [], f"Expected [] but got {res_dt.get('companies')}"
 
-        # 2. Test /api/bc/companies
-        handler_bc = MagicMock(spec=OpsmeldWebHandler)
-        handler_bc.headers = {"Authorization": "Bearer tok_non_admin_test"}
-        handler_bc.wfile = io.BytesIO()
-        handler_bc.path = "/api/bc/companies"
-        handler_bc._get_session_token.return_value = "tok_non_admin_test"
-        handler_bc._get_client_key.return_value = "default_client"
-        handler_bc.do_GET = OpsmeldWebHandler.do_GET.__get__(handler_bc, OpsmeldWebHandler)
-        handler_bc._handle_do_GET = OpsmeldWebHandler._handle_do_GET.__get__(handler_bc, OpsmeldWebHandler)
-        handler_bc._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_bc, OpsmeldWebHandler)
-        handler_bc._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_bc, OpsmeldWebHandler)
-        handler_bc._write_response = OpsmeldWebHandler._write_response.__get__(handler_bc, OpsmeldWebHandler)
+        # 2. Test /api/org/companies
+        handler_org = MagicMock(spec=OpsmeldWebHandler)
+        handler_org.headers = {"Authorization": "Bearer tok_non_admin_test"}
+        handler_org.wfile = io.BytesIO()
+        handler_org.path = "/api/org/companies"
+        handler_org._get_session_token.return_value = "tok_non_admin_test"
+        handler_org._get_client_key.return_value = "default_client"
+        handler_org.do_GET = OpsmeldWebHandler.do_GET.__get__(handler_org, OpsmeldWebHandler)
+        handler_org._handle_do_GET = OpsmeldWebHandler._handle_do_GET.__get__(handler_org, OpsmeldWebHandler)
+        handler_org._require_auth = OpsmeldWebHandler._require_auth.__get__(handler_org, OpsmeldWebHandler)
+        handler_org._set_headers = OpsmeldWebHandler._set_headers.__get__(handler_org, OpsmeldWebHandler)
+        handler_org._write_response = OpsmeldWebHandler._write_response.__get__(handler_org, OpsmeldWebHandler)
 
-        handler_bc.do_GET()
-        res_bc = json.loads(handler_bc.wfile.getvalue().decode("utf-8"))
-        assert res_bc.get("companies") == [], f"Expected [] but got {res_bc.get('companies')}"
+        handler_org.do_GET()
+        res_org = json.loads(handler_org.wfile.getvalue().decode("utf-8"))
+        assert res_org.get("companies") == [], f"Expected [] but got {res_org.get('companies')}"
