@@ -68,7 +68,9 @@ class CompanyAccessManager:
 
         err_msg = resp.get("error") if isinstance(resp, dict) else "Unknown BC REST error"
         logger.warning(f"Live Business Central company discovery failed: {err_msg}")
-        return default_4_companies, "LIVE_BUSINESS_CENTRAL", f"Live BC /companies query failed: {err_msg}"
+        if is_fixture_mode:
+            return default_4_companies, "SNAPSHOT_SEED", f"Live BC /companies query failed: {err_msg}"
+        return [], "DATA_UNAVAILABLE", f"Live BC /companies query failed: {err_msg}"
 
     def get_discovered_companies(self, client: Optional[BCMCPClient]) -> List[Dict[str, Any]]:
         """Retrieves company list from Business Central REST API /companies endpoint."""

@@ -134,6 +134,47 @@ class TestCompanyResolutionAndErrorHandling(unittest.TestCase):
         self.assertEqual(source, "AUTHENTICATION_REQUIRED")
         self.assertIn("Business Central OAuth access token missing", err)
 
+    def test_production_failing_bc_rest_fails_closed_data_unavailable(self):
+        """Task 7 Part A: Failing BC REST in production returns ([], DATA_UNAVAILABLE, msg), never fake companies."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        import os
+        mgr = CompanyAccessManager()
+        self.mock_client.get_access_token.return_value = "valid_token"
+        self.mock_client._execute_bc_rest.return_value = {"error": "HTTP 401: Unauthorized", "is_error": True}
+
+        # Ensure environment is non-fixture (production)
+        old_mode = os.environ.pop("OPSMELD_MODE", None)
+        try:
+            comps, source, err = mgr.get_discovered_companies_with_provenance(self.mock_client)
+            self.assertEqual(comps, [])
+            self.assertEqual(source, "DATA_UNAVAILABLE")
+            self.assertIn("Live BC /companies query failed: HTTP 401: Unauthorized", err)
+        finally:
+            if old_mode is not None:
+                os.environ["OPSMELD_MODE"] = old_mode
+
+    def test_fixture_mode_failing_bc_rest_returns_snapshot_seed(self):
+        """Task 7 Part A: Failing BC REST in fixture mode returns default companies honestly labeled SNAPSHOT_SEED."""
+        from modules.data_trust_engine.authorization import CompanyAccessManager
+        import os
+        mgr = CompanyAccessManager()
+        self.mock_client.get_access_token.return_value = "valid_token"
+        self.mock_client._execute_bc_rest.return_value = {"error": "HTTP 503: Service Unavailable", "is_error": True}
+
+        old_mode = os.environ.get("OPSMELD_MODE")
+        os.environ["OPSMELD_MODE"] = "TEST_FIXTURE"
+        try:
+            comps, source, err = mgr.get_discovered_companies_with_provenance(self.mock_client)
+            self.assertEqual(len(comps), 4)
+            self.assertEqual(source, "SNAPSHOT_SEED")
+            self.assertIn("Live BC /companies query failed: HTTP 503: Service Unavailable", err)
+            self.assertEqual(comps[0]["name"], "CRONUS IN")
+        finally:
+            if old_mode is not None:
+                os.environ["OPSMELD_MODE"] = old_mode
+            else:
+                os.environ.pop("OPSMELD_MODE", None)
+
 
 if __name__ == "__main__":
     unittest.main()

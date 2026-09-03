@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +33,19 @@ import logging
 import time
 import secrets
 logger = logging.getLogger(__name__)
+
+# Task 7 Part B: Short-lived in-memory store for PKCE auth flows keyed by state
+_PENDING_AUTH_FLOWS: dict = {}
+AUTH_FLOW_TTL_SECONDS = 600.0
+
+
+def cleanup_expired_auth_flows():
+    """Removes expired pending OAuth PKCE flows."""
+    now = time.time()
+    expired = [k for k, (flow, created_at) in _PENDING_AUTH_FLOWS.items() if now - created_at > AUTH_FLOW_TTL_SECONDS]
+    for k in expired:
+        _PENDING_AUTH_FLOWS.pop(k, None)
+
 
 
 def filter_companies_for_session(discovered: list, session) -> list:
@@ -314,9 +328,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             
             permitted_companies = filter_companies_for_session(discovered, session)
 
+            status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(permitted_companies) > 0 else "DATA_UNAVAILABLE"
             self._set_headers("application/json", 200)
             self._write_response(json.dumps({
-                "status": "SUCCESS",
+                "status": status,
                 "data_source": data_source,
                 "companies": permitted_companies
             }).encode("utf-8"))
@@ -464,7 +479,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"modules": modules_status}).encode("utf-8"))
 
         elif path == "/api/debug/bc":
-            import os
             if os.environ.get("ALLOW_DEBUG_ENDPOINT", "").lower() != "true":
                 self._set_headers("application/json", 403)
                 self._write_response(json.dumps({"error": "Forbidden: Debug endpoint disabled on client preview instance."}).encode("utf-8"))
@@ -781,18 +795,32 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             host = self.headers.get("Host", "ar.opsmeld.com")
             redirect_uri = f"https://{host}/api/auth/callback"
-            
-            bc_scope = "openid profile email offline_access https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"
-            auth_url = (
-                f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-                f"?client_id={client_id}"
-                f"&response_type=code"
-                f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
-                f"&response_mode=query"
-                f"&scope={urllib.parse.quote(bc_scope)}"
-                f"&prompt=select_account"
+
+            cleanup_expired_auth_flows()
+            import msal
+            client_secret = getattr(config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET", "")
+            authority = "https://login.microsoftonline.com/common"
+            if client_secret:
+                app = msal.ConfidentialClientApplication(
+                    config.app_client_id,
+                    client_credential=client_secret,
+                    authority=authority
+                )
+            else:
+                app = msal.PublicClientApplication(
+                    config.app_client_id,
+                    authority=authority
+                )
+
+            flow = app.initiate_auth_code_flow(
+                scopes=["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
+                redirect_uri=redirect_uri,
+                prompt="select_account"
             )
-            
+            state = flow["state"]
+            _PENDING_AUTH_FLOWS[state] = (flow, time.time())
+            auth_url = flow["auth_uri"]
+
             query_params = urllib.parse.parse_qs(parsed_url.query)
             if query_params.get("json", ["false"])[0] == "true":
                 self._set_headers("application/json")
@@ -808,12 +836,22 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             code = query_params.get("code", [None])[0]
             error = query_params.get("error", [None])[0]
             error_desc = query_params.get("error_description", ["Authentication failed"])[0]
+            state = query_params.get("state", [None])[0]
 
             if error or not code:
                 self._set_headers("text/html", 400)
                 self._write_response(f"<h3>Microsoft Entra Authentication Error</h3><p>{error_desc}</p><br><a href='/'>Return to Opsmeld Platform</a>".encode("utf-8"))
                 return
 
+            cleanup_expired_auth_flows()
+            flow_entry = _PENDING_AUTH_FLOWS.pop(state, None) if state else None
+            if not flow_entry:
+                logger.warning(f"[OAuthCallback] Missing or unverified OAuth state parameter: {state}")
+                self._set_headers("text/html", 400)
+                self._write_response("<h3>Microsoft Entra Authentication Error</h3><p>Invalid or expired login session state. Please try logging in again.</p><br><a href='/'>Return to Opsmeld Platform</a>".encode("utf-8"))
+                return
+
+            flow, _ = flow_entry
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             host = self.headers.get("Host", "ar.opsmeld.com")
@@ -845,10 +883,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                         authority=authority
                     )
 
-                result = app.acquire_token_by_authorization_code(
-                    code,
-                    scopes=["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"],
-                    redirect_uri=redirect_uri
+                auth_response = {k: v[0] for k, v in query_params.items()}
+                result = app.acquire_token_by_auth_code_flow(
+                    flow,
+                    auth_response
                 )
                 if isinstance(result, dict):
                     if "error" in result:
