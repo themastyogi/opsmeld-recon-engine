@@ -197,3 +197,84 @@ def test_bc_mcp_client_execute_jsonrpc_http_error_path_no_nameerror(monkeypatch)
     assert res["http_status"] == 401
     assert res["endpoint"] == "tools/call"
     assert res["error_code"] == "Unauthorized"
+
+
+def test_filter_companies_for_session_fail_closed_and_acl():
+    """Verifies that filter_companies_for_session:
+    1. Returns all companies for ENTERPRISE_ADMIN or CUSTOMER_ADMIN.
+    2. Fails closed (returns empty list) when allowed_companies is empty for non-admin.
+    3. Returns only explicitly granted companies when allowed_companies has items.
+    """
+    from web.app import filter_companies_for_session
+    from unittest.mock import Mock
+
+    discovered = [
+        {"id": "comp-A", "name": "Company A"},
+        {"id": "comp-B", "name": "Company B"},
+        {"id": "comp-C", "name": "Company C"}
+    ]
+
+    # Admin session
+    admin_session = Mock()
+    admin_session.roles = ["ENTERPRISE_ADMIN"]
+    admin_session.allowed_companies = set()
+    assert filter_companies_for_session(discovered, admin_session) == discovered
+
+    # Non-admin session with empty allowed_companies -> FAIL CLOSED (zero companies)
+    user_empty = Mock()
+    user_empty.roles = ["DATA_TRUST_VIEWER"]
+    user_empty.allowed_companies = set()
+    assert filter_companies_for_session(discovered, user_empty) == []
+
+    # Non-admin session with None allowed_companies -> FAIL CLOSED
+    user_none = Mock()
+    user_none.roles = ["DATA_TRUST_VIEWER"]
+    user_none.allowed_companies = None
+    assert filter_companies_for_session(discovered, user_none) == []
+
+    # Non-admin session with explicit allowed_companies = {"comp-A"}
+    user_comp_a = Mock()
+    user_comp_a.roles = ["DATA_TRUST_VIEWER"]
+    user_comp_a.allowed_companies = {"comp-A"}
+    filtered_a = filter_companies_for_session(discovered, user_comp_a)
+    assert len(filtered_a) == 1
+    assert filtered_a[0]["id"] == "comp-A"
+
+
+def test_device_flow_concurrency_and_cleanup():
+    """Verifies that ACTIVE_DEVICE_FLOWS supports concurrent logins and cleanup removes expired flows."""
+    import time
+    from web.app import ACTIVE_DEVICE_FLOWS, cleanup_expired_device_flows, DEVICE_FLOW_TTL
+
+    ACTIVE_DEVICE_FLOWS.clear()
+
+    # Flow 1
+    ACTIVE_DEVICE_FLOWS["flow_1"] = {
+        "flow": {"user_code": "CODE1"},
+        "created_at": time.time(),
+        "client_key": "key1"
+    }
+
+    # Flow 2 (concurrent)
+    ACTIVE_DEVICE_FLOWS["flow_2"] = {
+        "flow": {"user_code": "CODE2"},
+        "created_at": time.time(),
+        "client_key": "key2"
+    }
+
+    assert len(ACTIVE_DEVICE_FLOWS) == 2
+    assert ACTIVE_DEVICE_FLOWS["flow_1"]["flow"]["user_code"] == "CODE1"
+    assert ACTIVE_DEVICE_FLOWS["flow_2"]["flow"]["user_code"] == "CODE2"
+
+    # Expired flow
+    ACTIVE_DEVICE_FLOWS["flow_expired"] = {
+        "flow": {"user_code": "EXPIRED"},
+        "created_at": time.time() - (DEVICE_FLOW_TTL + 10),
+        "client_key": "key3"
+    }
+
+    cleanup_expired_device_flows()
+    assert "flow_expired" not in ACTIVE_DEVICE_FLOWS
+    assert "flow_1" in ACTIVE_DEVICE_FLOWS
+    assert "flow_2" in ACTIVE_DEVICE_FLOWS
+    ACTIVE_DEVICE_FLOWS.clear()

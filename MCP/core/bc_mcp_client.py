@@ -163,17 +163,20 @@ class BCMCPClient:
                 authority=f"https://login.microsoftonline.com/{tenant_id}",
                 token_cache=cache
             )
-            scopes = ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"]
+            scopes = ["email", "https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"]
             flow = app.initiate_device_flow(scopes=scopes)
             if "user_code" not in flow:
-                scopes = ["https://api.businesscentral.dynamics.com/user_impersonation"]
+                scopes = ["email", "https://api.businesscentral.dynamics.com/user_impersonation"]
+                flow = app.initiate_device_flow(scopes=scopes)
+            if "user_code" not in flow:
+                scopes = ["https://api.businesscentral.dynamics.com/Financials.ReadWrite.All"]
                 flow = app.initiate_device_flow(scopes=scopes)
             return flow
         except Exception as e:
             return {"error": str(e)}
 
     def complete_device_flow(self, flow: Dict[str, Any]) -> Dict[str, Any]:
-        """Completes device code flow and persists token cache."""
+        """Completes device code flow, extracts identity claims, and persists token cache."""
         try:
             import msal
             tenant_id = self._get_tenant_id()
@@ -191,7 +194,22 @@ class BCMCPClient:
                 self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(self.token_cache_path, "w", encoding="utf-8") as f:
                     f.write(cache.serialize())
-                return {"status": "success", "access_token": result["access_token"]}
+
+                # Task 1: Extract verified email, oid, and display name from ID token claims
+                claims = result.get("id_token_claims", {})
+                email = claims.get("preferred_username") or claims.get("email") or claims.get("upn")
+                name = claims.get("name") or email
+                oid = claims.get("oid")
+
+                return {
+                    "status": "success",
+                    "access_token": result["access_token"],
+                    "email": email,
+                    "name": name,
+                    "display_name": name,
+                    "oid": oid,
+                    "id_token_claims": claims
+                }
             return {"error": result.get("error_description", "Authentication pending or failed.")}
         except Exception as e:
             return {"error": str(e)}

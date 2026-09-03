@@ -29,9 +29,29 @@ from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
 
 import logging
+import time
+import secrets
 logger = logging.getLogger(__name__)
 
-CURRENT_DEVICE_FLOW = None
+ACTIVE_DEVICE_FLOWS: Dict[str, Dict[str, Any]] = {}
+DEVICE_FLOW_TTL = 900  # 15 minutes TTL
+
+def cleanup_expired_device_flows():
+    """Removes abandoned device code flows older than TTL."""
+    now = time.time()
+    expired = [fid for fid, data in ACTIVE_DEVICE_FLOWS.items() if now - data.get("created_at", now) > DEVICE_FLOW_TTL]
+    for fid in expired:
+        ACTIVE_DEVICE_FLOWS.pop(fid, None)
+
+def filter_companies_for_session(discovered: list, session) -> list:
+    """Filters discovered companies by session company ACL. Fails closed (empty list) on empty allowed_companies."""
+    roles = getattr(session, "roles", [])
+    if "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles:
+        return discovered
+    user_allowed = getattr(session, "allowed_companies", set())
+    if not user_allowed:
+        return []  # resolved decision: fail closed, not fail open
+    return [c for c in discovered if c.get("id") in user_allowed]
 
 
 
@@ -297,17 +317,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config(client_key)
             client = BCMCPClient(config)
             mgr = CompanyAccessManager()
-            discovered, data_source = mgr.get_discovered_companies_with_provenance(client)
+            discovered, data_source = mgr.get_discovered_companies_with_provenance(client)[:2]
             
-            user_allowed = getattr(session, "allowed_companies", set())
-            roles = getattr(session, "roles", [])
-            is_admin = "ENTERPRISE_ADMIN" in roles or "CUSTOMER_ADMIN" in roles
-            
-            permitted_companies = []
-            for comp in discovered:
-                c_id = comp.get("id")
-                if is_admin or not user_allowed or c_id in user_allowed:
-                    permitted_companies.append(comp)
+            permitted_companies = filter_companies_for_session(discovered, session)
 
             self._set_headers("application/json", 200)
             self._write_response(json.dumps({
@@ -489,22 +501,40 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             config = load_client_config(client_key)
             client = BCMCPClient(config)
             flow = client.start_device_flow()
-            CURRENT_DEVICE_FLOW = flow
+            cleanup_expired_device_flows()
+            flow_id = secrets.token_urlsafe(16)
+            ACTIVE_DEVICE_FLOWS[flow_id] = {
+                "flow": flow,
+                "created_at": time.time(),
+                "client_key": client_key
+            }
+            res_flow = dict(flow) if isinstance(flow, dict) else {}
+            res_flow["flow_id"] = flow_id
             self._set_headers("application/json")
-            self._write_response(json.dumps(flow).encode("utf-8"))
+            self._write_response(json.dumps(res_flow).encode("utf-8"))
 
         elif path == "/api/auth/poll":
-            if not CURRENT_DEVICE_FLOW:
+            cleanup_expired_device_flows()
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            flow_id = query_params.get("flow_id", [None])[0]
+            
+            # Also allow flow_id passed in header or cookie or fallback to only active flow
+            if not flow_id and len(ACTIVE_DEVICE_FLOWS) == 1:
+                flow_id = next(iter(ACTIVE_DEVICE_FLOWS.keys()))
+
+            flow_entry = ACTIVE_DEVICE_FLOWS.get(flow_id) if flow_id else None
+            if not flow_entry:
                 self._set_headers("application/json")
-                self._write_response(json.dumps({"status": "error", "message": "No active device authorization flow"}).encode("utf-8"))
+                self._write_response(json.dumps({"status": "error", "message": "No active device authorization flow or flow expired"}).encode("utf-8"))
             else:
-                client_key = self._get_client_key(parsed_url)
+                flow = flow_entry["flow"]
+                client_key = flow_entry.get("client_key") or self._get_client_key(parsed_url)
                 config = load_client_config(client_key)
                 client = BCMCPClient(config)
-                result = client.complete_device_flow(CURRENT_DEVICE_FLOW)
+                result = client.complete_device_flow(flow)
                 if result and result.get("status") == "success":
-                    CURRENT_DEVICE_FLOW = None
-                    email = result.get("email") or result.get("username") or "user@company.com"
+                    ACTIVE_DEVICE_FLOWS.pop(flow_id, None)
+                    email = result.get("email")
                     display_name = result.get("name") or result.get("display_name") or email
                     entra_oid = result.get("oid")
                     token = get_auth_manager().login_entra_user(email=email, display_name=display_name, entra_oid=entra_oid)
@@ -522,9 +552,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self._write_response(json.dumps(result).encode("utf-8"))
 
         elif path == "/api/auth/session_status":
-            is_auth = self._is_authenticated()
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token) if token else None
+            is_auth = bool(session and not session.is_expired())
+            user_identity = session.email if (is_auth and session) else None
             self._set_headers("application/json")
-            self._write_response(json.dumps({"authenticated": is_auth, "user": "admin@opsmeld.com" if is_auth else None}).encode("utf-8"))
+            self._write_response(json.dumps({"authenticated": is_auth, "user": user_identity}).encode("utf-8"))
 
         # Route-level security boundary: _require_auth() enforced before company discovery or orchestrator creation
         elif path == "/api/data-trust/authorized-companies":
@@ -539,12 +572,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             mgr = CompanyAccessManager()
             discovered, data_source, err_detail = mgr.get_discovered_companies_with_provenance(client)
-            status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(discovered) > 0 else "DATA_UNAVAILABLE"
+
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            filtered_companies = filter_companies_for_session(discovered, session)
+
+            status = "SUCCESS" if data_source == "LIVE_BUSINESS_CENTRAL" and len(filtered_companies) > 0 else "DATA_UNAVAILABLE"
             self._set_headers("application/json")
             self._write_response(json.dumps({
                 "status": status,
                 "data_source": data_source,
-                "companies": discovered,
+                "companies": filtered_companies,
                 "error_detail": err_detail
             }).encode("utf-8"))
 
@@ -843,8 +881,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             redirect_uri = f"https://{host}/api/auth/callback"
 
             auth_mgr = get_auth_manager()
-            email = "admin@opsmeld.com"
-            name = "Vikas Kumar (Microsoft Entra)"
+            email = None
+            name = None
             oid = None
             access_token = None
             tenant_id = None
@@ -881,12 +919,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     access_token = result.get("access_token")
                     if "id_token_claims" in result:
                         claims = result["id_token_claims"]
-                        email = claims.get("preferred_username") or claims.get("email") or claims.get("upn") or email
-                        name = claims.get("name") or name
+                        email = claims.get("preferred_username") or claims.get("email") or claims.get("upn")
+                        name = claims.get("name") or email
                         oid = claims.get("oid")
                         tenant_id = claims.get("tid")
             except Exception as e:
                 print(f"[OAuthCallback] Code exchange notice: {e}", flush=True)
+
+            if not email and not oid:
+                self._set_headers("text/html", 400)
+                self._write_response("<h3>Microsoft Entra Authentication Error</h3><p>Could not extract verified identity claims from token.</p><br><a href='/'>Return to Opsmeld Platform</a>".encode("utf-8"))
+                return
 
             token = auth_mgr.login_entra_user(email=email, display_name=name, entra_oid=oid, access_token=access_token, tenant_id=tenant_id)
 
@@ -927,9 +970,15 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 config = load_client_config(client_key)
                 client = BCMCPClient(config)
                 flow = client.start_device_flow()
-                global CURRENT_DEVICE_FLOW
-                CURRENT_DEVICE_FLOW = flow
+                cleanup_expired_device_flows()
+                flow_id = secrets.token_urlsafe(16)
+                ACTIVE_DEVICE_FLOWS[flow_id] = {
+                    "flow": flow,
+                    "created_at": time.time(),
+                    "client_key": client_key
+                }
                 res_flow = dict(flow) if isinstance(flow, dict) else {}
+                res_flow["flow_id"] = flow_id
                 res_flow["status"] = "device_authorization_required"
                 self._set_headers("application/json", 200)
                 self._write_response(json.dumps(res_flow).encode("utf-8"))
@@ -1194,7 +1243,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 except Exception:
                     new_config = cfg_mgr.load_config()
 
-            user_identity = session_info.get("username") or "admin@opsmeld.com"
+            user_identity = session_info.get("email") or session_info.get("username") or session_info.get("user_id") or "authorized_user"
             saved, errors = cfg_mgr.save_config(new_config, user=user_identity)
             if saved:
                 res = {"status": "success", "message": "Data Trust configuration saved successfully"}

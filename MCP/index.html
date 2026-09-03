@@ -548,11 +548,11 @@
             <form onsubmit="OpsmeldAuth.handlePasswordLogin(event)">
                 <div style="text-align: left; margin-bottom: 14px;">
                     <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Email / Username</label>
-                    <input type="text" id="app-login-email" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
+                    <input type="text" id="app-login-email" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="user@company.com" required>
                 </div>
                 <div style="text-align: left; margin-bottom: 20px;">
                     <label style="font-size: 0.78rem; font-weight: 700; color: #CBD5E1; display: block; margin-bottom: 4px;">Password</label>
-                    <input type="password" id="app-login-pass" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="••••••••" value="password123" required>
+                    <input type="password" id="app-login-pass" class="input" style="width: 100%; font-size: 0.88rem; padding: 10px 12px; background: #0F172A; border: 1px solid #334155; color: white; border-radius: 8px;" placeholder="••••••••" required>
                 </div>
 
                 <div id="app-login-error" style="display: none; background: #FEE2E2; color: #DC2626; font-size: 0.78rem; font-weight: 600; padding: 8px; border-radius: 6px; margin-bottom: 14px;">
@@ -1606,14 +1606,16 @@
             fetch('/api/auth/entra/device-flow', { credentials: 'same-origin' })
                 .then(res => res.json())
                 .then(data => {
+                    const flowId = data.flow_id || '';
                     if (data.user_code && codeEl) {
                         codeEl.innerText = data.user_code;
                         if (linkEl && data.verification_uri) {
                             linkEl.href = data.verification_uri;
                         }
-                        // Start polling /api/auth/poll every 3 seconds to complete Entra sign-in automatically
+                        // Start polling /api/auth/poll with flow_id every 3 seconds to complete Entra sign-in
                         this.pollInterval = setInterval(() => {
-                            fetch('/api/auth/poll', { credentials: 'same-origin' })
+                            const pollUrl = flowId ? `/api/auth/poll?flow_id=${encodeURIComponent(flowId)}` : '/api/auth/poll';
+                            fetch(pollUrl, { credentials: 'same-origin' })
                                 .then(res => res.json())
                                 .then(pollRes => {
                                     if (pollRes.status === 'success' || pollRes.token) {
@@ -1622,13 +1624,21 @@
                                         if (pollRes.token) {
                                             localStorage.setItem('opsmeld_token', pollRes.token);
                                             document.cookie = `session=${pollRes.token}; path=/; max-age=86400; SameSite=Lax`;
+                                            this.closeModal();
+                                            switchMainView('data-trust');
+                                            loadAuthorizedCompanies();
+                                        } else {
+                                            if (codeEl) codeEl.innerText = 'AUTHENTICATION FAILED';
                                         }
-                                        this.closeModal();
-                                        switchMainView('data-trust');
-                                        loadAuthorizedCompanies();
+                                    } else if (pollRes.error && pollRes.error !== 'authorization_pending') {
+                                        clearInterval(this.pollInterval);
+                                        this.pollInterval = null;
+                                        if (codeEl) codeEl.innerText = pollRes.message || pollRes.error;
                                     }
                                 })
-                                .catch(err => console.error("Auth poll error:", err));
+                                .catch(err => {
+                                    console.error("Auth poll error:", err);
+                                });
                         }, 3000);
                     } else if (data.message && codeEl) {
                         codeEl.innerText = data.message;
@@ -1638,7 +1648,7 @@
                 })
                 .catch(err => {
                     console.error("Device flow error:", err);
-                    if (codeEl) codeEl.innerText = 'HTTPS ENTRA ONLINE';
+                    if (codeEl) codeEl.innerText = 'AUTHENTICATION ERROR';
                 });
         },
         handlePasswordLogin: function(e) {
@@ -1723,7 +1733,7 @@
                     }
                 });
             } else {
-                switchMainView('control-tower');
+                switchMainView('public');
             }
         } else {
             switchMainView('public');
@@ -3405,11 +3415,11 @@
             <form onsubmit="performAppLogin(event)">
                 <div style="text-align:left; margin-bottom:14px;">
                     <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Email / Username</label>
-                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="admin@opsmeld.com" value="admin@opsmeld.com" required>
+                    <input type="text" id="app-login-email" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="user@company.com" required>
                 </div>
                 <div style="text-align:left; margin-bottom:20px;">
                     <label style="font-size:0.78rem; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Password</label>
-                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" value="password123" required>
+                    <input type="password" id="app-login-pass" class="input" style="width:100%; font-size:0.88rem; padding:8px 12px;" placeholder="••••••••" required>
                 </div>
 
                 <div id="app-login-error" style="display:none; background:#FEE2E2; color:#DC2626; font-size:0.78rem; font-weight:600; padding:8px; border-radius:6px; margin-bottom:14px;">
