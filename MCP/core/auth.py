@@ -288,15 +288,16 @@ class AuthManager:
                 tenant_id=tenant_id
             )
 
-        # Grant provisioned session to all authenticated Microsoft Entra users
+        # Unresolved identity gets an unprovisioned session (fail-closed)
         return self.create_session(
             user_id=f"usr_entra_{int(time.time())}",
             email=user_email,
             display_name=name,
-            organization_id="org_abc_001",
-            roles=["ENTERPRISE_ADMIN"],
-            allowed_companies=self.default_admin_companies,
-            provisioned=True,
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False,
             access_token=access_token,
             tenant_id=tenant_id
         )
