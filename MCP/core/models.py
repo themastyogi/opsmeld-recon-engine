@@ -4,8 +4,13 @@ Defines multi-tenant data structures, organization lifecycle state machine, regi
 Opsmeld Platform -> Registration / Prospect -> Approval -> Customer Organization -> Subscription -> Module -> User -> Role -> Permission -> BC Company
 """
 
+import os
 import time
 from typing import Dict, List, Set, Optional, Any, Tuple
+
+BOOTSTRAP_ORG_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ORG_NAME")
+BOOTSTRAP_ADMIN_EMAIL = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_EMAIL")
+BOOTSTRAP_ADMIN_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_NAME")
 
 
 class OrganizationStatus:
@@ -187,6 +192,7 @@ class MultitenantDataStore:
         self.access_requests: Dict[str, AccessRequest] = {}
 
         self._seed_default_tenants()
+        self.bootstrap_from_env()
 
     def _seed_default_tenants(self):
         """Seeds default multi-tenant baseline for production and testing."""
@@ -435,6 +441,71 @@ class MultitenantDataStore:
                 json.dump(data, f, indent=2)
         except Exception:
             pass
+
+    def bootstrap_from_env(self) -> Optional[Organization]:
+        """
+        Environment-variable-driven bootstrap logic for real customer organization and admin.
+        Safe and idempotent: runs once only when environment variables are configured
+        and the organization does not already exist.
+        """
+        org_name = (os.environ.get("OPSMELD_BOOTSTRAP_ORG_NAME") or "").strip()
+        admin_email = (os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_EMAIL") or "").strip()
+        admin_name = (os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_NAME") or "").strip()
+
+        if not org_name or not admin_email:
+            return None
+
+        existing = next((o for o in self.organizations.values() if o.name.strip().lower() == org_name.lower()), None)
+        if existing:
+            return existing
+
+        org_id = f"org_{len(self.organizations) + 101}"
+        org = Organization(org_id, org_name, OrganizationStatus.ACTIVE)
+        self.organizations[org_id] = org
+        self.subscriptions[org_id] = Subscription(f"sub_{org_id}", org_id, "Enterprise")
+        self.org_modules[org_id] = {"ar_control_tower", "data_trust"}
+
+        # Roles for new Organization
+        self.org_roles[org_id] = {
+            "CUSTOMER_ADMIN": {
+                "ar_control_tower:read", "ar_control_tower:write",
+                "data_trust:read", "data_trust:write",
+                "layer_3:read", "layer_3:write",
+                "org:users:manage", "org:roles:manage", "org:companies:manage"
+            },
+            "VIEWER": {
+                "ar_control_tower:read",
+                "data_trust:read",
+                "layer_3:read"
+            }
+        }
+
+        # Seeded demo company GUIDs (matches BC demo baseline)
+        comp_cronus = OrganizationCompany(f"comp_{org_id}_1", org_id, "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "CRONUS IN")
+        comp_mycompany = OrganizationCompany(f"comp_{org_id}_2", org_id, "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "My Company")
+        comp_sandbox = OrganizationCompany(f"comp_{org_id}_3", org_id, "c4e0106b-159e-f111-8072-7ced8d9f80ff", "Sandbox")
+        self.org_companies[org_id] = [comp_cronus, comp_mycompany, comp_sandbox]
+
+        allowed_companies = {
+            comp_cronus.bc_company_guid,
+            comp_mycompany.bc_company_guid,
+            comp_sandbox.bc_company_guid,
+            "GUID-COMP-01", "GUID-COMP-02", "GUID-COMP-A", "GUID-COMP-B"
+        }
+
+        user_id = self.provision_org_user(
+            org_id=org_id,
+            email=admin_email,
+            display_name=admin_name or admin_email,
+            allowed_companies=allowed_companies,
+            role="CUSTOMER_ADMIN"
+        )
+        if user_id in self.users:
+            self.users[user_id].must_change_password = False
+
+        self.persist()
+        return org
+
 
 
 _GLOBAL_DATASTORE = MultitenantDataStore()

@@ -1571,6 +1571,7 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 
 
 def create_server(host: str = "0.0.0.0", port: int = 8000) -> HTTPServer:
+    get_datastore().bootstrap_from_env()
     return ReusableHTTPServer((host, port), OpsmeldWebHandler)
 
 

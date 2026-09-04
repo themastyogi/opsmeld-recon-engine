@@ -625,6 +625,40 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         self.assertEqual(len(matching_reqs), 0)
         ctx.close()
 
+    def test_bootstrap_customer_admin_e2e_login(self):
+        """Bootstrapped customer admin completes Entra login, lands in app shell, not account-not-provisioned."""
+        from core.models import get_datastore
+        from core.auth import get_auth_manager
+        import os
+        from unittest.mock import patch
+
+        test_email = "vikas_test_bootstrap@realorg.com"
+        test_org = "Real Company Inc"
+        test_name = "Vikas TestAdmin"
+
+        with patch.dict(os.environ, {
+            "OPSMELD_BOOTSTRAP_ORG_NAME": test_org,
+            "OPSMELD_BOOTSTRAP_ADMIN_EMAIL": test_email,
+            "OPSMELD_BOOTSTRAP_ADMIN_NAME": test_name
+        }):
+            ds = get_datastore()
+            ds.bootstrap_from_env()
+            auth_mgr = get_auth_manager()
+
+            token = auth_mgr.login_entra_user(email=test_email, display_name=test_name)
+
+            ctx = self.browser.new_context()
+            ctx.add_cookies([{"name": "session", "value": token, "domain": "127.0.0.1", "path": "/"}])
+            page = ctx.new_page()
+
+            page.goto(f"{self.base_url}/?login=success")
+            page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
+            self.assertTrue(page.is_visible("#view-app-shell"))
+            self.assertFalse(page.is_visible("#view-account-not-provisioned"))
+            self.assertFalse(page.is_visible("#view-change-password"))
+            ctx.close()
+
 
 if __name__ == "__main__":
     unittest.main()
+
