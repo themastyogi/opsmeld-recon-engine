@@ -101,6 +101,11 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     },
     "COMPLIANCE_AUDITOR": {
         "layer_3:read"
+    },
+    "VIEWER": {
+        "ar_control_tower:read",
+        "data_trust:read",
+        "layer_3:read"
     }
 }
 

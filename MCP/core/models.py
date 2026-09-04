@@ -221,7 +221,12 @@ class MultitenantDataStore:
                 "org:users:manage", "org:roles:manage", "org:companies:manage"
             },
             "AR_ANALYST": {"ar_control_tower:read", "ar_control_tower:write"},
-            "DATA_TRUST_AUDITOR": {"data_trust:read"}
+            "DATA_TRUST_AUDITOR": {"data_trust:read"},
+            "VIEWER": {
+                "ar_control_tower:read",
+                "data_trust:read",
+                "layer_3:read"
+            }
         }
         self.user_roles[f"{admin_user.user_id}:{org_abc.organization_id}"] = {"CUSTOMER_ADMIN"}
 
@@ -258,7 +263,11 @@ class MultitenantDataStore:
         roles_dict = self.org_roles.get(org_id, {})
         perms: Set[str] = set()
         for r_id in role_ids:
-            perms.update(roles_dict.get(r_id, set()))
+            if r_id in roles_dict:
+                perms.update(roles_dict[r_id])
+            else:
+                from core.rbac import ROLE_PERMISSIONS
+                perms.update(ROLE_PERMISSIONS.get(r_id, set()))
         return perms
 
     def get_user_allowed_companies(self, user_id: str, org_id: str) -> Set[str]:
@@ -332,6 +341,11 @@ class MultitenantDataStore:
                 "data_trust:read", "data_trust:write",
                 "layer_3:read", "layer_3:write",
                 "org:users:manage", "org:roles:manage", "org:companies:manage"
+            },
+            "VIEWER": {
+                "ar_control_tower:read",
+                "data_trust:read",
+                "layer_3:read"
             }
         }
         self.user_roles[f"{user_id}:{org_id}"] = {"CUSTOMER_ADMIN"}
@@ -339,6 +353,40 @@ class MultitenantDataStore:
         self.user_company_acls[f"{user_id}:{org_id}"] = set()
 
         return org
+
+    def provision_viewer_user(self, org_id: str, email: str, display_name: str, allowed_companies: set) -> str:
+        """Admin-provisioned, read-only, password-login user. Mirrors the registration-approval
+        provisioning pattern but adds to an EXISTING organization rather than creating a new one."""
+        org = self.get_organization(org_id)
+        if not org:
+            raise ValueError(f"Organization '{org_id}' does not exist.")
+
+        org_roles = self.org_roles.setdefault(org_id, {})
+        if "VIEWER" not in org_roles:
+            from core.rbac import ROLE_PERMISSIONS
+            org_roles["VIEWER"] = set(ROLE_PERMISSIONS.get("VIEWER", set()))
+
+        email_clean = (email or "").strip().lower()
+        existing_user = None
+        for u in self.users.values():
+            if u.email.strip().lower() == email_clean:
+                existing_user = u
+                break
+
+        if existing_user:
+            user_id = existing_user.user_id
+            if display_name:
+                existing_user.display_name = display_name
+        else:
+            user_id = f"usr_{len(self.users) + 101}"
+            user = User(user_id, f"oid_{user_id}", email, display_name)
+            self.users[user_id] = user
+
+        self.org_users.setdefault(org_id, set()).add(user_id)
+        self.user_org[user_id] = org_id
+        self.user_roles[f"{user_id}:{org_id}"] = {"VIEWER"}
+        self.user_company_acls[f"{user_id}:{org_id}"] = set(allowed_companies)
+        return user_id
 
     def create_access_request(self, organization_id: str, user_id: str, email: str, display_name: str) -> AccessRequest:
         req_id = f"req_{len(self.access_requests) + 101}"

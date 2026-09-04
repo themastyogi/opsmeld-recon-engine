@@ -533,9 +533,33 @@
             </p>
             
             <!-- Canonical Microsoft Entra SSO (Browser Authorization Code Flow) -->
-            <a href="/api/auth/entra/authorize" class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+            <a href="/api/auth/entra/authorize" class="btn-btn" style="background: #059669; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 14px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
                 🔑 Continue with Microsoft Entra ID
             </a>
+
+            <!-- Secondary Email/Password Login for Read-Only / Admin-Provisioned Accounts -->
+            <div style="margin-bottom: 20px;">
+                <a href="javascript:void(0)" id="email-login-toggle" onclick="toggleEmailLoginForm()" style="font-size: 0.82rem; color: #94A3B8; text-decoration: underline; cursor: pointer;">
+                    Sign in with email instead
+                </a>
+            </div>
+
+            <div id="email-login-container" style="display: none; text-align: left; margin-bottom: 24px; padding-top: 16px; border-top: 1px solid #334155;">
+                <form id="email-login-form" onsubmit="handleEmailPasswordLogin(event)">
+                    <div style="margin-bottom: 12px;">
+                        <label for="email-login-input" style="display: block; font-size: 0.78rem; font-weight: 600; color: #CBD5E1; margin-bottom: 4px;">Email</label>
+                        <input type="email" id="email-login-input" required placeholder="name@company.com" style="width: 100%; padding: 10px 12px; background: #0F172A; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 0.88rem; box-sizing: border-box;" autocomplete="username">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label for="password-login-input" style="display: block; font-size: 0.78rem; font-weight: 600; color: #CBD5E1; margin-bottom: 4px;">Password</label>
+                        <input type="password" id="password-login-input" required placeholder="Enter password" style="width: 100%; padding: 10px 12px; background: #0F172A; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 0.88rem; box-sizing: border-box;" autocomplete="current-password">
+                    </div>
+                    <div id="email-login-error" style="display: none; font-size: 0.8rem; color: #EF4444; margin-bottom: 12px;"></div>
+                    <button type="submit" id="email-login-submit" class="btn-btn" style="background: #3B82F6; color: white; width: 100%; font-size: 0.9rem; font-weight: 700; padding: 10px; border-radius: 6px; cursor: pointer; border: none;">
+                        Sign In
+                    </button>
+                </form>
+            </div>
 
             <div style="font-size: 0.78rem; color: #64748B; cursor: pointer;" onclick="switchMainView('public')">
                 ← Back to Opsmeld Platform
@@ -1543,6 +1567,70 @@
 
     function openAppLoginModal() {
         window.location.href = '/api/auth/entra/authorize';
+    }
+
+    function toggleEmailLoginForm() {
+        const c = document.getElementById('email-login-container');
+        if (!c) return;
+        const isHidden = (c.style.display === 'none' || c.style.display === '');
+        c.style.display = isHidden ? 'block' : 'none';
+        const toggle = document.getElementById('email-login-toggle');
+        if (toggle) {
+            toggle.innerText = isHidden ? 'Hide email sign in' : 'Sign in with email instead';
+        }
+    }
+
+    function handleEmailPasswordLogin(event) {
+        event.preventDefault();
+        const emailEl = document.getElementById('email-login-input');
+        const passEl = document.getElementById('password-login-input');
+        const errEl = document.getElementById('email-login-error');
+        if (!emailEl || !passEl) return;
+        const email = emailEl.value.trim();
+        const password = passEl.value;
+        if (errEl) { errEl.style.display = 'none'; errEl.innerText = ''; }
+
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, password: password })
+        })
+        .then(res => {
+            if (!res.ok) {
+                return res.json().catch(() => ({ error: 'Invalid email or password' })).then(d => {
+                    throw new Error(d.error || 'Authentication failed');
+                });
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (data && data.token) {
+                localStorage.setItem('opsmeld_token', data.token);
+                document.cookie = `session=${data.token}; Path=/; SameSite=Lax`;
+                document.cookie = `opsmeld_token=${data.token}; Path=/; SameSite=Lax`;
+                window.location.href = '/?login=success';
+            } else {
+                throw new Error('No session token received');
+            }
+        })
+        .catch(err => {
+            if (errEl) {
+                errEl.style.display = 'block';
+                errEl.innerText = err.message || 'Login failed';
+            }
+        });
+    }
+
+    function performAppLogout() {
+        if (window.OpsmeldSession && typeof window.OpsmeldSession.logout === 'function') {
+            window.OpsmeldSession.logout();
+        } else {
+            fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
+                localStorage.removeItem('opsmeld_token');
+                document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                switchMainView('public');
+            });
+        }
     }
 
     function getAuthHeaders() {

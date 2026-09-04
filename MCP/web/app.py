@@ -1050,6 +1050,96 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"status": "success", "organization_id": org_id, "org_status": org.status if org else None}).encode("utf-8"))
             return
 
+        elif path == "/api/admin/viewers":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or not getattr(session, "provisioned", True):
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
+                return
+
+            has_manage_perm = "org:users:manage" in getattr(session, "permissions", set()) or "ENTERPRISE_ADMIN" in getattr(session, "roles", [])
+            if not has_manage_perm:
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Requires org:users:manage or ENTERPRISE_ADMIN"}).encode("utf-8"))
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
+            email = (data.get("email") or "").strip().lower()
+            display_name = (data.get("display_name") or "").strip() or email
+            allowed_companies = data.get("allowed_companies", [])
+
+            if not email or "@" not in email:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Valid business email required"}).encode("utf-8"))
+                return
+
+            if not isinstance(allowed_companies, (list, set)) or len(allowed_companies) == 0:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: allowed_companies must be a non-empty list of company GUIDs"}).encode("utf-8"))
+                return
+
+            ds = get_datastore()
+            org_id = data.get("organization_id") or getattr(session, "organization_id", None)
+            if not org_id or not ds.get_organization(org_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid organization"}).encode("utf-8"))
+                return
+
+            # Validate requested companies are real, discoverable companies for this organization
+            org_comps = ds.org_companies.get(org_id, [])
+            valid_org_companies = {c.bc_company_guid for c in org_comps} | {c.name for c in org_comps}
+            if getattr(session, "allowed_companies", None):
+                valid_org_companies.update(session.allowed_companies)
+
+            try:
+                mgr = CompanyAccessManager()
+                disc = mgr.get_discovered_companies(None)
+                valid_org_companies.update(c.get("id") for c in disc if c.get("id"))
+                valid_org_companies.update(c.get("name") for c in disc if c.get("name"))
+            except Exception:
+                pass
+
+            invalid_companies = [c for c in allowed_companies if c not in valid_org_companies]
+            if invalid_companies:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": f"Bad Request: Company GUID(s) not discoverable or authorized for this organization: {invalid_companies}"
+                }).encode("utf-8"))
+                return
+
+            # Generate random password (never logged, never stored in plaintext)
+            generated_password = secrets.token_urlsafe(16)
+
+            # Provision viewer user in datastore
+            user_id = ds.provision_viewer_user(org_id, email, display_name, set(allowed_companies))
+
+            # Set hashed password in AuthManager
+            auth_mgr = get_auth_manager()
+            auth_mgr.set_user_password(email, generated_password)
+
+            self._set_headers("application/json", 201)
+            self._write_response(json.dumps({
+                "status": "success",
+                "message": f"Viewer account provisioned for '{email}'.",
+                "user_id": user_id,
+                "email": email,
+                "display_name": display_name,
+                "organization_id": org_id,
+                "role": "VIEWER",
+                "allowed_companies": list(allowed_companies),
+                "temporary_password": generated_password
+            }).encode("utf-8"))
+            return
+
         elif path == "/api/settings":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
