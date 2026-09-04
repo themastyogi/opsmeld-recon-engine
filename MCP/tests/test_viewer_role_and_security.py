@@ -150,6 +150,16 @@ class TestViewerRoleAndSecurity(unittest.TestCase):
             self.assertEqual(resp_login.status, 200)
             login_data = json.loads(resp_login.read().decode("utf-8"))
             viewer_token = login_data["token"]
+            self.assertTrue(login_data.get("must_change_password"))
+
+        # Must change password on first login before accessing read endpoints
+        req_change = urllib.request.Request(
+            f"{self.base_url}/api/auth/change-password",
+            data=json.dumps({"current_password": temp_password, "new_password": "NewPermanentPassword123!"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {viewer_token}"}
+        )
+        with urllib.request.urlopen(req_change) as resp_change:
+            self.assertEqual(resp_change.status, 200)
 
         req_read = urllib.request.Request(
             f"{self.base_url}/api/data-trust/findings?company_id={self.comp_a}",
@@ -430,6 +440,162 @@ class TestViewerRoleAndSecurity(unittest.TestCase):
             self.assertEqual(resp.status, 200)
 
         self.assertEqual(self.ds.org_modules.get("org_abc_001"), {"data_trust", "ar_control_tower"})
+
+    def test_must_change_password_lifecycle_and_enforcement(self):
+        """Verify temporary password forces password change on first login and blocks access until updated."""
+        # 1. Admin provisions a new viewer account
+        prov_url = f"{self.base_url}/api/admin/users"
+        prov_req = urllib.request.Request(
+            prov_url,
+            data=json.dumps({
+                "email": "must_change_user@opsmeld.com",
+                "display_name": "Must Change User",
+                "role": "VIEWER",
+                "allowed_companies": [self.comp_a]
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.admin_token}"
+            }
+        )
+        with urllib.request.urlopen(prov_req) as resp:
+            self.assertEqual(resp.status, 201)
+            prov_data = json.loads(resp.read().decode("utf-8"))
+
+        temp_password = prov_data["temporary_password"]
+
+        # 2. Login with temporary password
+        login_url = f"{self.base_url}/api/auth/login"
+        login_req = urllib.request.Request(
+            login_url,
+            data=json.dumps({
+                "email": "must_change_user@opsmeld.com",
+                "password": temp_password
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(login_req) as resp:
+            self.assertEqual(resp.status, 200)
+            login_data = json.loads(resp.read().decode("utf-8"))
+
+        user_token = login_data["token"]
+        self.assertTrue(login_data.get("must_change_password"))
+
+        # 3. GET /api/auth/me is ALLOWED and reports must_change_password: True
+        me_url = f"{self.base_url}/api/auth/me"
+        me_req = urllib.request.Request(
+            me_url,
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        with urllib.request.urlopen(me_req) as resp:
+            self.assertEqual(resp.status, 200)
+            me_data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(me_data.get("must_change_password"))
+
+        # 4. Accessing any protected endpoint returns HTTP 403 PASSWORD_CHANGE_REQUIRED
+        modules_url = f"{self.base_url}/api/portal/modules"
+        mod_req = urllib.request.Request(
+            modules_url,
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(mod_req)
+        self.assertEqual(ctx.exception.code, 403)
+        err_data = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertEqual(err_data.get("status"), "PASSWORD_CHANGE_REQUIRED")
+
+        # 5. POST /api/auth/change-password validation tests
+        change_url = f"{self.base_url}/api/auth/change-password"
+
+        # 5a. Wrong current password -> 401
+        wrong_req = urllib.request.Request(
+            change_url,
+            data=json.dumps({
+                "current_password": "WrongPassword123!",
+                "new_password": "ValidNewPassword456!"
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {user_token}"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(wrong_req)
+        self.assertEqual(ctx.exception.code, 401)
+
+        # 5b. New password < 12 characters -> 400
+        short_req = urllib.request.Request(
+            change_url,
+            data=json.dumps({
+                "current_password": temp_password,
+                "new_password": "Short123"
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {user_token}"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(short_req)
+        self.assertEqual(ctx.exception.code, 400)
+        short_err = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertIn("at least 12 characters", short_err.get("error", ""))
+
+        # 5c. New password same as current -> 400
+        same_req = urllib.request.Request(
+            change_url,
+            data=json.dumps({
+                "current_password": temp_password,
+                "new_password": temp_password
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {user_token}"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(same_req)
+        self.assertEqual(ctx.exception.code, 400)
+        same_err = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertIn("different from current", same_err.get("error", ""))
+
+        # 6. Successful password change
+        new_valid_password = "BrandNewSecurePassword2026!"
+        success_req = urllib.request.Request(
+            change_url,
+            data=json.dumps({
+                "current_password": temp_password,
+                "new_password": new_valid_password
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {user_token}"}
+        )
+        with urllib.request.urlopen(success_req) as resp:
+            self.assertEqual(resp.status, 200)
+            res_json = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(res_json.get("status"), "success")
+            self.assertFalse(res_json.get("must_change_password"))
+
+        # 7. Current session can now immediately access protected endpoints without 403
+        with urllib.request.urlopen(mod_req) as resp:
+            self.assertEqual(resp.status, 200)
+
+        # 8. Old temporary password fails to log in
+        old_login_req = urllib.request.Request(
+            login_url,
+            data=json.dumps({
+                "email": "must_change_user@opsmeld.com",
+                "password": temp_password
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(old_login_req)
+        self.assertEqual(ctx.exception.code, 401)
+
+        # 9. New password logs in successfully with must_change_password: False
+        new_login_req = urllib.request.Request(
+            login_url,
+            data=json.dumps({
+                "email": "must_change_user@opsmeld.com",
+                "password": new_valid_password
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(new_login_req) as resp:
+            self.assertEqual(resp.status, 200)
+            new_login_data = json.loads(resp.read().decode("utf-8"))
+            self.assertFalse(new_login_data.get("must_change_password"))
 
 
 if __name__ == "__main__":

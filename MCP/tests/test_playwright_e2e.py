@@ -423,6 +423,59 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
 
         self.assertEqual(len(self.console_errors), 0)
 
+    def test_must_change_password_e2e_flow(self):
+        """End-to-end browser journey: Admin provisions viewer -> Viewer logs in -> Forced to change password -> Enters new password -> Lands in Portal workspace."""
+        from core.models import get_datastore
+        from core.auth import get_auth_manager
+        ds = get_datastore()
+        auth_mgr = get_auth_manager()
+        email = "e2e_must_change@opsmeld.com"
+        temp_pass = "TempPassword12345!"
+        ds.provision_org_user("org_abc_001", email, "E2E Must Change", {"GUID-COMP-01"}, role="VIEWER")
+        auth_mgr.set_user_password(email, temp_pass)
+
+        # Clear cookies to start unauthenticated
+        self.context.clear_cookies()
+        self.page.goto(self.base_url)
+
+        # Click Sign In on landing page
+        self.page.click("button:has-text('Sign In')")
+        self.page.wait_for_selector("#view-signin-wall", state="visible")
+
+        # Open email login form
+        self.page.click("#email-login-toggle")
+        self.page.wait_for_selector("#email-login-form", state="visible")
+
+        # Fill credentials
+        self.page.fill("#email-login-input", email)
+        self.page.fill("#password-login-input", temp_pass)
+        self.page.click("#email-login-submit")
+
+        # Assert user is directed to Change Password screen, NOT app shell
+        self.page.wait_for_selector("#view-change-password", state="visible", timeout=5000)
+        self.assertFalse(self.page.is_visible("#view-app-shell"))
+
+        # Try navigating to control tower (guard test)
+        self.page.evaluate("switchMainView('control-tower')")
+        self.page.wait_for_timeout(500)
+        # Should stay on or bounce back to change-password
+        self.assertTrue(self.page.is_visible("#view-change-password"))
+        self.assertFalse(self.page.is_visible("#view-app-shell"))
+
+        # Submit change password form
+        new_pass = "SecurePermanentPass2026!"
+        self.page.fill("#cp-current-password", temp_pass)
+        self.page.fill("#cp-new-password", new_pass)
+        self.page.fill("#cp-confirm-password", new_pass)
+
+        # Handle alert dialog
+        self.page.once("dialog", lambda dialog: dialog.accept())
+        self.page.click("#cp-submit-btn")
+
+        # Assert successfully transitioned to app shell
+        self.page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
+        self.assertFalse(self.page.is_visible("#view-change-password"))
+
 
 if __name__ == "__main__":
     unittest.main()

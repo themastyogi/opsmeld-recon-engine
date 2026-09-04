@@ -57,7 +57,8 @@ class OpsmeldUserSession:
         expires_at: Optional[float] = None,
         access_token: Optional[str] = None,
         tenant_id: Optional[str] = None,
-        customer_id: Optional[str] = None
+        customer_id: Optional[str] = None,
+        must_change_password: bool = False
     ):
         self.token = token
         self.user_id = user_id
@@ -68,6 +69,7 @@ class OpsmeldUserSession:
         self.permissions = set(permissions) if permissions is not None else RBACResolver.resolve_permissions(self.roles)
         self.allowed_companies = set(allowed_companies) if allowed_companies is not None else set()
         self.provisioned = provisioned
+        self.must_change_password = must_change_password
         self.created_at = created_at or time.time()
         self.expires_at = expires_at or (self.created_at + SESSION_TTL_SECONDS)
         self.access_token = access_token
@@ -116,8 +118,10 @@ class OpsmeldUserSession:
             "user": {
                 "id": self.user_id,
                 "email": self.email,
-                "display_name": self.display_name
+                "display_name": self.display_name,
+                "must_change_password": self.must_change_password
             },
+            "must_change_password": self.must_change_password,
             "provisioned": self.provisioned,
             "status": "ACTIVE" if self.provisioned else "ACCOUNT_NOT_PROVISIONED",
             "customer_id": self.customer_id,
@@ -226,6 +230,7 @@ class AuthManager:
             user_perms = ds.get_user_permissions(user.user_id, org.organization_id)
             user_companies = ds.get_user_allowed_companies(user.user_id, org.organization_id)
             roles = sorted(list(ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())))
+            user_must_change = getattr(user, "must_change_password", False)
             return self.create_session(
                 user_id=user.user_id,
                 email=user.email,
@@ -234,7 +239,8 @@ class AuthManager:
                 roles=roles,
                 permissions=user_perms,
                 allowed_companies=user_companies,
-                provisioned=True
+                provisioned=True,
+                must_change_password=user_must_change
             )
 
         return None
@@ -251,7 +257,8 @@ class AuthManager:
         permissions: Optional[Set[str]] = None,
         provisioned: bool = True,
         access_token: Optional[str] = None,
-        tenant_id: Optional[str] = None
+        tenant_id: Optional[str] = None,
+        must_change_password: bool = False
     ) -> str:
         """Creates an authenticated session token with explicit multitenant organization and company entitlements."""
         token = secrets.token_hex(32)
@@ -267,7 +274,8 @@ class AuthManager:
             allowed_companies=allowed_companies,
             provisioned=provisioned,
             access_token=access_token,
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            must_change_password=must_change_password
         )
         _ACTIVE_SESSIONS[token] = session
         if token in _REVOKED_TOKENS:

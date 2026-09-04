@@ -627,6 +627,38 @@
         </div>
     </div>
 
+    <!-- 3C. CHANGE PASSWORD SCREEN (PASSWORD_CHANGE_REQUIRED) -->
+    <div id="view-change-password" style="display: none; min-height: 100vh; background: #0F172A; align-items: center; justify-content: center; padding: 24px;">
+        <div style="background: #1E293B; border: 1px solid #3B82F6; border-radius: 16px; padding: 40px; width: 440px; text-align: left; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+            <div style="text-align: center; font-size: 2.5rem; margin-bottom: 8px;">🔐</div>
+            <h2 style="font-size: 1.3rem; font-weight: 800; color: white; margin: 0 0 6px 0; text-align: center;">Set New Password</h2>
+            <p style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin: 0 0 20px 0; text-align: center;">
+                Your account was provisioned with a temporary password. You must update your password before accessing the platform.
+            </p>
+            <form id="form-change-password" onsubmit="handleChangePasswordSubmit(event)">
+                <div style="margin-bottom: 14px;">
+                    <label for="cp-current-password" style="display: block; font-size: 0.78rem; font-weight: 600; color: #CBD5E1; margin-bottom: 4px;">Current (Temporary) Password</label>
+                    <input type="password" id="cp-current-password" required placeholder="Enter temporary password" style="width: 100%; padding: 10px 12px; background: #0F172A; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 0.88rem; box-sizing: border-box;" autocomplete="current-password">
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label for="cp-new-password" style="display: block; font-size: 0.78rem; font-weight: 600; color: #CBD5E1; margin-bottom: 4px;">New Password (min 12 characters)</label>
+                    <input type="password" id="cp-new-password" required minlength="12" placeholder="At least 12 characters" style="width: 100%; padding: 10px 12px; background: #0F172A; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 0.88rem; box-sizing: border-box;" autocomplete="new-password">
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label for="cp-confirm-password" style="display: block; font-size: 0.78rem; font-weight: 600; color: #CBD5E1; margin-bottom: 4px;">Confirm New Password</label>
+                    <input type="password" id="cp-confirm-password" required minlength="12" placeholder="Re-enter new password" style="width: 100%; padding: 10px 12px; background: #0F172A; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 0.88rem; box-sizing: border-box;" autocomplete="new-password">
+                </div>
+                <div id="cp-error-message" style="display: none; font-size: 0.82rem; color: #EF4444; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; padding: 8px 12px; margin-bottom: 14px;"></div>
+                <button type="submit" id="cp-submit-btn" class="btn-btn" style="background: #10B981; color: white; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 12px; border-radius: 6px; cursor: pointer; border: none; margin-bottom: 16px;">
+                    Update Password
+                </button>
+            </form>
+            <div style="text-align: center; font-size: 0.8rem; color: #64748B; cursor: pointer;" onclick="performAppLogout()">
+                🚪 Cancel and Sign Out
+            </div>
+        </div>
+    </div>
+
     <!-- 4. AUTHENTICATED APPLICATION SHELL (Displayed ONLY when Authenticated + Authorized) -->
     <div id="view-app-shell" style="display: none;">
         <div class="top-header">
@@ -1608,7 +1640,11 @@
                 localStorage.setItem('opsmeld_token', data.token);
                 document.cookie = `session=${data.token}; Path=/; SameSite=Lax`;
                 document.cookie = `opsmeld_token=${data.token}; Path=/; SameSite=Lax`;
-                window.location.href = '/?login=success';
+                if (data.must_change_password) {
+                    switchMainView('change-password');
+                } else {
+                    window.location.href = '/?login=success';
+                }
             } else {
                 throw new Error('No session token received');
             }
@@ -1618,6 +1654,76 @@
                 errEl.style.display = 'block';
                 errEl.innerText = err.message || 'Login failed';
             }
+        });
+    }
+
+    function handleChangePasswordSubmit(event) {
+        if (event) event.preventDefault();
+        const curPass = document.getElementById('cp-current-password')?.value || '';
+        const newPass = document.getElementById('cp-new-password')?.value || '';
+        const confirmPass = document.getElementById('cp-confirm-password')?.value || '';
+        const errEl = document.getElementById('cp-error-message');
+
+        function showError(msg) {
+            if (errEl) {
+                errEl.style.display = 'block';
+                errEl.textContent = msg;
+            }
+        }
+
+        if (errEl) {
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+        }
+
+        if (!curPass) {
+            showError('Please enter your current temporary password.');
+            return;
+        }
+        if (newPass.length < 12) {
+            showError('New password must be at least 12 characters.');
+            return;
+        }
+        if (newPass === curPass) {
+            showError('New password must be different from current password.');
+            return;
+        }
+        if (newPass !== confirmPass) {
+            showError('New passwords do not match. Please re-type.');
+            return;
+        }
+
+        fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                current_password: curPass,
+                new_password: newPass
+            })
+        })
+        .then(res => {
+            return res.json().then(data => {
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to change password');
+                }
+                return data;
+            });
+        })
+        .then(data => {
+            document.getElementById('cp-current-password').value = '';
+            document.getElementById('cp-new-password').value = '';
+            document.getElementById('cp-confirm-password').value = '';
+            if (data.token) {
+                localStorage.setItem('opsmeld_token', data.token);
+                document.cookie = `session=${data.token}; Path=/; SameSite=Lax`;
+                document.cookie = `opsmeld_token=${data.token}; Path=/; SameSite=Lax`;
+            }
+            alert('🎉 Password changed successfully! Welcome to Opsmeld.');
+            switchMainView('control-tower');
+        })
+        .catch(err => {
+            showError(err.message || 'Failed to change password.');
         });
     }
 
@@ -1677,7 +1783,11 @@
             if (window.OpsmeldSession) {
                 window.OpsmeldSession.resolveState().then(state => {
                     if (state.status === 'AUTHENTICATED_PROVISIONED') {
-                        switchMainView('control-tower');
+                        if (state.must_change_password) {
+                            switchMainView('change-password');
+                        } else {
+                            switchMainView('control-tower');
+                        }
                     } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
                         switchMainView('account-not-provisioned');
                     } else {
@@ -1725,8 +1835,21 @@
         const topDt = document.getElementById('nav-top-dt');
 
         const notProvisioned = document.getElementById('view-account-not-provisioned');
+        const changePassword = document.getElementById('view-change-password');
 
         document.querySelectorAll('.top-nav-item').forEach(el => el.classList.remove('active'));
+
+        if (changePassword) changePassword.style.display = 'none';
+
+        if (viewName === 'change-password') {
+            if (publicLanding) publicLanding.style.display = 'none';
+            if (signinWall) signinWall.style.display = 'none';
+            if (authDenied) authDenied.style.display = 'none';
+            if (notProvisioned) notProvisioned.style.display = 'none';
+            if (changePassword) changePassword.style.display = 'flex';
+            if (appShell) appShell.style.display = 'none';
+            return;
+        }
 
         if (viewName === 'account-not-provisioned') {
             if (publicLanding) publicLanding.style.display = 'none';
@@ -1825,6 +1948,10 @@
             window.OpsmeldSession.resolveState().then(state => {
                 if (!state.authenticated) {
                     if (publicLanding) publicLanding.style.display = 'block';
+                    return;
+                }
+                if (state.must_change_password) {
+                    switchMainView('change-password');
                     return;
                 }
                 if (!state.provisioned || state.status === 'AUTHENTICATED_UNPROVISIONED') {

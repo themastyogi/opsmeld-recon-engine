@@ -113,12 +113,13 @@ class Organization:
 
 
 class User:
-    def __init__(self, user_id: str, entra_oid: str, email: str, display_name: str, status: str = "ACTIVE"):
+    def __init__(self, user_id: str, entra_oid: str, email: str, display_name: str, status: str = "ACTIVE", must_change_password: bool = False):
         self.user_id = user_id
         self.entra_oid = entra_oid
         self.email = email
         self.display_name = display_name
         self.status = status
+        self.must_change_password = must_change_password
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -126,7 +127,8 @@ class User:
             "entra_oid": self.entra_oid,
             "email": self.email,
             "display_name": self.display_name,
-            "status": self.status
+            "status": self.status,
+            "must_change_password": self.must_change_password
         }
 
 
@@ -390,9 +392,10 @@ class MultitenantDataStore:
             user_id = existing_user.user_id
             if display_name:
                 existing_user.display_name = display_name
+            existing_user.must_change_password = True
         else:
             user_id = f"usr_{len(self.users) + 101}"
-            user = User(user_id, f"oid_{user_id}", email, display_name)
+            user = User(user_id, f"oid_{user_id}", email, display_name, must_change_password=True)
             self.users[user_id] = user
 
         self.org_users.setdefault(org_id, set()).add(user_id)

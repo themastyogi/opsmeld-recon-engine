@@ -127,6 +127,14 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         auth_mgr = get_auth_manager()
         session = auth_mgr.get_session(token)
 
+        if session and getattr(session, "must_change_password", False):
+            self._set_headers("application/json", 403)
+            self._write_response(json.dumps({
+                "error": "Password change required before continuing",
+                "status": "PASSWORD_CHANGE_REQUIRED"
+            }).encode("utf-8"))
+            return None
+
         if company_id is not None and (not company_id or company_id in ("default_company", "unspecified_company")):
             self._set_headers("application/json", 400)
             self._write_response(json.dumps({
@@ -205,6 +213,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
     def _handle_do_GET(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
+
+        if path.startswith("/api/") and path not in ("/api/auth/me", "/api/auth/logout"):
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token) if token else None
+            if session and getattr(session, "must_change_password", False):
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": "Password change required before continuing",
+                    "status": "PASSWORD_CHANGE_REQUIRED"
+                }).encode("utf-8"))
+                return
 
         if path == "/favicon.ico":
             self.send_response(204)
@@ -920,6 +939,17 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
+        if path.startswith("/api/") and path not in ("/api/auth/login", "/api/auth/change-password", "/api/auth/logout"):
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token) if token else None
+            if session and getattr(session, "must_change_password", False):
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({
+                    "error": "Password change required before continuing",
+                    "status": "PASSWORD_CHANGE_REQUIRED"
+                }).encode("utf-8"))
+                return
+
         if path == "/api/auth/login":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else ""
@@ -953,7 +983,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                     "status": "success",
                     "token": token,
                     "username": sess.display_name,
-                    "email": sess.email
+                    "email": sess.email,
+                    "must_change_password": getattr(sess, "must_change_password", False)
                 }
                 self._set_headers("application/json", 200, cookie=token)
                 self._write_response(json.dumps(res).encode("utf-8"))
@@ -972,6 +1003,77 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", cookie_header)
             self.end_headers()
             self.wfile.write(json.dumps({"status": "success", "message": "Logged out"}).encode("utf-8"))
+            return
+
+        elif path == "/api/auth/change-password":
+            token = self._get_session_token()
+            auth_mgr = get_auth_manager()
+            session = auth_mgr.get_session(token) if token else None
+            if not session:
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized: Active session required"}).encode("utf-8"))
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
+            current_password = data.get("current_password", "")
+            new_password = data.get("new_password", "")
+
+            # Verify current password
+            is_valid_current = False
+            if auth_mgr.verify_user_password(session.email, current_password):
+                is_valid_current = True
+            elif secrets.compare_digest(current_password, auth_mgr.admin_pass) and (session.email.strip().lower() == auth_mgr.admin_user.strip().lower() or session.email.strip().lower() == "admin"):
+                is_valid_current = True
+
+            if not is_valid_current:
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Invalid current password"}).encode("utf-8"))
+                return
+
+            # Password policy: at least 12 chars
+            if len(new_password) < 12:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "New password must be at least 12 characters"}).encode("utf-8"))
+                return
+
+            # Must differ from current password
+            if new_password == current_password:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "New password must be different from current password"}).encode("utf-8"))
+                return
+
+            # Set new password
+            auth_mgr.set_user_password(session.email, new_password)
+
+            # Clear flag on datastore user
+            ds = get_datastore()
+            resolved = ds.resolve_user_organization(session.email)
+            if resolved:
+                resolved[0].must_change_password = False
+            for u in ds.users.values():
+                if u.email.strip().lower() == session.email.strip().lower():
+                    u.must_change_password = False
+
+            # Clear flag on active session
+            session.must_change_password = False
+
+            logger.info(f"Password changed successfully for user={session.email}, org={session.organization_id}")
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({
+                "status": "success",
+                "message": "Password changed successfully",
+                "must_change_password": False,
+                "token": session.token
+            }).encode("utf-8"))
             return
 
         elif path == "/api/onboarding/register":

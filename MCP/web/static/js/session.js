@@ -64,10 +64,12 @@
                     };
                 }
 
+                const mustChange = !!data.must_change_password || (data.user && !!data.user.must_change_password);
                 return {
                     status: 'AUTHENTICATED_PROVISIONED',
                     authenticated: true,
                     provisioned: true,
+                    must_change_password: mustChange,
                     user: data.user || { email: data.email, display_name: data.username },
                     organization: data.organization || null,
                     roles: data.roles || [],
@@ -130,7 +132,11 @@
     function continueToPortal() {
         return resolveSessionState().then(state => {
             if (state.status === 'AUTHENTICATED_PROVISIONED') {
-                if (typeof window.switchMainView === 'function') {
+                if (state.must_change_password) {
+                    if (typeof window.switchMainView === 'function') {
+                        window.switchMainView('change-password');
+                    }
+                } else if (typeof window.switchMainView === 'function') {
                     window.switchMainView('control-tower');
                 }
             } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
