@@ -1,7 +1,14 @@
 ---
 name: dev
-description: Launch the local Opsmeld Reconciliation Engine dev server and follow this repo's coding conventions (module layout, config loading, RBAC patterns) when writing or editing code here. Use when the user asks to run the app locally, or wants code changes made that should match existing repo patterns. For running the test suite, use the test skill instead — this skill is for writing/running code, not testing it.
+description: Launch the local Opsmeld Reconciliation Engine dev server and follow this repo's coding conventions (module layout, config loading, RBAC patterns) when writing or editing code here. This is the only skill permitted to change code, and only when the user has explicitly asked for that code change in this turn — not on a council/persona skill's recommendation alone. Use when the user asks to run the app locally, or wants code changes made that should match existing repo patterns. For running the test suite, use the test skill instead — this skill is for writing/running code, not testing it.
 ---
+
+This is the only skill in the set that changes code. Only make a code
+change when the user has explicitly asked for it in this turn — a
+recommendation from the council skill or any single persona skill (ceo,
+tech-expert, qa-expert, etc.) is input to consider, not an instruction to
+act on. If a persona surfaced a fix and the user hasn't yet asked for it
+to be applied, say what the fix would be and ask, rather than making it.
 
 ## Running the local server
 
