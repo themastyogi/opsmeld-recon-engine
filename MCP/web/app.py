@@ -1030,7 +1030,13 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
-            data = json.loads(body)
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
             org_id = data.get("organization_id")
             if not org_id:
                 self._set_headers("application/json", 400)
@@ -1038,6 +1044,22 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 return
             new_status = data.get("status")
             modules = data.get("modules")
+
+            # Task C: Tighten module-toggle validation against real registered modules
+            if modules is not None:
+                if not isinstance(modules, (list, set)):
+                    self._set_headers("application/json", 400)
+                    self._write_response(json.dumps({"error": "Bad Request: modules must be a list"}).encode("utf-8"))
+                    return
+                from core.rbac import get_module_registry
+                valid_modules = {m.module_id for m in get_module_registry().list_modules()}
+                invalid_modules = [m for m in modules if m not in valid_modules]
+                if invalid_modules:
+                    self._set_headers("application/json", 400)
+                    self._write_response(json.dumps({
+                        "error": f"Bad Request: Invalid module ID(s): {invalid_modules}. Valid modules: {sorted(list(valid_modules))}"
+                    }).encode("utf-8"))
+                    return
 
             ds = get_datastore()
             org = ds.get_organization(org_id)
@@ -1050,7 +1072,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._write_response(json.dumps({"status": "success", "organization_id": org_id, "org_status": org.status if org else None}).encode("utf-8"))
             return
 
-        elif path == "/api/admin/viewers":
+        elif path in ("/api/admin/viewers", "/api/admin/users"):
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
             if not session or not getattr(session, "provisioned", True):
@@ -1058,8 +1080,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
                 return
 
-            has_manage_perm = "org:users:manage" in getattr(session, "permissions", set()) or "ENTERPRISE_ADMIN" in getattr(session, "roles", [])
-            if not has_manage_perm:
+            session_roles = getattr(session, "roles", [])
+            session_perms = getattr(session, "permissions", set())
+            is_enterprise_admin = "ENTERPRISE_ADMIN" in session_roles
+            is_customer_admin = "CUSTOMER_ADMIN" in session_roles or "org:users:manage" in session_perms
+
+            if not (is_enterprise_admin or is_customer_admin):
                 self._set_headers("application/json", 403)
                 self._write_response(json.dumps({"error": "Forbidden: Requires org:users:manage or ENTERPRISE_ADMIN"}).encode("utf-8"))
                 return
@@ -1071,6 +1097,42 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             except Exception:
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
+            raw_role = data.get("role") or "VIEWER"
+            target_role = raw_role.strip().upper()
+
+            # Task B: ENTERPRISE_ADMIN provisioning stays out of self-service entirely
+            if target_role == "ENTERPRISE_ADMIN":
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Cannot provision ENTERPRISE_ADMIN via API"}).encode("utf-8"))
+                return
+
+            if target_role not in ("VIEWER", "CUSTOMER_ADMIN"):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": f"Bad Request: Unsupported role '{target_role}'. Supported roles are VIEWER and CUSTOMER_ADMIN"}).encode("utf-8"))
+                return
+
+            # Task A: Strict organization scoping based on caller role
+            if is_enterprise_admin:
+                # Platform admin can create users in any organization; organization_id must be in request body
+                org_id = data.get("organization_id")
+                if not org_id:
+                    self._set_headers("application/json", 400)
+                    self._write_response(json.dumps({"error": "Bad Request: organization_id is required in request body for ENTERPRISE_ADMIN callers"}).encode("utf-8"))
+                    return
+            else:
+                # Customer admin can only create users within their own organization (from session, never from body)
+                org_id = getattr(session, "organization_id", None)
+                if not org_id:
+                    self._set_headers("application/json", 400)
+                    self._write_response(json.dumps({"error": "Bad Request: Caller session has no associated organization"}).encode("utf-8"))
+                    return
+
+            ds = get_datastore()
+            if not ds.get_organization(org_id):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": f"Bad Request: Invalid organization '{org_id}'"}).encode("utf-8"))
                 return
 
             email = (data.get("email") or "").strip().lower()
@@ -1085,13 +1147,6 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             if not isinstance(allowed_companies, (list, set)) or len(allowed_companies) == 0:
                 self._set_headers("application/json", 400)
                 self._write_response(json.dumps({"error": "Bad Request: allowed_companies must be a non-empty list of company GUIDs"}).encode("utf-8"))
-                return
-
-            ds = get_datastore()
-            org_id = data.get("organization_id") or getattr(session, "organization_id", None)
-            if not org_id or not ds.get_organization(org_id):
-                self._set_headers("application/json", 400)
-                self._write_response(json.dumps({"error": "Bad Request: Invalid organization"}).encode("utf-8"))
                 return
 
             # Validate requested companies are real, discoverable companies for this organization
@@ -1119,8 +1174,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             # Generate random password (never logged, never stored in plaintext)
             generated_password = secrets.token_urlsafe(16)
 
-            # Provision viewer user in datastore
-            user_id = ds.provision_viewer_user(org_id, email, display_name, set(allowed_companies))
+            # Provision user in datastore with target role
+            user_id = ds.provision_org_user(org_id, email, display_name, set(allowed_companies), role=target_role)
 
             # Set hashed password in AuthManager
             auth_mgr = get_auth_manager()
@@ -1129,12 +1184,12 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json", 201)
             self._write_response(json.dumps({
                 "status": "success",
-                "message": f"Viewer account provisioned for '{email}'.",
+                "message": f"{target_role} account provisioned for '{email}'.",
                 "user_id": user_id,
                 "email": email,
                 "display_name": display_name,
                 "organization_id": org_id,
-                "role": "VIEWER",
+                "role": target_role,
                 "allowed_companies": list(allowed_companies),
                 "temporary_password": generated_password
             }).encode("utf-8"))

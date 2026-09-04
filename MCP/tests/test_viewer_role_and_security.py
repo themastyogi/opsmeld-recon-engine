@@ -223,6 +223,214 @@ class TestViewerRoleAndSecurity(unittest.TestCase):
             urllib.request.urlopen(req)
         self.assertEqual(ctx.exception.code, 401)
 
+    def test_customer_admin_cannot_create_user_in_other_org_lands_in_own_org(self):
+        """Task A: CUSTOMER_ADMIN for org A attempts to pass organization_id: 'org-B'.
+        Confirms the created user strictly lands in org A, not org B."""
+        from core.models import Organization, OrganizationStatus
+        # Setup Org B
+        org_b_id = "org_xyz_999"
+        if not self.ds.get_organization(org_b_id):
+            self.ds.organizations[org_b_id] = Organization(org_b_id, "Organization B", OrganizationStatus.ACTIVE)
+            self.ds.org_users[org_b_id] = set()
+
+        target_email = "scope_tamper_user@opsmeld.com"
+        url = f"{self.base_url}/api/admin/users"
+        payload = {
+            "email": target_email,
+            "display_name": "Scope Tamper User",
+            "organization_id": org_b_id,  # Adversarial attempt to create in Org B
+            "role": "VIEWER",
+            "allowed_companies": [self.comp_a]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.admin_token}"
+            }
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            data = json.loads(resp.read().decode("utf-8"))
+
+        user_id = data["user_id"]
+        # Response must show caller's org_abc_001, NOT org_b_id
+        self.assertEqual(data["organization_id"], "org_abc_001")
+
+        # Datastore verification: User MUST land in org_abc_001, never in org_b_id
+        self.assertEqual(self.ds.user_org.get(user_id), "org_abc_001")
+        self.assertIn(user_id, self.ds.org_users.get("org_abc_001", set()))
+        self.assertNotIn(user_id, self.ds.org_users.get(org_b_id, set()))
+
+        # Resolution verification: Resolving identity points to org_abc_001
+        resolved = self.ds.resolve_user_organization(target_email)
+        self.assertIsNotNone(resolved)
+        user_obj, org_obj = resolved
+        self.assertEqual(org_obj.organization_id, "org_abc_001")
+
+    def test_customer_admin_can_create_customer_admin_in_own_org(self):
+        """Task A: CUSTOMER_ADMIN can create another CUSTOMER_ADMIN user in their own org."""
+        target_email = "new_co_admin@opsmeld.com"
+        url = f"{self.base_url}/api/admin/users"
+        payload = {
+            "email": target_email,
+            "display_name": "New Company Admin",
+            "role": "CUSTOMER_ADMIN",
+            "allowed_companies": [self.comp_a]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.admin_token}"
+            }
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            data = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(data["role"], "CUSTOMER_ADMIN")
+        self.assertEqual(data["organization_id"], "org_abc_001")
+        temp_pass = data["temporary_password"]
+
+        # Log in as newly created CUSTOMER_ADMIN
+        req_login = urllib.request.Request(
+            f"{self.base_url}/api/auth/login",
+            data=json.dumps({"email": target_email, "password": temp_pass}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req_login) as resp_login:
+            self.assertEqual(resp_login.status, 200)
+            login_data = json.loads(resp_login.read().decode("utf-8"))
+            new_admin_token = login_data["token"]
+
+        new_session = self.auth_mgr.get_session(new_admin_token)
+        self.assertIn("CUSTOMER_ADMIN", new_session.roles)
+        self.assertTrue(new_session.has_permission("org:users:manage"))
+        self.assertTrue(new_session.has_permission("data_trust:write"))
+
+    def test_enterprise_admin_can_create_users_in_any_org(self):
+        """Task A: ENTERPRISE_ADMIN can create users in any org by specifying organization_id."""
+        enterprise_token = self.auth_mgr.create_session(
+            user_id="usr_enterprise_tester",
+            email="platform_boss@opsmeld.com",
+            display_name="Enterprise Admin Tester",
+            roles=["ENTERPRISE_ADMIN"],
+            organization_id=None,
+            provisioned=True
+        )
+
+        url = f"{self.base_url}/api/admin/users"
+        # 1. Success with organization_id
+        payload_ok = {
+            "email": "enterprise_created_user@opsmeld.com",
+            "display_name": "Enterprise Created User",
+            "organization_id": "org_abc_001",
+            "role": "VIEWER",
+            "allowed_companies": [self.comp_a]
+        }
+        req_ok = urllib.request.Request(
+            url,
+            data=json.dumps(payload_ok).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {enterprise_token}"
+            }
+        )
+        with urllib.request.urlopen(req_ok) as resp:
+            self.assertEqual(resp.status, 201)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data["organization_id"], "org_abc_001")
+
+        # 2. Rejection (400) if ENTERPRISE_ADMIN caller omits organization_id
+        payload_no_org = {
+            "email": "enterprise_no_org@opsmeld.com",
+            "role": "VIEWER",
+            "allowed_companies": [self.comp_a]
+        }
+        req_no_org = urllib.request.Request(
+            url,
+            data=json.dumps(payload_no_org).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {enterprise_token}"
+            }
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req_no_org)
+        self.assertEqual(ctx.exception.code, 400)
+
+    def test_cannot_provision_enterprise_admin_via_api(self):
+        """Task B: API strictly rejects any attempt to create ENTERPRISE_ADMIN with HTTP 400."""
+        url = f"{self.base_url}/api/admin/users"
+        payload = {
+            "email": "malicious_admin_attempt@opsmeld.com",
+            "role": "ENTERPRISE_ADMIN",
+            "allowed_companies": [self.comp_a]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.admin_token}"
+            }
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req)
+        self.assertEqual(ctx.exception.code, 400)
+        data = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertIn("Cannot provision ENTERPRISE_ADMIN", data.get("error", ""))
+
+    def test_organizations_status_tightening_rejects_invalid_module_id(self):
+        """Task C: /api/admin/organizations/status rejects invalid module IDs with HTTP 400."""
+        enterprise_token = self.auth_mgr.create_session(
+            user_id="usr_enterprise_mod_tester",
+            email="platform_modules@opsmeld.com",
+            display_name="Enterprise Mod Tester",
+            roles=["ENTERPRISE_ADMIN"],
+            organization_id=None,
+            provisioned=True
+        )
+        url = f"{self.base_url}/api/admin/organizations/status"
+
+        # 1. Invalid module ID returns 400
+        req_invalid = urllib.request.Request(
+            url,
+            data=json.dumps({
+                "organization_id": "org_abc_001",
+                "modules": ["data_trust", "totally_fake_module_xyz"]
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {enterprise_token}"
+            }
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req_invalid)
+        self.assertEqual(ctx.exception.code, 400)
+        err_data = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertIn("Invalid module ID", err_data.get("error", ""))
+
+        # 2. Valid modules return 200 and persist
+        req_valid = urllib.request.Request(
+            url,
+            data=json.dumps({
+                "organization_id": "org_abc_001",
+                "modules": ["data_trust", "ar_control_tower"]
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {enterprise_token}"
+            }
+        )
+        with urllib.request.urlopen(req_valid) as resp:
+            self.assertEqual(resp.status, 200)
+
+        self.assertEqual(self.ds.org_modules.get("org_abc_001"), {"data_trust", "ar_control_tower"})
+
 
 if __name__ == "__main__":
     unittest.main()

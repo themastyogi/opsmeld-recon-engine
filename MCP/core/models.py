@@ -354,17 +354,30 @@ class MultitenantDataStore:
 
         return org
 
-    def provision_viewer_user(self, org_id: str, email: str, display_name: str, allowed_companies: set) -> str:
-        """Admin-provisioned, read-only, password-login user. Mirrors the registration-approval
-        provisioning pattern but adds to an EXISTING organization rather than creating a new one."""
+    def provision_org_user(self, org_id: str, email: str, display_name: str, allowed_companies: set, role: str = "VIEWER") -> str:
+        """Admin-provisioned, password-login user (VIEWER or CUSTOMER_ADMIN).
+        Adds to an EXISTING organization with strict role and company ACL boundaries."""
         org = self.get_organization(org_id)
         if not org:
             raise ValueError(f"Organization '{org_id}' does not exist.")
 
+        role_clean = (role or "VIEWER").strip().upper()
+        if role_clean not in ("VIEWER", "CUSTOMER_ADMIN"):
+            raise ValueError(f"Unsupported role '{role}'. Only VIEWER and CUSTOMER_ADMIN can be provisioned.")
+
         org_roles = self.org_roles.setdefault(org_id, {})
-        if "VIEWER" not in org_roles:
-            from core.rbac import ROLE_PERMISSIONS
-            org_roles["VIEWER"] = set(ROLE_PERMISSIONS.get("VIEWER", set()))
+        if role_clean == "CUSTOMER_ADMIN":
+            if "CUSTOMER_ADMIN" not in org_roles:
+                org_roles["CUSTOMER_ADMIN"] = {
+                    "ar_control_tower:read", "ar_control_tower:write",
+                    "data_trust:read", "data_trust:write",
+                    "layer_3:read", "layer_3:write",
+                    "org:users:manage", "org:roles:manage", "org:companies:manage"
+                }
+        elif role_clean == "VIEWER":
+            if "VIEWER" not in org_roles:
+                from core.rbac import ROLE_PERMISSIONS
+                org_roles["VIEWER"] = set(ROLE_PERMISSIONS.get("VIEWER", set()))
 
         email_clean = (email or "").strip().lower()
         existing_user = None
@@ -384,9 +397,13 @@ class MultitenantDataStore:
 
         self.org_users.setdefault(org_id, set()).add(user_id)
         self.user_org[user_id] = org_id
-        self.user_roles[f"{user_id}:{org_id}"] = {"VIEWER"}
+        self.user_roles[f"{user_id}:{org_id}"] = {role_clean}
         self.user_company_acls[f"{user_id}:{org_id}"] = set(allowed_companies)
         return user_id
+
+    def provision_viewer_user(self, org_id: str, email: str, display_name: str, allowed_companies: set) -> str:
+        """Backwards-compatible wrapper for provision_org_user with role='VIEWER'."""
+        return self.provision_org_user(org_id, email, display_name, allowed_companies, role="VIEWER")
 
     def create_access_request(self, organization_id: str, user_id: str, email: str, display_name: str) -> AccessRequest:
         req_id = f"req_{len(self.access_requests) + 101}"
