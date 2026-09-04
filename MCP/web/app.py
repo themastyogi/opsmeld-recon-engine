@@ -201,7 +201,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            self._handle_do_GET()
+            OpsmeldWebHandler._handle_do_GET(self)
         except Exception as e:
             logger.error(f"Unhandled exception in do_GET: {str(e)}", exc_info=True)
             self._set_headers("application/json", 500)
@@ -341,7 +341,7 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            client = BCMCPClient(config, user_token=session.access_token, user_tenant_id=session.tenant_id, customer_id=session.customer_id)
             mgr = CompanyAccessManager()
             discovered, data_source = mgr.get_discovered_companies_with_provenance(client)[:2]
             
@@ -376,7 +376,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             rules = load_engine_rules()
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             report = ARManagerReport(client, rules)
             res = report.fetch_data()
             error_msg = res.get("error")
@@ -411,7 +414,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             rules = load_engine_rules()
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             report = ARManagerReport(client, rules)
             detail = report.get_procedure_detail(tier, customer_no=customer_no)
             self._set_headers("application/json")
@@ -753,7 +759,9 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
             user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
-            client = BCMCPClient(config, user_token=user_token)
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
 
             # Anti-BOLA/IDOR Guard for finding-detail
             mgr = CompanyAccessManager()
@@ -1459,7 +1467,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
 
             # Anti-BOLA/IDOR Guard for update-status
             mgr = CompanyAccessManager()
@@ -1543,7 +1554,10 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             client_key = self._get_client_key(parsed_url)
             config = load_client_config(client_key)
-            client = BCMCPClient(config)
+            user_token = session_info.get("access_token") if isinstance(session_info, dict) else None
+            user_tenant_id = session_info.get("tenant_id") if isinstance(session_info, dict) else None
+            customer_id_param = session_info.get("customer_id") if isinstance(session_info, dict) else None
+            client = BCMCPClient(config, user_token=user_token, user_tenant_id=user_tenant_id, customer_id=customer_id_param)
             orchestrator = DataTrustEngineOrchestrator(mcp_client=client, client_key=client_key)
             res = orchestrator.run_recon(company_id=company_id, session_info=session_info)
             self._set_headers("application/json")

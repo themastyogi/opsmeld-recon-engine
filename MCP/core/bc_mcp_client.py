@@ -92,35 +92,51 @@ class BCMCPClient:
         return getattr(self.config, "client_secret", None) or os.environ.get("BC_CLIENT_SECRET", "")
 
     def get_access_token(self) -> str:
-        """Acquires OAuth2 token via Client Secret flow, MSAL token cache, or explicit user_access_token."""
+        """Acquires OAuth2 token from the signed-in user's real delegated session,
+        falling back to the public-client token cache. The client_secret /
+        application-permission flow is intentionally disabled — see note below."""
+        if self.user_access_token:
+            return self.user_access_token
+
+        # Unattended background client_secret / application-permission flow is intentionally
+        # disabled by default.
+        # Why: Business Central rejects application-permission tokens with "HTTP Error 401: Unauthorized"
+        # because the Azure AD app registration currently lacks tenant-admin consent for application-level
+        # Business Central permissions (e.g. API.ReadWrite.All). Real user logins use delegated permissions
+        # (user_impersonation / Financials.ReadWrite.All) which are already consented and work.
+        # To re-enable unattended background access in the future:
+        # 1. Grant admin consent in Azure AD for Business Central application permissions.
+        # 2. Set OPSMELD_ENABLE_CLIENT_SECRET_AUTH="true" in the environment.
+        if os.environ.get("OPSMELD_ENABLE_CLIENT_SECRET_AUTH", "").lower() == "true":
+            try:
+                import msal
+                tenant_id = self._get_tenant_id()
+                client_id = self._get_client_id()
+                client_secret = self._get_client_secret()
+                if client_secret and tenant_id and client_id:
+                    try:
+                        app = msal.ConfidentialClientApplication(
+                            client_id=client_id,
+                            client_credential=client_secret,
+                            authority=f"https://login.microsoftonline.com/{tenant_id}",
+                        )
+                        result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
+                        if result and "access_token" in result:
+                            return result["access_token"]
+                    except Exception as e:
+                        logger.warning(f"MSAL client secret acquisition failed: {e}")
+            except ImportError:
+                pass
+
         try:
             import msal
         except ImportError:
-            return self.user_access_token or ""
+            return ""
 
         tenant_id = self._get_tenant_id()
         client_id = self._get_client_id()
 
-        # 1. Confidential Client Secret Flow (Primary for Business Central API)
-        client_secret = self._get_client_secret()
-        if client_secret and tenant_id and client_id:
-            try:
-                app = msal.ConfidentialClientApplication(
-                    client_id=client_id,
-                    client_credential=client_secret,
-                    authority=f"https://login.microsoftonline.com/{tenant_id}",
-                )
-                result = app.acquire_token_for_client(scopes=["https://api.businesscentral.dynamics.com/.default"])
-                if result and "access_token" in result:
-                    return result["access_token"]
-            except Exception as e:
-                logger.warning(f"MSAL client secret acquisition failed: {e}")
-
-        # 2. Explicit User Access Token
-        if self.user_access_token:
-            return self.user_access_token
-
-        # 3. Public Client Token Cache
+        # Public Client Token Cache (unchanged — keep this branch as-is)
         cache = msal.SerializableTokenCache()
         if self.token_cache_path.exists():
             try:
