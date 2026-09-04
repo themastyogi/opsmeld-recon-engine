@@ -1096,6 +1096,68 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             }).encode("utf-8"))
             return
 
+        elif path == "/api/onboarding/request-access":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token) if token else None
+            if not session:
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({
+                    "error": "Unauthorized: Active session required to request access",
+                    "status": "UNAUTHENTICATED"
+                }).encode("utf-8"))
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
+            org_name_input = (data.get("organization_name") or "").strip()
+            if not org_name_input:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({
+                    "error": "Bad Request: organization_name is required",
+                    "status": "MISSING_ORGANIZATION_NAME"
+                }).encode("utf-8"))
+                return
+
+            ds = get_datastore()
+            matched_org = None
+            for org in ds.organizations.values():
+                if org.name.strip().lower() == org_name_input.lower():
+                    matched_org = org
+                    break
+
+            if not matched_org:
+                self._set_headers("application/json", 404)
+                self._write_response(json.dumps({
+                    "error": f"Organization '{org_name_input}' was not found. Please verify the company name or use 'Register Your Organization' to establish a new tenant.",
+                    "status": "ORGANIZATION_NOT_FOUND"
+                }).encode("utf-8"))
+                return
+
+            # Call datastore to record real AccessRequest using identity from verified session
+            req = ds.create_access_request(
+                organization_id=matched_org.organization_id,
+                user_id=session.user_id,
+                email=session.email,
+                display_name=session.display_name
+            )
+
+            logger.info(f"Access request {req.request_id} created for user={session.email} to join org={matched_org.name} ({matched_org.organization_id})")
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({
+                "status": "success",
+                "message": f"Access request for '{matched_org.name}' submitted successfully. Your organization's administrator will review your request.",
+                "request": req.to_dict()
+            }).encode("utf-8"))
+            return
+
         elif path == "/api/admin/registrations/approve":
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)

@@ -614,10 +614,10 @@
                 Your Microsoft Entra identity is authenticated, but your Opsmeld account has not yet been associated with an active customer organization.
             </p>
             <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                <button class="btn-btn" style="background: #10B981; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="openRegisterModal()">
+                <button id="btn-open-register-org" class="btn-btn" style="background: #10B981; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="openRegisterModal()">
                     🚀 Register Your Organization
                 </button>
-                <button class="btn-btn" style="background: #3B82F6; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="alert('📩 Request Access submitted. Contact your organization administrator.')">
+                <button id="btn-open-request-access" class="btn-btn" style="background: #3B82F6; color: white; flex: 1; font-weight: 700; padding: 12px; border-radius: 8px;" onclick="openRequestAccessModal()">
                     Request Access 📩
                 </button>
             </div>
@@ -1269,6 +1269,7 @@
             </div>
         </div>
     </div>
+    </div> <!-- end view-app-shell -->
 
     <div id="demo-modal" class="modal-overlay" style="display:none;">
         <div class="modal-box">
@@ -1437,6 +1438,9 @@
                                     <td>AR Manager</td>
                                 </tr>
                             </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1585,7 +1589,6 @@
             </form>
         </div>
     </div>
-
     <script>
     window.OpsmeldAuth = {
         openModal: function() {
@@ -1751,6 +1754,84 @@
         const modal = document.getElementById('modal-register-company');
         if (modal) modal.style.display = 'flex';
         else alert('🚀 Register Your Organization\n\nEnter Company Name and Work Email to initiate onboarding.');
+    }
+
+    function closeRegisterModal() {
+        const modal = document.getElementById('modal-register-company');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function openRequestAccessModal() {
+        const modal = document.getElementById('modal-request-access');
+        const feedback = document.getElementById('req-access-feedback');
+        const input = document.getElementById('req-access-org-name');
+        if (feedback) { feedback.style.display = 'none'; feedback.textContent = ''; }
+        if (input) input.value = '';
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeRequestAccessModal() {
+        const modal = document.getElementById('modal-request-access');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function submitRequestAccess(event) {
+        if (event) event.preventDefault();
+        const orgName = document.getElementById('req-access-org-name')?.value?.trim() || '';
+        const feedback = document.getElementById('req-access-feedback');
+        const submitBtn = document.getElementById('btn-submit-request-access');
+
+        if (!orgName) {
+            if (feedback) {
+                feedback.style.display = 'block';
+                feedback.style.background = '#FEE2E2';
+                feedback.style.border = '1px solid #FCA5A5';
+                feedback.style.color = '#991B1B';
+                feedback.textContent = 'Please enter an organization name.';
+            }
+            return;
+        }
+
+        if (submitBtn) submitBtn.disabled = true;
+
+        fetch('/api/onboarding/request-access', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+            credentials: 'same-origin',
+            body: JSON.stringify({ organization_name: orgName })
+        })
+        .then(res => {
+            return res.json().then(data => ({ status: res.status, data: data }));
+        })
+        .then(result => {
+            if (submitBtn) submitBtn.disabled = false;
+            if (feedback) {
+                feedback.style.display = 'block';
+                if (result.status === 200 || result.status === 201) {
+                    feedback.style.background = '#ECFDF5';
+                    feedback.style.border = '1px solid #A7F3D0';
+                    feedback.style.color = '#065F46';
+                    feedback.textContent = `🎉 ${result.data.message || 'Access request submitted successfully!'}`;
+                    const input = document.getElementById('req-access-org-name');
+                    if (input) input.value = '';
+                } else {
+                    feedback.style.background = '#FEE2E2';
+                    feedback.style.border = '1px solid #FCA5A5';
+                    feedback.style.color = '#991B1B';
+                    feedback.textContent = `❌ ${result.data.error || 'Failed to submit request.'}`;
+                }
+            }
+        })
+        .catch(err => {
+            if (submitBtn) submitBtn.disabled = false;
+            if (feedback) {
+                feedback.style.display = 'block';
+                feedback.style.background = '#FEE2E2';
+                feedback.style.border = '1px solid #FCA5A5';
+                feedback.style.color = '#991B1B';
+                feedback.textContent = `❌ Network error: ${err.message}`;
+            }
+        });
     }
 
     function submitCompanyRegistration(event) {
@@ -3542,6 +3623,61 @@
                     <button class="btn-btn" style="background: #2563EB; font-weight: 700;" onclick="window.open('https://businesscentral.dynamics.com/db961cfa-b4ab-42c5-9ab4-90b82e0da387/Production?company=CRONUS%20IN&page=17', '_blank');">Inspect G/L Entry #10200 in BC ↗</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Register Organization Modal (Task A) -->
+    <div id="modal-register-company" class="modal-overlay" style="display:none; z-index: 4500;">
+        <div class="modal-box" style="width: 480px; text-align: left; padding: 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #E5E7EB; padding-bottom: 10px;">
+                <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #111827;">🚀 Register Your Organization</h2>
+                <button type="button" class="btn-btn" style="background: #6B7280; font-size: 0.75rem; padding: 4px 8px;" onclick="closeRegisterModal()">✕</button>
+            </div>
+            <p style="font-size: 0.85rem; color: #4B5563; margin-bottom: 16px; line-height: 1.4;">
+                Initiate self-service onboarding for your company on the Opsmeld platform.
+            </p>
+            <form onsubmit="submitCompanyRegistration(event)">
+                <div style="margin-bottom: 14px;">
+                    <label for="reg-org-name" style="display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 4px;">Organization Name</label>
+                    <input type="text" id="reg-org-name" class="form-control" placeholder="e.g. Acme Corporation" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label for="reg-user-name" style="display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 4px;">Your Full Name</label>
+                    <input type="text" id="reg-user-name" class="form-control" placeholder="e.g. Jane Doe" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div style="margin-bottom: 18px;">
+                    <label for="reg-email" style="display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 4px;">Business Email</label>
+                    <input type="email" id="reg-email" class="form-control" placeholder="e.g. jane@acme.com" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" class="btn-btn" style="background: #6B7280;" onclick="closeRegisterModal()">Cancel</button>
+                    <button type="submit" id="btn-submit-registration" class="btn-btn" style="background: #10B981;">Submit Registration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Request Access Modal (Task B) -->
+    <div id="modal-request-access" class="modal-overlay" style="display:none; z-index: 4500;">
+        <div class="modal-box" style="width: 480px; text-align: left; padding: 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #E5E7EB; padding-bottom: 10px;">
+                <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #111827;">📩 Request Access to Organization</h2>
+                <button type="button" class="btn-btn" style="background: #6B7280; font-size: 0.75rem; padding: 4px 8px;" onclick="closeRequestAccessModal()">✕</button>
+            </div>
+            <p style="font-size: 0.85rem; color: #4B5563; margin-bottom: 16px; line-height: 1.4;">
+                Enter the name of your organization. An access request will be submitted to your organization's administrator for review.
+            </p>
+            <form onsubmit="submitRequestAccess(event)">
+                <div style="margin-bottom: 16px;">
+                    <label for="req-access-org-name" style="display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 4px;">Organization Name</label>
+                    <input type="text" id="req-access-org-name" class="form-control" placeholder="e.g. ABC Manufacturing" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div id="req-access-feedback" style="display: none; font-size: 0.84rem; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; line-height: 1.4;"></div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" class="btn-btn" style="background: #6B7280;" onclick="closeRequestAccessModal()">Cancel</button>
+                    <button type="submit" id="btn-submit-request-access" class="btn-btn" style="background: #3B82F6;">Submit Request</button>
+                </div>
+            </form>
         </div>
     </div>
 

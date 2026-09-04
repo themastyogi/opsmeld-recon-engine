@@ -476,6 +476,155 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         self.page.wait_for_selector("#view-app-shell", state="visible", timeout=5000)
         self.assertFalse(self.page.is_visible("#view-change-password"))
 
+    def test_unprovisioned_user_register_organization_e2e(self):
+        """Task A E2E: Unrecognized user lands on account-not-provisioned screen, opens real modal, registers org, and creates datastore registration."""
+        from core.models import get_datastore
+        from core.auth import get_auth_manager
+        auth_mgr = get_auth_manager()
+        ds = get_datastore()
+
+        unprov_token = auth_mgr.create_session(
+            user_id="usr_unprov_reg_e2e",
+            email="peter@initech.com",
+            display_name="Peter Gibbons",
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False
+        )
+
+        ctx = self.browser.new_context()
+        ctx.add_cookies([{"name": "session", "value": unprov_token, "domain": "127.0.0.1", "path": "/"}])
+        page = ctx.new_page()
+
+        # Lands on account-not-provisioned
+        page.goto(f"{self.base_url}/?login=success")
+        page.wait_for_selector("#view-account-not-provisioned", state="visible", timeout=5000)
+
+        # Click Register Your Organization button
+        page.click("#btn-open-register-org")
+        page.wait_for_selector("#modal-register-company", state="visible", timeout=3000)
+        self.assertTrue(page.is_visible("#modal-register-company"))
+
+        # Fill real form
+        page.fill("#reg-org-name", "Initech Solutions")
+        page.fill("#reg-user-name", "Peter Gibbons")
+        page.fill("#reg-email", "peter@initech.com")
+
+        # Handle submission alert dialog
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.click("#btn-submit-registration")
+
+        page.wait_for_timeout(500)
+        # Modal closes
+        self.assertFalse(page.is_visible("#modal-register-company"))
+
+        # Verify registration in datastore
+        matching_regs = [r for r in ds.registrations.values() if r.organization_name == "Initech Solutions"]
+        self.assertEqual(len(matching_regs), 1)
+        reg = matching_regs[0]
+        self.assertEqual(reg.business_email, "peter@initech.com")
+
+        # Confirm registration approval provisions real organization in datastore
+        approved_org = ds.approve_registration(reg.registration_id, "usr_admin_001")
+        self.assertIsNotNone(approved_org)
+        self.assertEqual(approved_org.name, "Initech Solutions")
+        self.assertIn(approved_org.organization_id, ds.organizations)
+        ctx.close()
+
+    def test_unprovisioned_user_request_access_success_e2e(self):
+        """Task B E2E: Unrecognized user clicks Request Access, submits existing org name, and real AccessRequest is created in datastore."""
+        from core.models import get_datastore
+        from core.auth import get_auth_manager
+        auth_mgr = get_auth_manager()
+        ds = get_datastore()
+
+        unprov_token = auth_mgr.create_session(
+            user_id="usr_unprov_req_acc_e2e",
+            email="alice@external.com",
+            display_name="Alice Candidate",
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False
+        )
+
+        ctx = self.browser.new_context()
+        ctx.add_cookies([{"name": "session", "value": unprov_token, "domain": "127.0.0.1", "path": "/"}])
+        page = ctx.new_page()
+
+        # Lands on account-not-provisioned
+        page.goto(f"{self.base_url}/?login=success")
+        page.wait_for_selector("#view-account-not-provisioned", state="visible", timeout=5000)
+
+        # Click Request Access button
+        page.click("#btn-open-request-access")
+        page.wait_for_selector("#modal-request-access", state="visible", timeout=3000)
+        self.assertTrue(page.is_visible("#modal-request-access"))
+
+        # Fill with existing organization name (ABC Manufacturing)
+        page.fill("#req-access-org-name", "ABC Manufacturing")
+        page.click("#btn-submit-request-access")
+
+        # Verify real success feedback displayed in UI
+        page.wait_for_selector("#req-access-feedback:has-text('submitted successfully')", state="visible", timeout=5000)
+        feedback_text = page.inner_text("#req-access-feedback")
+        self.assertIn("submitted successfully", feedback_text)
+
+        # Verify real AccessRequest in datastore
+        matching_reqs = [r for r in ds.access_requests.values() if r.email == "alice@external.com"]
+        self.assertEqual(len(matching_reqs), 1)
+        access_req = matching_reqs[0]
+        self.assertEqual(access_req.organization_id, "org_abc_001")
+        self.assertEqual(access_req.display_name, "Alice Candidate")
+        ctx.close()
+
+    def test_unprovisioned_user_request_access_not_found_e2e(self):
+        """Task B E2E: Unrecognized user requests access for non-existent org, receives honest 'not found' feedback."""
+        from core.models import get_datastore
+        from core.auth import get_auth_manager
+        auth_mgr = get_auth_manager()
+        ds = get_datastore()
+
+        unprov_token = auth_mgr.create_session(
+            user_id="usr_unprov_notfound_e2e",
+            email="bob@external.com",
+            display_name="Bob Searcher",
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False
+        )
+
+        ctx = self.browser.new_context()
+        ctx.add_cookies([{"name": "session", "value": unprov_token, "domain": "127.0.0.1", "path": "/"}])
+        page = ctx.new_page()
+
+        page.goto(f"{self.base_url}/?login=success")
+        page.wait_for_selector("#view-account-not-provisioned", state="visible", timeout=5000)
+
+        # Click Request Access
+        page.click("#btn-open-request-access")
+        page.wait_for_selector("#modal-request-access", state="visible", timeout=3000)
+
+        # Fill with non-existent company
+        page.fill("#req-access-org-name", "Completely NonExistent Company 9999")
+        page.click("#btn-submit-request-access")
+
+        # Verify clear, honest not-found message in UI
+        page.wait_for_selector("#req-access-feedback:has-text('not found')", state="visible", timeout=5000)
+        feedback_text = page.inner_text("#req-access-feedback")
+        self.assertIn("was not found", feedback_text)
+        self.assertIn("Register Your Organization", feedback_text)
+
+        # Verify no fake AccessRequest created in datastore
+        matching_reqs = [r for r in ds.access_requests.values() if r.email == "bob@external.com"]
+        self.assertEqual(len(matching_reqs), 0)
+        ctx.close()
+
 
 if __name__ == "__main__":
     unittest.main()
