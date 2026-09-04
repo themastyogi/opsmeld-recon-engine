@@ -1,9 +1,9 @@
 /**
  * MCP/web/static/js/auth.js
- * Opsmeld Pure Authentication Controller v3.0
+ * Opsmeld Pure Authentication Controller v3.1
  * 
- * HARD RULE: Single canonical owner of authentication flow execution (Entra Device Flow & Password Login).
- * Manages modal visibility, network interaction, polling timer, and delegates view switching to switchMainView.
+ * Manages Microsoft Entra authorization flow execution, modal visibility, and polling timers.
+ * Scoped password login for admin-provisioned accounts is managed by handleEmailPasswordLogin in index.html.
  */
 
 (function (window) {
@@ -43,58 +43,11 @@
         window.location.href = '/api/auth/entra/authorize';
     }
 
-    /**
-     * Handles password login form submission on the canonical sign-in card.
-     */
-    function handlePasswordLogin(event) {
-        if (event) event.preventDefault();
-
-        const emailEl = document.getElementById('app-login-email');
-        const passEl = document.getElementById('app-login-pass');
-        const errEl = document.getElementById('app-login-error');
-
-        const email = emailEl ? emailEl.value.trim() : 'admin@opsmeld.com';
-        const password = passEl ? passEl.value : 'password123';
-
-        if (errEl) errEl.style.display = 'none';
-
-        return fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, password: password }),
-            credentials: 'same-origin'
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.token) {
-                    localStorage.setItem('opsmeld_token', data.token);
-                    if (typeof window.switchMainView === 'function') {
-                        window.switchMainView('control-tower');
-                    }
-                } else if (data.user_code) {
-                    startEntraFlow();
-                } else {
-                    if (errEl) {
-                        errEl.textContent = 'Invalid credentials: ' + (data.error || 'Authentication failed');
-                        errEl.style.display = 'block';
-                    }
-                }
-            })
-            .catch(err => {
-                console.error('[AuthController] Password login error:', err);
-                if (errEl) {
-                    errEl.textContent = 'Sign in error: ' + err.message;
-                    errEl.style.display = 'block';
-                }
-            });
-    }
-
     // Export OpsmeldAuth API globally
     window.OpsmeldAuth = {
         openModal: openEntraModal,
         closeModal: closeEntraModal,
         startEntraFlow: startEntraFlow,
-        handlePasswordLogin: handlePasswordLogin,
         stopPolling: stopPolling
     };
 

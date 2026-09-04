@@ -115,6 +115,34 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
         """)
         self.assertIn(res, [400, 401])
 
+    def test_unprovisioned_account_routing_shows_account_not_provisioned_screen(self):
+        """Validates post-login routing for unprovisioned Entra account redirects to account-not-provisioned screen."""
+        auth_mgr = get_auth_manager()
+        unprov_token = auth_mgr.create_session(
+            user_id="usr_unprov_e2e_test",
+            email="unrecognized_user@externalcorp.com",
+            display_name="Unrecognized User",
+            organization_id=None,
+            roles=[],
+            permissions=set(),
+            allowed_companies=set(),
+            provisioned=False
+        )
+        ctx = self.browser.new_context()
+        ctx.add_cookies([{
+            "name": "session",
+            "value": unprov_token,
+            "domain": "127.0.0.1",
+            "path": "/"
+        }])
+        page = ctx.new_page()
+        page.goto(f"{self.base_url}/?login=success")
+        page.wait_for_selector("#view-account-not-provisioned", state="visible", timeout=5000)
+        self.assertTrue(page.is_visible("#view-account-not-provisioned"), "account-not-provisioned screen must be visible")
+        self.assertFalse(page.is_visible("#view-public-landing"), "public landing page must NOT be visible")
+        self.assertFalse(page.is_visible("#view-app-shell"), "app shell must NOT be visible")
+        ctx.close()
+
     def test_auth_sign_out(self):
         """Sign out: Validates clicking Sign Out button triggers logout workflow."""
         self._open_page()

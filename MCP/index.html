@@ -1678,6 +1678,8 @@
                 window.OpsmeldSession.resolveState().then(state => {
                     if (state.status === 'AUTHENTICATED_PROVISIONED') {
                         switchMainView('control-tower');
+                    } else if (state.status === 'AUTHENTICATED_UNPROVISIONED') {
+                        switchMainView('account-not-provisioned');
                     } else {
                         switchMainView('public');
                     }
