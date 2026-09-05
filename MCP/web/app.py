@@ -24,7 +24,7 @@ from core.config_loader import load_client_config, load_engine_rules, CONFIG_DIR
 from core.auth import get_auth_manager
 from core.rbac import RBACResolver, get_module_registry
 from core.authorization import CentralAuthorizationEngine, DenialReason, ModulePortalState
-from core.models import get_datastore, OrganizationStatus
+from core.models import get_datastore, OrganizationStatus, AccessRequestStatus
 from modules.ar_manager import ARManagerReport
 from modules.data_trust import DataTrustEngine, DataTrustConfigManager
 from web.templates import render_dashboard_html, render_settings_html
@@ -318,6 +318,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json", 200)
             self._write_response(json.dumps({"status": "success", "registrations": regs}).encode("utf-8"))
             return
+
+        elif path == "/api/admin/organizations":
             token = self._get_session_token()
             session = get_auth_manager().get_session(token)
             if not session or "ENTERPRISE_ADMIN" not in session.roles:
@@ -329,6 +331,51 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
             subs = [s.to_dict() for s in ds.subscriptions.values()]
             self._set_headers("application/json", 200)
             self._write_response(json.dumps({"status": "success", "organizations": orgs, "subscriptions": subs}).encode("utf-8"))
+            return
+
+        elif path == "/api/admin/access-requests":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or not getattr(session, "provisioned", True):
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
+                return
+
+            session_roles = getattr(session, "roles", [])
+            session_perms = getattr(session, "permissions", set())
+            is_enterprise_admin = "ENTERPRISE_ADMIN" in session_roles
+            is_customer_admin = "CUSTOMER_ADMIN" in session_roles or "org:users:manage" in session_perms
+
+            if not (is_enterprise_admin or is_customer_admin):
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Admin required"}).encode("utf-8"))
+                return
+
+            ds = get_datastore()
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            status_filter = query_params.get("status", ["PENDING"])[0].strip().upper()
+
+            caller_org_id = getattr(session, "organization_id", None)
+
+            results = []
+            for req in ds.access_requests.values():
+                if not is_enterprise_admin:
+                    if not caller_org_id or req.organization_id != caller_org_id:
+                        continue
+
+                if status_filter != "ALL" and req.status.upper() != status_filter:
+                    continue
+
+                org = ds.organizations.get(req.organization_id)
+                org_name = org.name if org else "Unknown Organization"
+                req_data = req.to_dict()
+                req_data["organization_name"] = org_name
+                results.append(req_data)
+
+            results.sort(key=lambda r: r.get("created_at", 0), reverse=True)
+
+            self._set_headers("application/json", 200)
+            self._write_response(json.dumps({"status": "success", "requests": results}).encode("utf-8"))
             return
 
         elif path == "/api/org/companies":
@@ -1191,6 +1238,103 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "message": f"Organization '{org.name}' approved and activated.",
                 "organization": org.to_dict()
             }).encode("utf-8"))
+            return
+
+        elif path == "/api/admin/access-requests/decision":
+            token = self._get_session_token()
+            session = get_auth_manager().get_session(token)
+            if not session or not getattr(session, "provisioned", True):
+                self._set_headers("application/json", 401)
+                self._write_response(json.dumps({"error": "Unauthorized"}).encode("utf-8"))
+                return
+
+            session_roles = getattr(session, "roles", [])
+            session_perms = getattr(session, "permissions", set())
+            is_enterprise_admin = "ENTERPRISE_ADMIN" in session_roles
+            is_customer_admin = "CUSTOMER_ADMIN" in session_roles or "org:users:manage" in session_perms
+
+            if not (is_enterprise_admin or is_customer_admin):
+                self._set_headers("application/json", 403)
+                self._write_response(json.dumps({"error": "Forbidden: Admin required"}).encode("utf-8"))
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: Invalid JSON body"}).encode("utf-8"))
+                return
+
+            request_id = data.get("request_id")
+            decision = data.get("decision")
+            if not request_id or not decision:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": "Bad Request: request_id and decision are required"}).encode("utf-8"))
+                return
+
+            ds = get_datastore()
+            req = ds.access_requests.get(request_id)
+            if not req:
+                self._set_headers("application/json", 404)
+                self._write_response(json.dumps({"error": f"Access request '{request_id}' not found"}).encode("utf-8"))
+                return
+
+            # Caller scoping: ENTERPRISE_ADMIN can decide any request; CUSTOMER_ADMIN only their own organization
+            if not is_enterprise_admin:
+                caller_org_id = getattr(session, "organization_id", None)
+                if not caller_org_id or req.organization_id != caller_org_id:
+                    self._set_headers("application/json", 403)
+                    self._write_response(json.dumps({"error": "Forbidden: Cannot review access requests for another organization"}).encode("utf-8"))
+                    return
+
+            if req.status != AccessRequestStatus.PENDING:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": f"Bad Request: Request is already {req.status}"}).encode("utf-8"))
+                return
+
+            decision_clean = decision.strip().upper()
+            if decision_clean not in (AccessRequestStatus.APPROVED, AccessRequestStatus.REJECTED):
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": f"Bad Request: Unsupported decision '{decision}'. Must be APPROVED or REJECTED"}).encode("utf-8"))
+                return
+
+            ok, msg, updated_req, user_id = ds.decide_access_request(
+                request_id=request_id,
+                decision=decision_clean,
+                reviewer_user_id=session.user_id
+            )
+            if not ok:
+                self._set_headers("application/json", 400)
+                self._write_response(json.dumps({"error": msg}).encode("utf-8"))
+                return
+
+            if decision_clean == AccessRequestStatus.APPROVED:
+                from core.auth import _ACTIVE_SESSIONS
+                for s in _ACTIVE_SESSIONS.values():
+                    if s.email.strip().lower() == req.email.strip().lower() and not getattr(s, "provisioned", True):
+                        s.provisioned = True
+                        s.organization_id = req.organization_id
+                        s.roles = ["VIEWER"]
+                        s.permissions = ds.get_user_permissions(user_id, req.organization_id)
+                        s.allowed_companies = ds.get_user_allowed_companies(user_id, req.organization_id)
+                        s.must_change_password = False
+
+                self._set_headers("application/json", 200)
+                self._write_response(json.dumps({
+                    "status": "success",
+                    "message": "Access request approved. User provisioned as VIEWER.",
+                    "user_id": user_id,
+                    "request": updated_req.to_dict()
+                }).encode("utf-8"))
+            else:
+                self._set_headers("application/json", 200)
+                self._write_response(json.dumps({
+                    "status": "success",
+                    "message": "Access request rejected.",
+                    "request": updated_req.to_dict()
+                }).encode("utf-8"))
             return
 
         elif path == "/api/admin/organizations/status":

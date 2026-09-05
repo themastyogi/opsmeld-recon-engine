@@ -80,7 +80,9 @@ class AccessRequest:
         email: str,
         display_name: str,
         status: str = AccessRequestStatus.PENDING,
-        created_at: Optional[float] = None
+        created_at: Optional[float] = None,
+        reviewed_at: Optional[float] = None,
+        reviewed_by: Optional[str] = None
     ):
         self.request_id = request_id
         self.organization_id = organization_id
@@ -89,6 +91,8 @@ class AccessRequest:
         self.display_name = display_name
         self.status = status
         self.created_at = created_at or time.time()
+        self.reviewed_at = reviewed_at
+        self.reviewed_by = reviewed_by
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -98,8 +102,11 @@ class AccessRequest:
             "email": self.email,
             "display_name": self.display_name,
             "status": self.status,
-            "created_at": self.created_at
+            "created_at": self.created_at,
+            "reviewed_at": self.reviewed_at,
+            "reviewed_by": self.reviewed_by
         }
+
 
 
 class Organization:
@@ -363,7 +370,7 @@ class MultitenantDataStore:
 
         return org
 
-    def provision_org_user(self, org_id: str, email: str, display_name: str, allowed_companies: set, role: str = "VIEWER") -> str:
+    def provision_org_user(self, org_id: str, email: str, display_name: str, allowed_companies: set, role: str = "VIEWER", must_change_password: bool = True) -> str:
         """Admin-provisioned, password-login user (VIEWER or CUSTOMER_ADMIN).
         Adds to an EXISTING organization with strict role and company ACL boundaries."""
         org = self.get_organization(org_id)
@@ -399,10 +406,10 @@ class MultitenantDataStore:
             user_id = existing_user.user_id
             if display_name:
                 existing_user.display_name = display_name
-            existing_user.must_change_password = True
+            existing_user.must_change_password = must_change_password
         else:
             user_id = f"usr_{len(self.users) + 101}"
-            user = User(user_id, f"oid_{user_id}", email, display_name, must_change_password=True)
+            user = User(user_id, f"oid_{user_id}", email, display_name, must_change_password=must_change_password)
             self.users[user_id] = user
 
         self.org_users.setdefault(org_id, set()).add(user_id)
@@ -420,6 +427,49 @@ class MultitenantDataStore:
         req = AccessRequest(req_id, organization_id, user_id, email, display_name)
         self.access_requests[req_id] = req
         return req
+
+    def decide_access_request(
+        self,
+        request_id: str,
+        decision: str,
+        reviewer_user_id: str
+    ) -> Tuple[bool, str, Optional[AccessRequest], Optional[str]]:
+        """
+        Decides on an access request (APPROVED or REJECTED).
+        If APPROVED: provisions the user into the requested organization with role='VIEWER',
+        assigns companies available to that organization, and sets must_change_password=False.
+        """
+        req = self.access_requests.get(request_id)
+        if not req:
+            return False, f"Access request '{request_id}' not found", None, None
+
+        if req.status != AccessRequestStatus.PENDING:
+            return False, f"Request is already {req.status}", req, None
+
+        decision_clean = (decision or "").strip().upper()
+        if decision_clean not in (AccessRequestStatus.APPROVED, AccessRequestStatus.REJECTED):
+            return False, f"Unsupported decision '{decision}'. Must be APPROVED or REJECTED", req, None
+
+        req.status = decision_clean
+        req.reviewed_at = time.time()
+        req.reviewed_by = reviewer_user_id
+
+        user_id = None
+        if decision_clean == AccessRequestStatus.APPROVED:
+            org_comps = self.org_companies.get(req.organization_id, [])
+            allowed_companies = {c.bc_company_guid for c in org_comps}
+            user_id = self.provision_org_user(
+                req.organization_id,
+                req.email,
+                req.display_name,
+                allowed_companies,
+                role="VIEWER",
+                must_change_password=False
+            )
+
+        self.persist()
+        return True, "Success", req, user_id
+
 
     def persist(self, filepath: Optional[str] = None):
         """Persists current multitenant data store to JSON file."""

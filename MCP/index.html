@@ -1056,6 +1056,39 @@
                     </div>
                 </div>
 
+                <!-- Admin Pending Access Requests Section (Visible to Admins) -->
+                <div id="ct-admin-access-requests-section" style="display: none; margin-top: 24px;">
+                    <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A;">Pending Access Requests</h3>
+                                <span id="ct-access-requests-count-badge" style="background: #FEF3C7; color: #92400E; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">0 Pending</span>
+                            </div>
+                            <button class="btn-btn" style="background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; font-size: 0.78rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer;" onclick="loadAdminAccessRequests()">🔄 Refresh</button>
+                        </div>
+                        <div id="ct-access-requests-feedback" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 14px;"></div>
+                        <div style="overflow-x: auto;">
+                            <table class="table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 2px solid #E2E8F0; color: #64748B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                                        <th style="padding: 10px 12px;">Requester Name</th>
+                                        <th style="padding: 10px 12px;">Email</th>
+                                        <th style="padding: 10px 12px;">Organization</th>
+                                        <th style="padding: 10px 12px;">Requested Date</th>
+                                        <th style="padding: 10px 12px;">Status</th>
+                                        <th style="padding: 10px 12px; text-align: right;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ct-access-requests-tbody" style="font-size: 0.88rem; color: #334155;">
+                                    <tr>
+                                        <td colspan="6" style="padding: 20px; text-align: center; color: #94A3B8;">No pending access requests.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Footer Status Bar -->
                 <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 10px 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #047857;">
                     <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
@@ -1265,6 +1298,49 @@
                             <!-- Loaded via JS -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- OPSMELD ADMIN VIEW -->
+            <div id="view-opsmeld-admin" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: #111827;">Platform &amp; Organization Administration</h2>
+                        <div style="font-size: 0.88rem; color: #6B7280; margin-top: 4px;">Review access requests, manage user entitlements, and oversee multitenant tenants.</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button class="btn-btn" style="background: #2563EB; color: white; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; border-radius: 6px; cursor: pointer;" onclick="loadAdminAccessRequests()">🔄 Refresh Requests</button>
+                    </div>
+                </div>
+
+                <!-- Pending Access Requests Card -->
+                <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #0F172A;">Pending Access Requests</h3>
+                            <span id="admin-access-requests-count-badge" style="background: #FEF3C7; color: #92400E; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 9999px;">0 Pending</span>
+                        </div>
+                    </div>
+                    <div id="admin-access-requests-feedback" style="display: none; padding: 12px 16px; border-radius: 6px; font-size: 0.88rem; margin-bottom: 16px;"></div>
+                    <div style="overflow-x: auto;">
+                        <table class="table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid #E2E8F0; color: #64748B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <th style="padding: 12px;">Requester Name</th>
+                                    <th style="padding: 12px;">Email</th>
+                                    <th style="padding: 12px;">Organization</th>
+                                    <th style="padding: 12px;">Requested Date</th>
+                                    <th style="padding: 12px;">Status</th>
+                                    <th style="padding: 12px; text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-access-requests-tbody" style="font-size: 0.88rem; color: #334155;">
+                                <tr>
+                                    <td colspan="6" style="padding: 24px; text-align: center; color: #94A3B8;">No pending access requests.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1910,10 +1986,12 @@
         const ctView = document.getElementById('view-control-tower');
         const segView = document.getElementById('view-segments');
         const dtView = document.getElementById('view-data-trust');
+        const adminView = document.getElementById('view-opsmeld-admin');
 
         const topPortal = document.getElementById('nav-top-portal');
         const topAr = document.getElementById('nav-top-ar');
         const topDt = document.getElementById('nav-top-dt');
+        const topAdmin = document.getElementById('nav-top-admin');
 
         const notProvisioned = document.getElementById('view-account-not-provisioned');
         const changePassword = document.getElementById('view-change-password');
@@ -2042,7 +2120,16 @@
 
                 const permissions = state.permissions || [];
                 const roles = state.roles || [];
-                const hasPerm = permissions.includes('data_trust:read') || permissions.includes('data-trust:read') || permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
+                const isAdmin = roles.includes('CUSTOMER_ADMIN') || roles.includes('ENTERPRISE_ADMIN') || permissions.includes('org:users:manage');
+
+                let hasPerm = false;
+                if (viewName === 'opsmeld-admin') {
+                    hasPerm = isAdmin || permissions.includes('*');
+                } else if (viewName === 'data-trust') {
+                    hasPerm = permissions.includes('data_trust:read') || permissions.includes('data-trust:read') || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN');
+                } else {
+                    hasPerm = permissions.includes(reqPerm) || permissions.includes('*') || roles.includes('ENTERPRISE_ADMIN') || roles.includes('CUSTOMER_ADMIN') || permissions.includes('data_trust:read');
+                }
 
                 if (!hasPerm) {
                     const msgEl = document.getElementById('auth-denied-message');
@@ -2056,28 +2143,182 @@
                 // Render App Shell ONLY after server-side session, provisioning, and permissions are verified
                 if (appShell) appShell.style.display = 'block';
 
+                const ctAdminSec = document.getElementById('ct-admin-access-requests-section');
+                if (ctAdminSec) {
+                    ctAdminSec.style.display = isAdmin ? 'block' : 'none';
+                }
+                if (topAdmin) {
+                    topAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
+                }
+
                 if (viewName === 'control-tower' || viewName === 'portal-landing') {
                     if (topAr) topAr.classList.add('active');
                     if (ctView) ctView.style.display = 'block';
                     if (segView) segView.style.display = 'none';
                     if (dtView) dtView.style.display = 'none';
+                    if (adminView) adminView.style.display = 'none';
                     loadControlTowerData();
+                    if (isAdmin) {
+                        loadAdminAccessRequests();
+                    }
                 } else if (viewName === 'data-trust') {
                     if (topDt) topDt.classList.add('active');
                     if (dtView) dtView.style.display = 'block';
                     if (ctView) ctView.style.display = 'none';
                     if (segView) segView.style.display = 'none';
+                    if (adminView) adminView.style.display = 'none';
                     loadAuthorizedCompanies();
+                } else if (viewName === 'opsmeld-admin') {
+                    if (topAdmin) topAdmin.classList.add('active');
+                    if (adminView) adminView.style.display = 'block';
+                    if (ctView) ctView.style.display = 'none';
+                    if (segView) segView.style.display = 'none';
+                    if (dtView) dtView.style.display = 'none';
+                    loadAdminAccessRequests();
                 } else {
                     if (segView) segView.style.display = 'block';
                     if (ctView) ctView.style.display = 'none';
                     if (dtView) dtView.style.display = 'none';
+                    if (adminView) adminView.style.display = 'none';
                 }
             })
             .catch(err => console.error('Module access check error:', err));
         } else {
             if (publicLanding) publicLanding.style.display = 'block';
         }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function loadAdminAccessRequests() {
+        fetch('/api/admin/access-requests?status=PENDING', { credentials: 'same-origin' })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                const requests = data.requests || [];
+                const tbodies = [
+                    document.getElementById('admin-access-requests-tbody'),
+                    document.getElementById('ct-access-requests-tbody')
+                ];
+                const countBadges = [
+                    document.getElementById('admin-access-requests-count-badge'),
+                    document.getElementById('ct-access-requests-count-badge')
+                ];
+
+                countBadges.forEach(badge => {
+                    if (badge) {
+                        badge.textContent = `${requests.length} Pending`;
+                        badge.style.background = requests.length > 0 ? '#FEF3C7' : '#E2E8F0';
+                        badge.style.color = requests.length > 0 ? '#92400E' : '#475569';
+                    }
+                });
+
+                tbodies.forEach(tbody => {
+                    if (!tbody) return;
+                    tbody.innerHTML = '';
+                    if (requests.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="padding: 24px; text-align: center; color: #94A3B8;">No pending access requests.</td></tr>';
+                        return;
+                    }
+
+                    requests.forEach(req => {
+                        const tr = document.createElement('tr');
+                        tr.id = `req-row-${req.request_id}`;
+                        tr.style.borderBottom = '1px solid #F1F5F9';
+
+                        const dateStr = req.created_at ? new Date(req.created_at * 1000).toLocaleString() : 'Recent';
+
+                        tr.innerHTML = `
+                            <td style="padding: 12px; font-weight: 600; color: #0F172A;">${escapeHtml(req.display_name || 'User')}</td>
+                            <td style="padding: 12px; color: #475569;">${escapeHtml(req.email || '')}</td>
+                            <td style="padding: 12px;"><span style="background: #EEF2FF; color: #4338CA; font-weight: 600; font-size: 0.78rem; padding: 2px 8px; border-radius: 4px;">${escapeHtml(req.organization_name || req.organization_id || '')}</span></td>
+                            <td style="padding: 12px; font-size: 0.8rem; color: #64748B;">${dateStr}</td>
+                            <td style="padding: 12px;"><span style="background: #FEF3C7; color: #92400E; font-weight: 700; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px;">PENDING</span></td>
+                            <td style="padding: 12px; text-align: right; white-space: nowrap;">
+                                <button class="btn-btn btn-approve-${req.request_id}" style="background: #10B981; color: white; padding: 6px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 4px; cursor: pointer;" onclick="decideAccessRequest('${req.request_id}', 'APPROVED')">Approve ✓</button>
+                                <button class="btn-btn btn-reject-${req.request_id}" style="background: #EF4444; color: white; padding: 6px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 4px; cursor: pointer; margin-left: 6px;" onclick="decideAccessRequest('${req.request_id}', 'REJECTED')">Reject ✕</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                });
+            })
+            .catch(err => {
+                console.warn('Failed to load admin access requests:', err);
+            });
+    }
+
+    function decideAccessRequest(requestId, decision) {
+        const feedbackEls = [
+            document.getElementById('admin-access-requests-feedback'),
+            document.getElementById('ct-access-requests-feedback')
+        ];
+
+        document.querySelectorAll(`.btn-approve-${requestId}, .btn-reject-${requestId}`).forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        });
+
+        fetch('/api/admin/access-requests/decision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ request_id: requestId, decision: decision })
+        })
+        .then(res => res.json().then(data => ({ status: res.status, data })))
+        .then(result => {
+            if (result.status === 200) {
+                feedbackEls.forEach(el => {
+                    if (el) {
+                        el.style.display = 'block';
+                        el.style.background = '#ECFDF5';
+                        el.style.border = '1px solid #6EE7B7';
+                        el.style.color = '#065F46';
+                        el.textContent = `✓ ${result.data.message || 'Decision recorded successfully.'}`;
+                    }
+                });
+                setTimeout(loadAdminAccessRequests, 300);
+            } else {
+                feedbackEls.forEach(el => {
+                    if (el) {
+                        el.style.display = 'block';
+                        el.style.background = '#FEF2F2';
+                        el.style.border = '1px solid #FCA5A5';
+                        el.style.color = '#991B1B';
+                        el.textContent = `⚠️ Error: ${result.data.error || 'Failed to process decision'}`;
+                    }
+                });
+                document.querySelectorAll(`.btn-approve-${requestId}, .btn-reject-${requestId}`).forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                });
+            }
+        })
+        .catch(err => {
+            feedbackEls.forEach(el => {
+                if (el) {
+                    el.style.display = 'block';
+                    el.style.background = '#FEF2F2';
+                    el.style.border = '1px solid #FCA5A5';
+                    el.style.color = '#991B1B';
+                    el.textContent = `⚠️ Network error: ${err.message}`;
+                }
+            });
+            document.querySelectorAll(`.btn-approve-${requestId}, .btn-reject-${requestId}`).forEach(btn => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            });
+        });
     }
 
     function loadOpsmeldPortalInfo() {
