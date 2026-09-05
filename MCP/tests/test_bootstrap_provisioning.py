@@ -12,6 +12,7 @@ Verifies:
 
 import os
 import json
+import time
 import unittest
 from unittest.mock import patch
 
@@ -230,6 +231,157 @@ class TestBootstrapProvisioning(unittest.TestCase):
         self.assertEqual(abc.name, "ABC Manufacturing")
         self.assertEqual(abc.status, OrganizationStatus.ACTIVE)
         self.assertIn("usr_admin_001", ds.org_users.get("org_abc_001", set()))
+
+    def test_8_grant_enterprise_admin_flag_adds_both_roles_and_permits_admin_endpoints(self):
+        """Verify OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN=true grants both roles and permits admin endpoints."""
+        with patch.dict(os.environ, {
+            "OPSMELD_BOOTSTRAP_ORG_NAME": "Dual Role Corp",
+            "OPSMELD_BOOTSTRAP_ADMIN_EMAIL": "dual_admin@dualcorp.com",
+            "OPSMELD_BOOTSTRAP_ADMIN_NAME": "Dual Admin",
+            "OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN": "true"
+        }):
+            ds = get_datastore()
+            org = ds.bootstrap_from_env()
+            self.assertIsNotNone(org)
+
+            resolved = ds.resolve_user_organization("dual_admin@dualcorp.com")
+            self.assertIsNotNone(resolved)
+            user, org = resolved
+
+            roles = ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())
+            self.assertIn("CUSTOMER_ADMIN", roles)
+            self.assertIn("ENTERPRISE_ADMIN", roles)
+
+            auth_mgr = get_auth_manager()
+            token = auth_mgr.login_entra_user(email="dual_admin@dualcorp.com", display_name="Dual Admin")
+            session = auth_mgr.get_session(token)
+            self.assertIn("CUSTOMER_ADMIN", session.roles)
+            self.assertIn("ENTERPRISE_ADMIN", session.roles)
+
+            from web.app import OpsmeldWebHandler
+            from unittest.mock import MagicMock
+            import io
+
+            # 1. Test POST /api/admin/registrations/approve
+            # Seed a pending registration
+            from core.models import OrganizationRegistration
+            reg = OrganizationRegistration("reg_dual_test", "Dual Prospect", "Prospect Admin", "p@dual.com", ["ar_control_tower", "data_trust"])
+            ds.registrations["reg_dual_test"] = reg
+
+            handler = OpsmeldWebHandler.__new__(OpsmeldWebHandler)
+            handler.headers = {"Cookie": f"session={token}", "Content-Length": "0"}
+            handler.command = "POST"
+            handler.path = "/api/admin/registrations/approve"
+            handler.rfile = io.BytesIO(json.dumps({"registration_id": "reg_dual_test"}).encode("utf-8"))
+            handler.headers["Content-Length"] = str(len(handler.rfile.getvalue()))
+            handler.wfile = io.BytesIO()
+            handler._set_headers = MagicMock()
+
+            handler.do_POST()
+
+            handler._set_headers.assert_called_with("application/json", 200)
+            resp_data = json.loads(handler.wfile.getvalue().decode("utf-8"))
+            self.assertEqual(resp_data.get("status"), "success")
+
+            # 2. Test POST /api/admin/organizations/status
+            handler2 = OpsmeldWebHandler.__new__(OpsmeldWebHandler)
+            handler2.headers = {"Cookie": f"session={token}", "Content-Length": "0"}
+            handler2.command = "POST"
+            handler2.path = "/api/admin/organizations/status"
+            handler2.rfile = io.BytesIO(json.dumps({"organization_id": org.organization_id, "status": "ACTIVE"}).encode("utf-8"))
+            handler2.headers["Content-Length"] = str(len(handler2.rfile.getvalue()))
+            handler2.wfile = io.BytesIO()
+            handler2._set_headers = MagicMock()
+
+            handler2.do_POST()
+
+            handler2._set_headers.assert_called_with("application/json", 200)
+            resp_data2 = json.loads(handler2.wfile.getvalue().decode("utf-8"))
+            self.assertEqual(resp_data2.get("status"), "success")
+
+    def test_9_idempotency_grant_enterprise_admin_on_existing_org(self):
+        """Verify that an org created with flag off can be upgraded to ENTERPRISE_ADMIN idempotently on restart with flag on."""
+        with patch.dict(os.environ, {
+            "OPSMELD_BOOTSTRAP_ORG_NAME": "Upgrade Corp",
+            "OPSMELD_BOOTSTRAP_ADMIN_EMAIL": "upgrade_admin@upgradecorp.com",
+            "OPSMELD_BOOTSTRAP_ADMIN_NAME": "Upgrade Admin",
+            "OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN": "false"
+        }):
+            ds = MultitenantDataStore()
+            org1 = ds.bootstrap_from_env()
+            self.assertIsNotNone(org1)
+
+            resolved = ds.resolve_user_organization("upgrade_admin@upgradecorp.com")
+            user, org = resolved
+            roles = ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())
+            self.assertIn("CUSTOMER_ADMIN", roles)
+            self.assertNotIn("ENTERPRISE_ADMIN", roles)
+
+            # Now simulate restarting server with OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN=true
+            with patch.dict(os.environ, {"OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN": "true"}):
+                org2 = ds.bootstrap_from_env()
+                self.assertEqual(org1.organization_id, org2.organization_id)
+
+                roles_after = ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())
+                self.assertIn("CUSTOMER_ADMIN", roles_after)
+                self.assertIn("ENTERPRISE_ADMIN", roles_after)
+
+                # Subsequent call with flag still true does not duplicate or alter roles
+                org3 = ds.bootstrap_from_env()
+                self.assertEqual(org1.organization_id, org3.organization_id)
+                self.assertEqual(roles_after, {"CUSTOMER_ADMIN", "ENTERPRISE_ADMIN"})
+
+    def test_10_grant_enterprise_admin_false_or_unset_leaves_customer_admin_only(self):
+        """Verify that when OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN is unset or false, only CUSTOMER_ADMIN is granted."""
+        for flag_val in [None, "false", "0", "no", ""]:
+            env_dict = {
+                "OPSMELD_BOOTSTRAP_ORG_NAME": f"Single Role Corp {flag_val}",
+                "OPSMELD_BOOTSTRAP_ADMIN_EMAIL": f"admin_{flag_val}@singlecorp.com",
+                "OPSMELD_BOOTSTRAP_ADMIN_NAME": "Single Admin"
+            }
+            if flag_val is not None:
+                env_dict["OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN"] = flag_val
+            elif "OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN" in os.environ:
+                del os.environ["OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN"]
+
+            with patch.dict(os.environ, env_dict):
+                ds = MultitenantDataStore()
+                org = ds.bootstrap_from_env()
+                self.assertIsNotNone(org)
+
+                resolved = ds.resolve_user_organization(f"admin_{flag_val}@singlecorp.com")
+                user, org = resolved
+                roles = ds.user_roles.get(f"{user.user_id}:{org.organization_id}", set())
+                self.assertIn("CUSTOMER_ADMIN", roles)
+                self.assertNotIn("ENTERPRISE_ADMIN", roles)
+
+    def test_11_company_filtering_and_own_org_scope_intact(self):
+        """Requirement 3: Confirm account still correctly sees its own org's data and company ACLs."""
+        with patch.dict(os.environ, {
+            "OPSMELD_BOOTSTRAP_ORG_NAME": "Scoped Scope Corp",
+            "OPSMELD_BOOTSTRAP_ADMIN_EMAIL": "scoped_admin@scopecorp.com",
+            "OPSMELD_BOOTSTRAP_ADMIN_NAME": "Scoped Admin",
+            "OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN": "true"
+        }):
+            ds = get_datastore()
+            org = ds.bootstrap_from_env()
+
+            auth_mgr = get_auth_manager()
+            token = auth_mgr.login_entra_user(email="scoped_admin@scopecorp.com", display_name="Scoped Admin")
+            session = auth_mgr.get_session(token)
+
+            # Confirm org-scoped company discovery & allowed companies
+            self.assertEqual(session.organization_id, org.organization_id)
+            user_allowed = ds.get_user_allowed_companies(session.user_id, org.organization_id)
+            self.assertIn("ac6b97ba-bc8f-f111-832d-7c1e5233db45", user_allowed)
+
+            from web.app import filter_companies_for_session
+            discovered = [
+                {"id": "ac6b97ba-bc8f-f111-832d-7c1e5233db45", "name": "CRONUS IN"},
+                {"id": "c37ac1c0-bc8f-f111-832d-7c1e5233db45", "name": "My Company"}
+            ]
+            filtered = filter_companies_for_session(discovered, session)
+            self.assertEqual(len(filtered), 2)
 
 
 if __name__ == "__main__":

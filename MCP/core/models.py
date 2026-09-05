@@ -11,6 +11,7 @@ from typing import Dict, List, Set, Optional, Any, Tuple
 BOOTSTRAP_ORG_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ORG_NAME")
 BOOTSTRAP_ADMIN_EMAIL = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_EMAIL")
 BOOTSTRAP_ADMIN_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_NAME")
+BOOTSTRAP_GRANT_ENTERPRISE_ADMIN = os.environ.get("OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN")
 
 
 class OrganizationStatus:
@@ -447,16 +448,28 @@ class MultitenantDataStore:
         Environment-variable-driven bootstrap logic for real customer organization and admin.
         Safe and idempotent: runs once only when environment variables are configured
         and the organization does not already exist.
+        If OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN=true, also grants ENTERPRISE_ADMIN role.
         """
         org_name = (os.environ.get("OPSMELD_BOOTSTRAP_ORG_NAME") or "").strip()
         admin_email = (os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_EMAIL") or "").strip()
         admin_name = (os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_NAME") or "").strip()
+        grant_enterprise_admin = (os.environ.get("OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN", "") or "").strip().lower() == "true"
 
         if not org_name or not admin_email:
             return None
 
         existing = next((o for o in self.organizations.values() if o.name.strip().lower() == org_name.lower()), None)
         if existing:
+            # Idempotency check: Ensure ENTERPRISE_ADMIN is granted if flag is active on existing org
+            if grant_enterprise_admin:
+                resolved = self.resolve_user_organization(admin_email)
+                if resolved:
+                    user, org = resolved
+                    role_key = f"{user.user_id}:{org.organization_id}"
+                    roles = self.user_roles.setdefault(role_key, set())
+                    if "ENTERPRISE_ADMIN" not in roles:
+                        roles.add("ENTERPRISE_ADMIN")
+                        self.persist()
             return existing
 
         org_id = f"org_{len(self.organizations) + 101}"
@@ -502,6 +515,8 @@ class MultitenantDataStore:
         )
         if user_id in self.users:
             self.users[user_id].must_change_password = False
+            if grant_enterprise_admin:
+                self.user_roles.setdefault(f"{user_id}:{org_id}", set()).add("ENTERPRISE_ADMIN")
 
         self.persist()
         return org
