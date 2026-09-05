@@ -14,11 +14,6 @@ from core.rbac import RBACResolver, get_module_registry
 
 SESSION_TTL_SECONDS = 86400  # 24 hours
 
-BOOTSTRAP_ORG_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ORG_NAME")
-BOOTSTRAP_ADMIN_EMAIL = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_EMAIL")
-BOOTSTRAP_ADMIN_NAME = os.environ.get("OPSMELD_BOOTSTRAP_ADMIN_NAME")
-BOOTSTRAP_GRANT_ENTERPRISE_ADMIN = os.environ.get("OPSMELD_BOOTSTRAP_GRANT_ENTERPRISE_ADMIN")
-
 def hash_password(password: str, salt: Optional[str] = None) -> str:
     """Hashes a password using PBKDF2-HMAC-SHA256 with a cryptographically secure salt."""
     if not salt:
