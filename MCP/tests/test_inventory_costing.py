@@ -380,6 +380,44 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertEqual(provenance, "DATA_UNAVAILABLE")
         self.assertEqual(len(txs), 0)
 
+    def test_inventory_costing_acquisition_exception_fails_closed_to_data_unavailable(self):
+        """Forcing exception path in acquire_inventory_cost_transactions MUST return ([], 'DATA_UNAVAILABLE'), never LIVE_BUSINESS_CENTRAL."""
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = "mock_token"
+        mock_client._execute_bc_rest.side_effect = lambda ep: (
+            {"value": [{"id": "COMP-1", "name": "COMP-1"}]}
+            if ep == "companies"
+            else (_ for _ in ()).throw(RuntimeError("Simulated BC network crash"))
+        )
+        acquirer = DataAcquirer(mcp_client=mock_client, mode="AUTO")
+        txs, provenance = acquirer.acquire_inventory_cost_transactions(company_id="COMP-1")
+        self.assertEqual(provenance, "DATA_UNAVAILABLE")
+        self.assertNotEqual(provenance, "LIVE_BUSINESS_CENTRAL")
+        self.assertEqual(txs, [])
+
+    def test_inventory_costing_acquisition_no_client_auto_mode_returns_data_unavailable(self):
+        """In AUTO mode with no client configured, acquire_inventory_cost_transactions MUST fail closed to ([], 'DATA_UNAVAILABLE')."""
+        acquirer = DataAcquirer(mcp_client=None, mode="AUTO")
+        txs, provenance = acquirer.acquire_inventory_cost_transactions(company_id="COMP-1")
+        self.assertEqual(provenance, "DATA_UNAVAILABLE")
+        self.assertEqual(txs, [])
+
+    def test_inventory_costing_acquisition_fixture_mode_unaffected(self):
+        """Confirm TEST_FIXTURE and DEMO_FIXTURE modes are unaffected and still return real fixture data with SNAPSHOT_SEED."""
+        # 1. TEST_FIXTURE with no client
+        acquirer_tf = DataAcquirer(mcp_client=None, mode="TEST_FIXTURE")
+        txs_tf, prov_tf = acquirer_tf.acquire_inventory_cost_transactions(company_id="COMP-1")
+        self.assertEqual(prov_tf, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_tf) > 0)
+
+        # 2. DEMO_FIXTURE with failing client
+        mock_failing_client = MagicMock()
+        mock_failing_client.get_access_token.return_value = None
+        acquirer_df = DataAcquirer(mcp_client=mock_failing_client, mode="DEMO_FIXTURE")
+        txs_df, prov_df = acquirer_df.acquire_inventory_cost_transactions(company_id="COMP-1")
+        self.assertEqual(prov_df, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_df) > 0)
+
     # -------------------------------------------------------------------------
     # 6. Boolean Normalization & Materiality Tests
     # -------------------------------------------------------------------------

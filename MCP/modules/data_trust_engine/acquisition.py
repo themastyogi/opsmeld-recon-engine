@@ -225,25 +225,20 @@ class DataAcquirer:
             token = self.client.get_access_token()
             comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
-                txs = self._get_fixture_inventory_cost_transactions(company_id)
-                if lookback_months is not None and float(lookback_months) > 0:
-                    txs = self._filter_by_lookback(txs, float(lookback_months))
-                return txs, "SNAPSHOT_SEED"
+                return [], "DATA_UNAVAILABLE"
 
             try:
                 # Step A: Retrieve Item Ledger Entries
                 ile_resp = self.client._execute_bc_rest(f"companies({comp_guid})/itemLedgerEntries")
                 if isinstance(ile_resp, dict) and (ile_resp.get("is_error") or "error" in ile_resp):
-                    ile_raw = []
-                else:
-                    ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
+                    return [], "DATA_UNAVAILABLE"
+                ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
 
                 # Step B: Retrieve Value Entries
                 ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
                 if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
-                    ve_raw = []
-                else:
-                    ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
+                    return [], "DATA_UNAVAILABLE"
+                ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
 
                 env_id = self.client.config.environment if (hasattr(self.client, "config") and getattr(self.client.config, "environment", None)) else "Production"
                 resolved_cost_txs = self._resolve_bc_inventory_cost_entries(ile_raw, ve_raw, comp_guid, env_id)
@@ -252,12 +247,9 @@ class DataAcquirer:
                 return resolved_cost_txs, "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
                 logger.error(f"Inventory Costing acquisition exception: {str(e)}")
-                return [], "LIVE_BUSINESS_CENTRAL"
+                return [], "DATA_UNAVAILABLE"
 
-        txs = self._get_fixture_inventory_cost_transactions(company_id)
-        if lookback_months is not None and float(lookback_months) > 0:
-            txs = self._filter_by_lookback(txs, float(lookback_months))
-        return txs, "SNAPSHOT_SEED"
+        return [], "DATA_UNAVAILABLE"
 
     def _filter_by_lookback(self, txs: List[Dict[str, Any]], lookback_months: float) -> List[Dict[str, Any]]:
         """Filters transactions by lookback_months relative to latest business date in population."""
