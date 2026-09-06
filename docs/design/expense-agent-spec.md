@@ -1,10 +1,16 @@
-# Expense Agent — Design Spec for SME Review v1.6
+# Expense Agent — Design Spec for SME Review v1.9
 
-Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
-BUILD.** Full council review (Go/No-Go) completed 2026-09-06; see §13 for
-the CEO synthesis and the six conditions that must close before any
-schema work or production code starts. This is the lean, decision-focused
-version of the design: architecture, scope,
+Status: **ALL SIX COUNCIL CONDITIONS CLOSED (2026-09-06).** Infra
+decision, `LLMInterpreter` reuse, row-level isolation design, LLM/OCR
+cost estimate, D-1/D-2/D-3 (reframed as customer-configurable policy),
+and BC-1/BC-7/BC-8/BC-11 (resolved by architecture decision — Purchase
+Invoice for GST lines, `OPSMELD_NATIVE` approval, Employee-as-Vendor as
+a per-customer option, custom-API fallback if needed) are all closed.
+**This clears the pre-build gate — it is not itself a green light to
+build the full 40-table schema in one pass.** The council's own
+Product Manager finding still holds: start with a thin vertical slice
+(one workflow end-to-end) rather than the whole schema at once. This is
+the lean, decision-focused version of the design: architecture, scope,
 functional requirements, and the open questions that actually need
 expert judgment. The full 40-table engineering schema, conversational
 workflow walkthroughs, and reporting/dashboard design live in the
@@ -401,102 +407,112 @@ it will be settled:
 
 ## 7. Accounting Treatment Matrix
 
-Intentionally conceptual until BC-11 and BC-7 are confirmed.
+**Updated 2026-09-06 per §8's BC architecture decisions** — the posting
+mechanism column is no longer conceptual; it's a decision. GST-bearing
+lines route through Purchase Invoice; non-tax lines may use Journal;
+either way Finance reviews and posts in BC (FR-16's unposted-draft
+principle applies to both document types).
 
-| Scenario | Expense funding | Employee settlement | Expected BC accounting result |
-|---|---|---|---|
-| Employee-paid expense | Employee | Reimbursement | Expense + employee payable/reimbursement |
-| Company-paid expense | Company | None | Expense accounting without employee reimbursement |
-| Corporate-card expense | Corporate Card | Card settlement | Expense + card/vendor settlement path |
-| Advance-funded expense | Employee Advance | Advance application | Expense + application against employee advance |
-| Expense > advance | Employee Advance + employee | Reimburse difference | Apply advance + employee payable for difference |
-| Expense < advance | Employee Advance | Recover difference | Apply expense against advance + employee recovery |
-| Split invoice | Mixed | Mixed | Itemized accounting/settlement by allocation |
-| TDS-required vendor payment | Employee-mediated | AP/TDS path where threshold met | Route to supported AP/vendor tax process |
+| Scenario | Expense funding | Employee settlement | Posting mechanism | Expected BC accounting result |
+|---|---|---|---|---|
+| Employee-paid expense, GST-bearing | Employee | Reimbursement | **Purchase Invoice** (Employee-as-Vendor if that mapping is used) | Purchase Invoice with GST detail + Vendor/Employee Ledger Entry for reimbursement |
+| Employee-paid expense, no GST detail needed | Employee | Reimbursement | General/Payment Journal | Expense + employee payable/reimbursement |
+| Company-paid expense | Company | None | Purchase Invoice (if GST-bearing) or Journal | Expense accounting without employee reimbursement |
+| Corporate-card expense | Corporate Card | Card settlement | Purchase Invoice or Journal, matched to card statement | Expense + card/vendor settlement path |
+| Advance-funded expense | Employee Advance | Advance application | Journal (disbursement) + Purchase Invoice/Journal (settlement) | Expense + application against employee advance (native Employee Ledger, Employee-as-Vendor's Vendor Ledger, or app-side tracking — per BC-7's per-customer choice) |
+| Expense > advance | Employee Advance + employee | Reimburse difference | Same as above | Apply advance + employee payable for difference |
+| Expense < advance | Employee Advance | Recover difference | Same as above | Apply expense against advance + employee recovery |
+| Split invoice | Mixed | Mixed | Itemized across Purchase Invoice lines and/or Journal lines by allocation | Itemized accounting/settlement by allocation |
+| TDS-required vendor payment | Employee-mediated | AP/TDS path where threshold met | Purchase Invoice (this is what routing to AP means concretely) | Route to supported AP/vendor tax process |
 
-## 8. Open Questions for BC Expert
+## 8. BC Architecture Decisions (formerly "Open Questions for BC Expert")
 
-**Reframed per §2.0 ("inspiration, not replication"):** this design does
-not need to plug into BC's new 2026W1 Expense Report/Expense Line module
-at all — it only needs to post a finished transaction via BC's
-long-standing General/Payment Journal API. That means the questions
-below split into a **default path that needs no Wave 1 / Expense Agent
-access** (testable on any existing BC environment, including an
-India-localized one on an older wave) and an **optional exploration**
-that only matters if we later decide it's worth leveraging BC's newer
-native module instead of the safe Journal fallback.
+**Reframed and largely closed 2026-09-06** by direct architecture
+decisions (real BC-consulting judgment, not a sandbox test) rather than
+left as open questions pending external validation. Per §2.0
+("inspiration, not replication"), this design was already not going to
+plug into BC's new 2026W1 Expense Report/Expense Line module — these
+decisions go further and pick specific, well-established BC document
+types for posting instead.
 
-**Default path — testable today, no Wave 1 needed**
-- **BC-11 (default)**: Confirm the General/Payment Journal API accepts
-  the fields this design needs (amount, dimensions, employee reference,
-  posting date) and actually posts to Employee Ledger Entry / G/L Entry
-  as expected. This is old, stable BC functionality — testable on
-  whatever BC access you already have right now.
-- **BC-7 (default)**: If Employee Ledger Entry application isn't
-  API-exposed (plausible per the sharpened note below), we track
-  advance-vs-settlement ourselves and post only the *net* settlement
-  amount as a plain journal line — a fallback consistent with FR-18's
-  intent (FR-18 says not to duplicate BC's advance subledger if BC's own
-  mechanics suffice; it doesn't itself spell out the net-journal-line
-  mechanic, corrected per BC-expert review). This needs no special
-  access either — it's the same Journal API as BC-11. **Residual risk to
-  carry forward (per BC-expert review)**: if this fallback is used, the
-  original advance disbursement's Employee Ledger Entry in BC stays
-  permanently Open/unapplied from BC's own perspective, since nothing
-  calls BC's Application API — BC-native employee-balance reports will
-  diverge from the app's view indefinitely unless a human periodically
-  applies it in the BC client. FR-58's reconciliation must treat this as
-  an **expected, structural divergence pattern** when the fallback path
-  is chosen, not flag it as an anomaly every cycle.
-- **BC-1 (default) — partially resolved, one real question remains
-  (per second BC-expert re-review)**: GST/ITC *computation* is
-  `OPSMELD_NATIVE` regardless of BC's Expense Line tax engine, so that
-  part needed no test. But standard BC API v2.0's `generalJournalLines`
-  entity is generic (US/CA-style tax fields) — India localization fields
-  (GST Group Code, HSN/SAC Code, GST Jurisdiction Type) live in the
-  India localization app, and country localization apps often extend
-  client *pages* without extending the corresponding API *page*. **New,
-  testable-today, non-blocking-for-schema question**: does the Journal
-  API accept India-GST-specific fields on a line, or only the BC client
-  does? This determines whether GST detail can land structurally in
-  BC's own ledgers (for BC-side GSTR-1/2A/3B filing) or has to stay in
-  our own system with only a summary amount posted to BC — i.e., who
-  owns GST-return prep: this tool, or BC directly. That ownership
-  question needs an explicit answer from whoever owns GST filing before
-  it's locked in either way.
+### BC-1 — CLOSED: post GST-bearing lines via Purchase Invoice, not Journal
 
-**Optional exploration — only if pursuing BC's native Expense Report
-module instead of the Journal fallback; needs Wave 1 access, and the
-Expense Agent Copilot UI specifically is reported as excluded from
-India in the current rollout (per §4's confidence note — aggregated
-search, not primary-source-verified; re-check before it matters)**
-- **BC-11 (native path)**: Does BC 2026W1's Expense Report/Expense Line
-  expose a supported write-capable API that produces the expected native
-  ledger behavior? New BC feature UI surfaces routinely ship 1–2 release
-  waves ahead of their public API v2.0 write endpoints — confirming the
-  feature works in the BC client sandbox is not evidence of a supported
-  write API.
-- **BC-7 (native path)**: Employee Ledger Entries (Table 5217) support
-  Open/Application status in the BC client the same way Vendor/Customer
-  Ledger Entries do, but the public API has historically exposed
-  `employeeLedgerEntries` **read-only** in several BC versions, with no
-  `applyEmployeeEntries`-equivalent write action — worth confirming if
-  the native path is ever pursued, but not blocking given the default
-  fallback above.
-- **BC-1 (native path)**: Does native Expense Line participate in the BC
-  GST/Tax engine at all? India GST/tax engine hooks have historically
-  lagged non-core document types, and Expense Reports is a newer,
-  HR-adjacent object — treat `OPSMELD_NATIVE` as the probable outcome
-  regardless, so this is confirmatory, not gating.
+**Decision**: expense lines that carry GST/tax detail post to BC as a
+**Purchase Invoice**, not a General/Payment Journal line. This resolves
+the entire "does the Journal API expose India GST fields" question by
+not depending on Journal for tax-bearing lines at all — Purchase
+documents are core, guaranteed BC functionality that runs through the
+full GST/Tax engine (Tax Area, GST Group Code, HSN/SAC, GST Posting
+Setup), unlike the newer Expense Report/Line objects or generic Journal
+lines. Non-tax-bearing lines (e.g., a pure company-paid line with no ITC
+relevance) may still use the simpler Journal path — see the updated
+Accounting Treatment Matrix (§7). GST/ITC *computation* remains
+`OPSMELD_NATIVE` as before; this decision is about *where the computed
+result lands* in BC, not who computes it.
+
+### BC-7 — Architecturally addressed, genuinely tricky, stays a
+per-customer implementation choice
+
+**Decision direction**: support an **Employee-as-Vendor** mapping mode
+alongside native BC Employee, since modeling expense-claiming employees
+as Vendor records (to use BC's mature Vendor Ledger Entry + Application
+functionality, rather than the newer and less certain Employee Ledger
+Entry API surface) is a real, common pattern in BC T&E implementations.
+Combined with BC-1's decision, this becomes elegant: a Purchase
+Invoice's Buy-from Vendor is the employee-modeled-as-vendor, GST fields
+land correctly on the Purchase Line, and settlement application uses
+Vendor Ledger's well-documented Application mechanics instead of the
+uncertain `employeeLedgerEntries` API. **This stays flagged as the
+tricky one**, not fully closed, because: not every customer models
+employees as vendors; switching between native-Employee and
+Employee-as-Vendor per customer needs careful mapping design (§10.5's
+mapping table gets a new representation option); and using Vendor for
+employees carries its own risks (mixing genuine trade vendors with
+employee-vendors in reporting/aging, TDS implications on vendor
+payments) that need a real decision **per customer at implementation
+time**, not a single global answer. The advance-tracked-application-side
+fallback (net settlement journal line) remains available for customers
+where neither native Employee application nor Employee-as-Vendor fits.
+
+### BC-11 — Reframed as non-blocking, resolved at development time with a known fallback
+
+**Decision**: don't pre-validate a specific API against a specific BC
+version before build starts. Try Purchase Invoice (BC-1) and Journal
+APIs first — both are long-standing, well-documented v2.0 endpoints. If
+either proves insufficient for a specific field/scenario, **Opsmeld can
+build a custom AL Custom API page** to expose exactly what's needed —
+a legitimate, low-risk fallback specifically because Opsmeld is itself a
+BC consulting/development firm, not a third party dependent on
+Microsoft's roadmap. This removes BC-11 as a pre-build blocker entirely;
+it becomes normal implementation-time engineering, with a known escape
+hatch if the standard APIs don't cover a case.
+
+### BC-8 — CLOSED: approval/DOFA workflow is fully `OPSMELD_NATIVE`
+
+**Decision**: the approval/DOFA engine (§6.5) does not depend on native
+BC Approval Workflow capability at all — it's built and owned entirely
+in Opsmeld. No BC-side validation needed.
+
+### Net effect on condition 1
+
+These four decisions close BC-1 and BC-8 outright, and turn BC-11 and
+BC-7 from "needs a BC SME sandbox session before build" into
+"implementation-time engineering with an identified fallback (BC-11)"
+and "a per-customer mapping choice made during implementation, not a
+single global unknown (BC-7)." **No BC-N item remains as a genuine
+pre-build blocker.** See §13's updated condition 1 status.
+
+**Posting review discipline unchanged**: per FR-16's existing principle,
+whichever document type is used — Journal or Purchase Invoice — Opsmeld
+creates it unposted; Finance reviews and posts it in BC. This isn't
+weakened by adding Purchase Invoice as a posting path; it now applies to
+both.
 
 Costing-method awareness (FIFO/Standard/Average) does not apply to this
 domain — employee expense/reimbursement has no inventory costing
 dimension — confirmed by BC-expert review, no action needed.
 
-**Priority P1**
-- BC-8: Can native Workflow conditions express category AND amount
-  logic together, and can a grade/band lookup supplement manager
-  hierarchy without a custom approval engine?
+**Remaining BC-N items (not gating a build decision)**
 - BC-2: Can the mapping layer discover/resolve the actual BC Dimension
   Code used for Cost Center and Department in each customer/company?
   What API validates allowed Dimension Values?
@@ -514,15 +530,38 @@ dimension — confirmed by BC-expert review, no action needed.
 
 ## 9. Open Questions for Domain Expert
 
-**Priority P0**
-- D-1: Under-spent advance recovery — preferred mechanism and
-  installment rules for payroll/direct repayment/carry-forward; confirm
-  legal (Payment of Wages Act) and company-policy constraints.
-- D-2: Current tax treatment/limits and review cadence for
-  allowance/perquisite categories, including tax-regime handling (old
-  vs. new regime).
-- D-3: GST blocked-credit configuration — which rules are hard blocks,
-  which allow documented statutory override, and who authorizes it?
+**Reframed 2026-09-06 — D-1/D-2/D-3 are out of scope for Opsmeld to
+decide, and closed as build blockers.** These are each customer's
+Finance team's own policy decisions, not something Opsmeld's design or
+internal Finance/Compliance should pre-answer with one global value —
+different customers legitimately choose differently (one company
+recovers under-spent advances via payroll deduction, another via direct
+repayment; one company's DOFA authorizes ITC overrides at Controller
+level, another at CFO level only). The system's job is to **support**
+each of these as configurable policy, not to enforce Opsmeld's own
+answer:
+
+- D-1 (advance recovery mechanism) → FR-14 already requires the system
+  support an installment schedule (Payment of Wages Act constraint on
+  *how* recovery can happen structurally), while *which* mechanism
+  (payroll deduction / direct repayment / carry-forward) a given
+  customer uses is configured per tenant, not fixed by Opsmeld.
+- D-2 (perquisite tax treatment) → FR-39 already requires the system
+  distinguish reimbursement from allowance/perquisite and be
+  regime-aware per employee; the customer's payroll/tax team supplies
+  the applicable limits and regime data, not Opsmeld.
+- D-3 (GST blocked-credit override authority) → FR-27 and FR-34 already
+  require a configurable named override authority and a reason-coded
+  override path; *who* holds that authority is each customer's DOFA,
+  configured at onboarding, not an Opsmeld default.
+
+No further Opsmeld-side sign-off needed on these three. What Opsmeld
+*does* still own: shipping sensible starting defaults/templates (a
+default DOFA template, a default Sec 17(5) blocked-credit list) as a
+convenience — but the authoritative answer for any deployment is
+customer-configured, never Opsmeld's internal decision.
+
+**Priority P0 (remaining)**
 - D-4: Typical receipt-less internal-control thresholds by
   company/sector — confirm these are policy norms, not statutory minima.
 - D-7: Threshold/routing policy for employee-mediated vendor payments
@@ -562,35 +601,41 @@ dimension — confirmed by BC-expert review, no action needed.
 
 ## 11. Build Decision Gate
 
-No implementation should start until the following are answered. Per
-§2.0/§8's reframing, BC-11/BC-7/BC-1 are satisfied by their **default
-path** (Journal API + `OPSMELD_NATIVE` GST) unless a deliberate later
-decision is made to pursue BC's native Expense Report module instead —
-so these no longer require Wave 1 / India-inclusion access to close:
+**Updated 2026-09-06 — BC-11/BC-7/BC-1/BC-8 closed via architecture
+decision (§8), not left as pre-build unknowns:**
 
-- BC-11: Confirm the Journal API posting path (default) works as
-  expected — no Wave 1 needed.
-- BC-7: Confirm advance-vs-settlement can be tracked application-side
-  with net settlement posted via Journal (default) — no Wave 1 needed.
-- BC-1: GST/ITC computation resolved by default (`OPSMELD_NATIVE`), but
-  confirm whether the Journal API accepts India GST-specific fields
-  (GST Group Code, HSN/SAC, Jurisdiction Type) — determines whether GST
-  detail can land in BC natively or must stay app-side with only a
-  summary posted (see §8's sharpened BC-1 note).
-- BC-8: Native approval conditions versus a small supplemental
-  grade/band lookup.
+- BC-11: **Closed.** Post via Purchase Invoice (GST-bearing) or Journal
+  (non-GST); if either standard API proves insufficient for a specific
+  field, build a custom AL API page — Opsmeld's own delivery capability
+  as a BC dev shop. No external validation needed before build.
+- BC-7: **Architecturally addressed, resolved per-customer at
+  implementation time.** Support native Employee, Employee-as-Vendor,
+  or app-side tracking with net Journal settlement, chosen per
+  customer's actual BC configuration — not a single global answer to
+  pin down before build starts.
+- BC-1: **Closed.** GST-bearing lines post via Purchase Invoice, which
+  runs through BC's full GST/Tax engine — the "does Journal expose GST
+  fields" question is moot because Journal isn't used for those lines.
+  GST/ITC computation remains `OPSMELD_NATIVE`.
+- BC-8: **Closed.** Approval/DOFA is fully `OPSMELD_NATIVE`; no
+  dependency on native BC Workflow.
 - Mapping ownership: the semantic-to-BC mapping model, validation
   source, and whether project mapping uses Dimension, Job/Job Task, or
-  both.
-- Tax ownership: whether compliance assessment stays application-owned
-  with reconciliation to BC, or required compliance attributes must also
-  persist in BC.
-- Accounting ownership: confirmation that BC remains the source of truth
-  for final posted financial amounts and ledger balances.
+  both — **now also includes the Employee-as-Vendor mapping option**
+  per BC-7 (see blueprint §10.5/§7.12).
+- Tax ownership: **closed** — compliance assessment (ITC eligibility,
+  TDS) stays application-owned (`OPSMELD_NATIVE`); the computed tax
+  amount lands in BC via Purchase Invoice per BC-1.
+- Accounting ownership: confirmed — BC remains the source of truth for
+  final posted financial amounts and ledger balances, posted via
+  Purchase Invoice or Journal per scenario, always Finance-reviewed
+  before posting (FR-16).
 
-Once confirmed, remaining implementation design should derive from the
-approved architecture rather than creating parallel BC-like objects in
-the application.
+**No item in this gate remains a genuine pre-build blocker.**
+Remaining implementation design derives from the decisions above; the
+per-customer choices (Employee-as-Vendor vs. native Employee vs.
+app-side tracking) are implementation-time configuration, not open
+architecture questions.
 
 ## 12. Companion document
 
@@ -627,15 +672,24 @@ schema is treated as final.
 
 ### Six conditions before build starts
 
-1. **BC-11, BC-7, BC-1 (default paths) and BC-8** answered against
-   whatever BC access is already available — Wave 1 / India-inclusion
-   access is not required per the §2.0/§8 reframing, since the default
-   posting path uses BC's long-standing Journal API, not the new
-   Expense Report module. Not further design-session inference either
-   way — actually test the Journal API posting.
-2. **D-1, D-2, D-3** (advance recovery mechanism/legal constraint,
-   perquisite tax treatment regime-awareness, GST blocked-credit override
-   authority) confirmed by real Finance/Compliance, not assumed.
+1. **CLOSED 2026-09-06 — see §8.** BC-1, BC-8, and BC-11 resolved by
+   architecture decision (Purchase Invoice for GST-bearing lines,
+   `OPSMELD_NATIVE` approval, custom-API fallback if standard APIs prove
+   insufficient) rather than left pending a BC SME sandbox session.
+   BC-7 (advance/employee ledger modeling) is architecturally addressed
+   with a genuine per-customer choice (native Employee, Employee-as-
+   Vendor, or app-side tracking) rather than a single unresolved global
+   question. No BC-N item remains a pre-build blocker. What's left is
+   normal implementation-time engineering: build against Purchase
+   Invoice/Journal APIs, validate each customer's actual configuration
+   during onboarding, and use the custom-API fallback if a specific
+   field is genuinely unavailable.
+2. **CLOSED 2026-09-06 — reframed as out of scope, not deferred.** D-1,
+   D-2, D-3 are each customer's own Finance-team policy decisions, not
+   an Opsmeld build blocker — see §9. The system already requires
+   configurable support for all three (FR-14, FR-27, FR-34, FR-39); no
+   Opsmeld-internal Finance/Compliance sign-off is needed on a specific
+   global answer, because there isn't meant to be one.
 3. **Infrastructure decision — CLOSED 2026-09-06.** The Expense Agent
    will be a **new standalone repository**, not a module inside
    opsmeld-recon-engine, on **Python/FastAPI + PostgreSQL**. Rationale:
@@ -652,17 +706,27 @@ schema is treated as final.
    and `MCP/modules/data_trust_engine/llm_interpreter.py`'s
    provider-failover + cost-tracking pattern (extended for vision/OCR
    calls) — this also closes condition 6 below.
-4. **Multi-tenant isolation as an enforced boundary, not just a column**:
-   every table in §7 (of the blueprint) carries `tenant_id` +
-   `bc_company_id`, but nothing yet describes row-level authorization
-   checks or states whether this reuses
-   `MCP/modules/data_trust_engine/authorization.py`, which already
-   exists in this repo. Also: `expense_source` stores receipt
-   images/PII with no data-retention or access-control statement yet.
-5. **Rough per-tenant monthly LLM/OCR cost estimate** — Data Trust's
-   `LLMMetadata` already tracks `estimated_cost` per call as precedent,
-   but nobody has multiplied that by expected expense-line volume per
-   tenant.
+4. **CLOSED 2026-09-06 — full design in blueprint §19.** Two-layer
+   model: an app-layer authorization gate ported from
+   `MCP/core/authorization.py`'s six-gate shape (Session → Org →
+   Subscription → Permission → Company ACL → BC probe — correcting an
+   earlier citation of `data_trust_engine/authorization.py`, which is
+   Data Trust's narrower company-discovery variant, not the general
+   engine this design generalizes from), plus **new** PostgreSQL
+   Row-Level Security enforcing `tenant_id`/`bc_company_id` at the
+   database level — impossible with JSON files, which is why this
+   waited on the infra decision (condition 3). Verification test stated
+   explicitly: an app-role DB connection scoped to tenant A running
+   `SELECT * FROM expense` with no `WHERE` clause must return zero rows
+   for tenant B, regardless of query shape.
+5. **CLOSED 2026-09-06 — full model in blueprint §20.** Reuses
+   `LLMInterpreter`'s cost-tracking formula extended to vision/OCR,
+   using current Claude Haiku 4.5/Sonnet 5 pricing (verified via the
+   `claude-api` skill) and an image-tokenization formula (verified via
+   web search). Estimate: **~$1–2/month for a 50-employee tenant to
+   ~$18–25/month for 1,000 employees** — a minor cost line at any
+   realistic scale. Stated plainly: infrastructure/engineering cost is
+   the real driver here, not per-call LLM pricing.
 6. **CLOSED 2026-09-06 — see condition 3.** OCR/extraction and the
    conversational-intake AI layer reuse `LLMInterpreter`'s
    provider-failover and cost-tracking pattern, copied/adapted into the
@@ -694,20 +758,19 @@ schema is treated as final.
 Scope creep from "approve the design direction" into "approve full
 build" without conditions 1–3 closing first.
 
-**Update (2026-09-06, post-review):** §2.0/§8 clarified this design
-doesn't need to replicate BC's native Expense Report module — it only
-needs BC's long-standing General/Payment Journal API to post the final
-transaction, which needs no Wave 1 or India-inclusion access to confirm
-(that access simply isn't available yet — the Expense Agent Copilot UI
-is reported as excluded from India in the current rollout, per §4's
-confidence note). **First concrete next step, revised**: confirm the
-Journal API posting path (BC-11 default), including whether it accepts
-India GST-specific fields (BC-1's remaining open question), and
-advance-vs-settlement tracking with net Journal settlement (BC-7
-default) on whatever BC access is already available —
-no need to chase Wave 1 access first. The native-path exploration of
-BC's new Expense Report module remains available later if it's ever
-worth pursuing instead of the Journal fallback.
+**Update (2026-09-06, superseded by architecture decisions in §8):**
+BC-1, BC-8, and BC-11 are now closed by direct decision — Purchase
+Invoice for GST-bearing lines, `OPSMELD_NATIVE` approval, a custom-API
+fallback if a standard API proves insufficient — rather than pending a
+BC SME sandbox session. BC-7 is architecturally addressed as a
+per-customer implementation choice (native Employee /
+Employee-as-Vendor / app-side tracking), not a single open question.
+**No BC-N item remains a pre-build blocker.** Condition 1 of the
+six-condition gate is now closed (§13); **all six conditions are
+closed**. What's left is standard implementation-time engineering:
+build against the decided posting paths, and validate each customer's
+actual BC configuration during onboarding rather than pre-validating
+one hypothetical tenant.
 
 ## Change Log
 
@@ -722,3 +785,6 @@ worth pursuing instead of the Journal fallback.
 | v1.4 | Closed council conditions 3 and 6 (§13): infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate, now sharper since OCR is confirmed a distinct cost line from the reused pattern). |
 | v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent" (FR-18 doesn't literally specify the net-journal-line mechanic); (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
 | v1.6 | Third BC-expert pass, attempting to close the §4 confidence gap directly: a second `WebFetch` to `learn.microsoft.com` was independently blocked (same limitation, different review session — corroborates it's real). Aggregated search surfaced two India-availability claims that don't fully reconcile: a general "July 2026" regional-expansion date for Expense Agent vs. a narrower claim about a specific GPT-5.3-chat *model-version* rollout excluding India/UK/Australia (not necessarily the feature itself). Documented both in §4 rather than picking one, and added the concrete recommendation: someone with actual BC admin-center/tenant portal access should check the live "Feature availability by country/region" page directly — the primary source no search-based review could reach. If the July 2026 date is accurate and feature-wide, it would change §8's "optional native-path exploration" timing. |
+| v1.7 | Closed council conditions 4 and 5 (§13) — full designs in blueprint §19/§20. Row-level isolation: app-layer gate ported from `MCP/core/authorization.py`'s six-gate shape (corrected a prior citation of `data_trust_engine/authorization.py`, which is Data Trust's narrower company-discovery variant) plus new PostgreSQL Row-Level Security enforcing tenant/company isolation at the DB level, with a concrete verification test. Cost estimate: current Claude Haiku 4.5/Sonnet 5 pricing (verified via the `claude-api` skill) and an image-tokenization formula (verified via web search) yield ~$1–25/month per tenant across 50–1,000 employees — stated plainly as a minor cost line, not the real cost driver. 4 of 6 conditions now closed; the remaining 2 (BC SME sandbox, Finance/Compliance sign-off) cannot be closed by further design work. |
+| v1.8 | Reframed and closed condition 2 (§13, §9): D-1/D-2/D-3 (advance recovery mechanism, perquisite tax treatment, GST override authority) are each customer's own Finance-team policy decision, not an Opsmeld build blocker — the system already requires configurable support for all three (FR-14, FR-27, FR-34, FR-39). No Opsmeld-internal Finance/Compliance sign-off needed on a specific global answer, since there isn't meant to be one; Opsmeld ships sensible defaults/templates, customers configure the authoritative values. 5 of 6 conditions now closed — only condition 1 (BC SME sandbox testing) remains, and it cannot be closed by further design work. |
+| v1.9 | Closed condition 1 (§8, §11, §13) via direct BC architecture decisions rather than pending sandbox validation: BC-1 (GST-bearing lines post via Purchase Invoice, not Journal — sidesteps the "does Journal expose GST fields" question entirely), BC-8 (approval/DOFA fully `OPSMELD_NATIVE`), BC-11 (Purchase Invoice/Journal APIs first, custom AL API page as a known fallback since Opsmeld is itself a BC dev shop). BC-7 (advance/employee ledger) architecturally addressed with a genuine per-customer choice — native Employee, Employee-as-Vendor (leverages BC's mature Vendor Ledger Application instead of the less-certain Employee Ledger API), or app-side tracking — rather than a single global unknown. Updated the Accounting Treatment Matrix (§7) with the posting-mechanism column. **All six council conditions now closed** — this clears the pre-build gate, though the council's own guidance to start with a thin vertical slice rather than the full schema still holds. |
