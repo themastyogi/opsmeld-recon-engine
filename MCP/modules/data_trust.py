@@ -80,6 +80,8 @@ class DataTrustEngine:
         self.client = mcp_client
         self.client_key = client_key or load_client_config().client_key
         self.config_mgr = DataTrustConfigManager(self.client_key)
+        self.last_loaded_data_source: Optional[str] = None
+        self.data_source: Optional[str] = None
 
     def get_findings_file_path(self, company_id: Optional[str] = None) -> Path:
         """Strictly scoped file path for company findings snapshot. Removes all unscoped and fixture fallbacks."""
@@ -121,16 +123,33 @@ class DataTrustEngine:
         if not target_comp:
             target_comp = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
 
-        active_findings, _, _ = self._load_from_disk(company_id=target_comp)
+        active_findings, _, stored_ds = self._load_from_disk(company_id=target_comp)
+        data_source = stored_ds
 
-        if not active_findings:
+        p = self.get_findings_file_path(company_id=target_comp)
+        if not p.exists():
             from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
             orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
             mode = "TEST_FIXTURE" if self.client is None else "AUTO"
             res = orchestrator.run_recon(company_id=target_comp, mode=mode)
             active_findings = res.get("findings", [])
-            if active_findings:
-                self.save_stored_findings(active_findings, company_id=target_comp, data_source=res.get("run_summary", {}).get("data_source"))
+            data_source = res.get("run_summary", {}).get("data_source")
+            self.save_stored_findings(active_findings, company_id=target_comp, data_source=data_source)
+        elif not active_findings and not data_source:
+            from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
+            orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
+            mode = "TEST_FIXTURE" if self.client is None else "AUTO"
+            res = orchestrator.run_recon(company_id=target_comp, mode=mode)
+            active_findings = res.get("findings", [])
+            data_source = res.get("run_summary", {}).get("data_source")
+            self.save_stored_findings(active_findings, company_id=target_comp, data_source=data_source)
+
+        if not data_source and active_findings:
+            data_source = active_findings[0].get("data_source")
+
+        effective_ds = data_source or "DATA_UNAVAILABLE"
+        self.last_loaded_data_source = effective_ds
+        self.data_source = effective_ds
 
         return active_findings
 

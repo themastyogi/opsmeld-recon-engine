@@ -757,6 +757,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
 
             engine = DataTrustEngine(client, client_key=client_key)
             raw_findings = engine.load_stored_findings(company_id=company_id)
+            ds = getattr(engine, "data_source", None) or getattr(engine, "last_loaded_data_source", None)
+            data_source = ds if isinstance(ds, str) else "DATA_UNAVAILABLE"
             all_findings = [
                 f for f in raw_findings
                 if f.get("transaction_details", {}).get("document_no") != "PINV-9999"
@@ -788,7 +790,8 @@ class OpsmeldWebHandler(BaseHTTPRequestHandler):
                 "client_name": config.name,
                 "summary": summary,
                 "total_filtered_count": len(filtered),
-                "findings": filtered[:100]
+                "findings": filtered[:100],
+                "data_source": data_source
             }
             self._set_headers("application/json")
             self._write_response(json.dumps(res).encode("utf-8"))

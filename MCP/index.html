@@ -2423,9 +2423,31 @@
                 if (!tbody) return;
 
                 if (!data.findings || data.findings.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#6B7280;">No Data Trust findings matching selected filters.</td></tr>`;
+                    let msg;
+                    let msgColor = '#6B7280';
+                    const hasActiveFilter = Boolean(cls || str || rp || st || q);
+                    const totalUnfiltered = data.summary ? (data.summary.total_findings || 0) : 0;
+
+                    if (data.data_source === "DATA_UNAVAILABLE") {
+                        msg = "⚠️ Business Central data is currently unavailable for this company — check back shortly, or contact your administrator if this persists.";
+                        msgColor = '#92400E';
+                        renderPlatformStateBanner('DATA_UNAVAILABLE', 'Business Central data is currently unavailable for this company — check back shortly, or contact your administrator if this persists.');
+                    } else if (hasActiveFilter && totalUnfiltered > 0) {
+                        msg = "No Data Trust findings matching selected filters.";
+                        renderPlatformStateBanner('SUCCESS');
+                    } else if (data.data_source === "LIVE_BUSINESS_CENTRAL" || data.data_source === "SNAPSHOT_SEED") {
+                        msg = "✅ No Data Trust issues found for this company and the selected filters.";
+                        msgColor = '#065F46';
+                        renderPlatformStateBanner('SUCCESS');
+                    } else {
+                        msg = "No Data Trust findings matching selected filters.";
+                        renderPlatformStateBanner('SUCCESS');
+                    }
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:${msgColor}; font-weight:600;">${msg}</td></tr>`;
                     return;
                 }
+
+                renderPlatformStateBanner(data.data_source === 'PARTIAL' ? 'PARTIAL' : 'SUCCESS');
 
                 let html = '';
                 data.findings.forEach(f => {

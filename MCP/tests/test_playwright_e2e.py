@@ -658,7 +658,118 @@ class TestOpsmeldPlaywrightE2E(unittest.TestCase):
             self.assertFalse(page.is_visible("#view-change-password"))
             ctx.close()
 
+    def test_empty_state_data_unavailable_message(self):
+        """E2E Verification 1: DATA_UNAVAILABLE company surfaces honest data unavailable message and banner."""
+        from modules.data_trust import DataTrustEngine
+        comp_guid = "GUID-COMP-01"
+        engine = DataTrustEngine(client_key="default_client")
+        engine.save_stored_findings([], company_id=comp_guid, data_source="DATA_UNAVAILABLE")
+
+        self._open_page()
+        self.page.click("#nav-top-dt")
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=5000)
+
+        self.page.evaluate(f"""
+            const select = document.getElementById('dt-company-select');
+            if (!select.querySelector("option[value='{comp_guid}']")) {{
+                const opt = document.createElement('option');
+                opt.value = '{comp_guid}';
+                opt.textContent = '{comp_guid}';
+                select.appendChild(opt);
+            }}
+            select.value = '{comp_guid}';
+            loadDataTrustFindings();
+        """)
+
+        self.page.wait_for_function("!document.getElementById('dt-findings-tbody').innerText.includes('Loading')", timeout=5000)
+        tbody_text = self.page.locator("#dt-findings-tbody").inner_text()
+        self.assertIn("Business Central data is currently unavailable for this company", tbody_text)
+        self.assertNotIn("No Data Trust findings matching selected filters.", tbody_text)
+
+        banner = self.page.locator("#dt-state-banner-container")
+        self.assertTrue(banner.is_visible())
+        self.assertIn("Data Retrieval Unavailable", banner.inner_text())
+
+    def test_empty_state_clean_live_bc_message(self):
+        """E2E Verification 2: Clean company with successful LIVE_BUSINESS_CENTRAL surfaces checked clean message and hides banner."""
+        from modules.data_trust import DataTrustEngine
+        comp_guid = "GUID-COMP-02"
+        engine = DataTrustEngine(client_key="default_client")
+        engine.save_stored_findings([], company_id=comp_guid, data_source="LIVE_BUSINESS_CENTRAL")
+
+        self._open_page()
+        self.page.click("#nav-top-dt")
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=5000)
+
+        self.page.evaluate(f"""
+            const select = document.getElementById('dt-company-select');
+            if (!select.querySelector("option[value='{comp_guid}']")) {{
+                const opt = document.createElement('option');
+                opt.value = '{comp_guid}';
+                opt.textContent = '{comp_guid}';
+                select.appendChild(opt);
+            }}
+            select.value = '{comp_guid}';
+            loadDataTrustFindings();
+        """)
+
+        self.page.wait_for_function("!document.getElementById('dt-findings-tbody').innerText.includes('Loading')", timeout=5000)
+        tbody_text = self.page.locator("#dt-findings-tbody").inner_text()
+        self.assertIn("No Data Trust issues found for this company and the selected filters.", tbody_text)
+        self.assertNotIn("Business Central data is currently unavailable", tbody_text)
+
+        banner = self.page.locator("#dt-state-banner-container")
+        self.assertFalse(banner.is_visible())
+
+    def test_empty_state_filtered_findings_message(self):
+        """E2E Verification 3: Company with findings where filters exclude all surfaces filter matching message."""
+        from modules.data_trust import DataTrustEngine
+        from modules.data_trust_engine.models import DataTrustFinding
+        comp_guid = "GUID-COMP-03"
+        engine = DataTrustEngine(client_key="default_client")
+
+        finding = DataTrustFinding(
+            id="FINDING-ANOMALY-01",
+            dedup_key="ANOMALY_01",
+            rule_pack="Posting-Date Policy",
+            classification="Anomaly",
+            evidence_strength="HIGH",
+            severity="HIGH",
+            signals_fired_count=2,
+            evidence_chain=["Test chain"],
+            transaction_details={"document_no": "DOC-999"},
+            business_impact="Review required",
+            recommended_action="Review",
+            data_source="LIVE_BUSINESS_CENTRAL"
+        ).to_dict()
+        engine.save_stored_findings([finding], company_id=comp_guid, data_source="LIVE_BUSINESS_CENTRAL")
+
+        self._open_page()
+        self.page.click("#nav-top-dt")
+        self.page.wait_for_selector("#view-data-trust", state="visible", timeout=5000)
+
+        # Filter by "Policy Violation", which excludes our "Anomaly" finding
+        self.page.evaluate(f"""
+            const select = document.getElementById('dt-company-select');
+            if (!select.querySelector("option[value='{comp_guid}']")) {{
+                const opt = document.createElement('option');
+                opt.value = '{comp_guid}';
+                opt.textContent = '{comp_guid}';
+                select.appendChild(opt);
+            }}
+            select.value = '{comp_guid}';
+            document.getElementById('dt-filter-classification').value = 'Policy Violation';
+            loadDataTrustFindings();
+        """)
+
+        self.page.wait_for_function("!document.getElementById('dt-findings-tbody').innerText.includes('Loading')", timeout=5000)
+        tbody_text = self.page.locator("#dt-findings-tbody").inner_text()
+        self.assertIn("No Data Trust findings matching selected filters.", tbody_text)
+        self.assertNotIn("Business Central data is currently unavailable", tbody_text)
+        self.assertNotIn("No Data Trust issues found for this company and the selected filters.", tbody_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

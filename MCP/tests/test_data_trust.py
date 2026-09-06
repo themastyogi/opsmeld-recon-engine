@@ -564,3 +564,44 @@ class TestDataTrustWebAPIs(unittest.TestCase):
         self.assertNotIn("TEST_FIXTURE", data_sources)
         self.assertIn("107239", doc_nos)
         self.assertIn("LIVE_BUSINESS_CENTRAL", data_sources)
+
+    def test_load_stored_findings_tracks_data_source(self):
+        """Verify load_stored_findings correctly populates data_source and last_loaded_data_source."""
+        engine = DataTrustEngine(client_key="test_tenant_source_tracking")
+        comp_unavail = "c37ac1c0-bc8f-f111-832d-7c1e5233db45"
+        comp_clean = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
+
+        # 1. Save empty findings with DATA_UNAVAILABLE
+        engine.save_stored_findings([], company_id=comp_unavail, data_source="DATA_UNAVAILABLE")
+        findings_unavail = engine.load_stored_findings(company_id=comp_unavail)
+        self.assertEqual(len(findings_unavail), 0)
+        self.assertEqual(engine.data_source, "DATA_UNAVAILABLE")
+        self.assertEqual(engine.last_loaded_data_source, "DATA_UNAVAILABLE")
+
+        # 2. Save empty findings with LIVE_BUSINESS_CENTRAL (clean company)
+        engine.save_stored_findings([], company_id=comp_clean, data_source="LIVE_BUSINESS_CENTRAL")
+        findings_clean = engine.load_stored_findings(company_id=comp_clean)
+        self.assertEqual(len(findings_clean), 0)
+        self.assertEqual(engine.data_source, "LIVE_BUSINESS_CENTRAL")
+        self.assertEqual(engine.last_loaded_data_source, "LIVE_BUSINESS_CENTRAL")
+
+    def test_findings_api_response_includes_data_source(self):
+        """Verify GET /api/data-trust/findings returns data_source in JSON payload."""
+        import urllib.request
+
+        comp_guid = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
+
+        # Save empty findings with DATA_UNAVAILABLE for this company
+        engine = DataTrustEngine(client_key="default_client")
+        engine.save_stored_findings([], company_id=comp_guid, data_source="DATA_UNAVAILABLE")
+
+        req = urllib.request.Request(
+            f"{self.server_url}/api/data-trust/findings?company_id={comp_guid}",
+            headers={"Cookie": f"session={self.session_token}"}
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("data_source", data)
+            self.assertEqual(data["data_source"], "DATA_UNAVAILABLE")
+            self.assertEqual(data["findings"], [])
