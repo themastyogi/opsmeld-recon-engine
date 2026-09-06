@@ -1,4 +1,4 @@
-# Expense Agent — Engineering Blueprint v1.10
+# Expense Agent — Engineering Blueprint v1.11
 
 Status: **4 of 6 council conditions genuinely closed (3, 4, 5, 6) —
 corrected 2026-09-06 after re-review found two overclaims in v1.9.**
@@ -86,7 +86,9 @@ plug into that module's internals.** The application's own domain model
 (§7) is independent of BC's schema by design.
 
 The one hard BC dependency this design actually has: **posting a
-finished, GST-computed, dimension-tagged transaction into BC's ledgers.**
+finished, GST-classified, dimension-tagged transaction into BC's
+ledgers** — BC's own Tax Engine computes the actual GST amounts from
+that classification (revised 2026-09-06, §6.7/§11), Opsmeld doesn't.
 That posting can go through BC's long-standing General/Payment Journal
 API (stable since BC API v2.0, ~2019, and how most third-party expense
 tools already integrate with BC) rather than through the new 2026W1
@@ -466,12 +468,28 @@ it will be settled.
   confidence, not only a binary duplicate flag.
 
 ### 6.7 India compliance
-- FR-31: Capture vendor GSTIN and tax breakup (CGST/SGST/IGST) per line
-  where applicable.
-- FR-32: Separate tax calculation, invoice validity, and ITC eligibility.
+
+**Revised 2026-09-06 — Opsmeld classifies, BC computes.** Opsmeld does
+not calculate GST tax amounts (CGST/SGST/IGST) itself. It captures the
+transaction and resolves the correct **classification** — GST Group
+Code, HSN/SAC Code, Tax Area — pushed to BC on the Purchase Invoice
+line (§7, §11). BC's own Tax Engine, using that customer's GST Posting
+Setup, computes the actual tax split. This reduces Opsmeld's liability
+surface (tax arithmetic is Microsoft's maintained India-localization
+logic) and makes GST handling a mapping problem like Cost
+Center/Department (§10.5), not a calculation engine.
+
+- FR-31: Capture vendor GSTIN and resolve the correct classification
+  (GST Group Code, HSN/SAC Code, Tax Area) per line — not the tax
+  amount, which BC computes.
+- FR-32: Separate classification resolution, invoice validity, and ITC
+  eligibility as distinct decisions. Tax *calculation* is out of scope
+  for Opsmeld.
 - FR-33: Each taxable line carries an ITC eligibility decision (Yes, No,
   Blocked, Review) plus reason code, rule-set/version, and decision
-  provenance.
+  provenance. This decision drives *which classification* is sent to
+  BC (e.g., routing a blocked-credit category to a non-recoverable
+  classification) — a classification input, not a tax computation.
 - FR-34: Sec 17(5) blocked-credit defaults must allow a controlled
   override path for applicable statutory carve-outs; overrides require
   reason and reviewer evidence.
@@ -675,7 +693,7 @@ employee creation for Expense Users.
 | Dimension mapping | Cost Center / Department / Project / other semantic concepts to BC | Not a single native expense setup concept | OPSMELD_NATIVE configuration + BC mapping |
 | Project strategy | Dimension-only / Job-only / Both | BC supports Project + Project Task on expenses | HYBRID |
 | Employee assignments | Eligible/default departments, cost centers, projects/jobs, effective dates | Employee/user defaults exist but not sufficient for our multi-project model | OPSMELD_NATIVE |
-| GST configuration | GSTIN, tax components, ITC rules, blocked-credit rules, overrides, evidence | India-specific gap to validate for Expense Management | OPSMELD_NATIVE |
+| GST configuration | GSTIN, classification mapping (category → GST Group Code/HSN-SAC), ITC-eligibility rules, blocked-credit rules, overrides, evidence | Tax *computation* is BC's native Tax Engine (revised 2026-09-06); classification/eligibility rules are India-specific and not part of documented Expense Management setup | HYBRID — classification/eligibility `OPSMELD_NATIVE`, tax computation `MICROSOFT_NATIVE` |
 | TDS configuration | Sections, thresholds, rates, vendor/AP routing rules | India-specific expense capability gap to validate | OPSMELD_NATIVE |
 | Payroll tax treatment | Allowance/perquisite categories, regime-aware treatment, payroll handoff rules | Not part of the documented Expense setup surface | OPSMELD_NATIVE |
 | Duplicate/fraud policy | Signals, confidence, thresholds, cross-employee scope, reviewer actions | Agent has duplicate handling, but product policy control is broader | OPSMELD_NATIVE / HYBRID |
@@ -3369,31 +3387,38 @@ plug into BC's new 2026W1 Expense Report/Expense Line module — these
 decisions go further and pick specific, well-established BC document
 types for posting instead.
 
-### BC-1 — DE-RISKED, one narrow check remains: post GST-bearing lines via Purchase Invoice, not Journal
+### BC-1 — DE-RISKED FURTHER, one narrow check remains: post GST classification via Purchase Invoice; BC computes the tax
 
 **Decision**: expense lines that carry GST/tax detail post to BC as a
 **Purchase Invoice**, not a General/Payment Journal line. This resolves
 the specific worry it targeted — "does the Journal API expose India
 GST fields" — by not depending on Journal for tax-bearing lines at
 all. Non-tax-bearing lines may still use the simpler Journal path — see
-the Accounting Treatment Matrix (§15). GST/ITC *computation* remains
-`OPSMELD_NATIVE` as before; this decision is about *where the computed
-result lands* in BC, not who computes it.
+the Accounting Treatment Matrix (§15).
 
-**Corrected 2026-09-06, per BC-expert re-review**: this decision was
-asserted, not verified, against the same standard already applied
-elsewhere in this document to a different BC object — "new BC feature
-UI surfaces routinely ship 1–2 release waves ahead of their public API
-v2.0 write endpoints" (this doc's own earlier warning about Expense
-Report/Line, missed here for Purchase Invoice). Purchase Invoice is
-old and stable *as a BC feature*, but whether its **API page**
-(`purchaseInvoiceLines`, not just the client page) exposes India
-GST-localization fields (Tax Area, GST Group Code, HSN/SAC) for
-external POST has not actually been checked. **Remaining test — small
-and fast, not a full sandbox session**: POST one test Purchase Invoice
-line with India GST fields via API v2.0 against real (even trial) BC
-access. If unavailable, the custom-AL-API fallback (BC-11 below) still
-applies — a "no" here changes the implementation path, not the design.
+**Revised 2026-09-06 — classification, not computation.** GST/ITC
+computation is no longer `OPSMELD_NATIVE`. Opsmeld resolves the
+classification (GST Group Code, HSN/SAC Code, Tax Area) and pushes it
+on the Purchase Invoice line; BC's own Tax Engine, using that
+customer's GST Posting Setup, computes CGST/SGST/IGST. This is a real
+de-risking of the remaining check, not just reframing: the API question
+shifts from "does `purchaseInvoiceLines` accept a pre-computed tax
+amount" (unusual, less likely exposed) to "does it accept classification
+codes that drive BC's own calculation" (standard, setup-driven fields).
+ITC eligibility (Sec 17(5)) remains an Opsmeld classification decision
+— it determines which GST classification is sent, not the tax math.
+
+**Corrected 2026-09-06, per BC-expert re-review (still applies to the
+classification fields specifically)**: this document previously warned
+that "new BC feature UI surfaces routinely ship 1–2 release waves ahead
+of their public API v2.0 write endpoints" (about Expense Report/Line)
+and should have applied the same skepticism to Purchase Invoice — it
+hadn't been checked. **Remaining test — smaller now, not a full
+sandbox session**: POST one test Purchase Invoice line with GST Group
+Code and HSN/SAC Code via API v2.0 against real (even trial) BC access,
+and confirm BC computes the expected tax split. If unavailable, the
+custom-AL-API fallback (BC-11 below) still applies — a "no" here
+changes the implementation path, not the design.
 
 ### BC-7 — Architecturally addressed, genuinely tricky, stays a per-customer implementation choice
 
@@ -3644,20 +3669,25 @@ decision (§11), not left as pre-build unknowns:**
 - BC-7: **Architecturally addressed, resolved per-customer at
   implementation time.** Native Employee, Employee-as-Vendor, or
   app-side tracking, chosen per customer's actual BC configuration.
-- BC-1: **De-risked, not closed.** GST-bearing lines post via Purchase
-  Invoice, sidestepping "does Journal expose GST fields." But whether
-  Purchase Invoice's own API (`purchaseInvoiceLines`) exposes India GST
-  fields (Tax Area, GST Group Code, HSN/SAC) for external POST hasn't
-  been checked — corrected 2026-09-06, see §11. One fast test remains:
-  POST a test line with these fields via API v2.0. GST/ITC computation
-  remains `OPSMELD_NATIVE` regardless of the outcome.
+- BC-1: **De-risked further, not fully closed.** GST-bearing lines post
+  via Purchase Invoice carrying GST classification (Group Code,
+  HSN/SAC, Tax Area) — BC's own Tax Engine computes CGST/SGST/IGST from
+  that classification, revised 2026-09-06 (Opsmeld no longer computes
+  tax amounts; see §6.7, §11). This narrows the remaining check to
+  whether `purchaseInvoiceLines` accepts classification fields — more
+  likely exposed than a computed-value field. One fast test remains:
+  POST a test line with these fields via API v2.0 and confirm BC
+  computes the expected split.
 - BC-8: **Closed.** Approval/DOFA is fully `OPSMELD_NATIVE`.
 - Mapping ownership: the semantic-to-BC mapping model now also includes
   the Employee-as-Vendor option (§10.5, §7.12) alongside Dimension/
-  Job/Job Task for Project.
-- Tax ownership: **closed** — compliance assessment stays
-  application-owned (`OPSMELD_NATIVE`); the computed tax amount lands in
-  BC via Purchase Invoice per BC-1.
+  Job/Job Task for Project, and the GST classification mapping
+  (category → GST Group Code/HSN-SAC) per BC-1.
+- Tax ownership: **revised** — GST *computation* is BC's (its own Tax
+  Engine, driven by Opsmeld's classification); ITC-eligibility
+  classification decisions and TDS assessment stay application-owned
+  (`OPSMELD_NATIVE`) as inputs to that classification, not independent
+  tax math.
 - Accounting ownership: confirmed — BC remains the source of truth for
   final posted financial amounts, posted via Purchase Invoice or
   Journal per scenario, always Finance-reviewed before posting (FR-16).
@@ -4318,3 +4348,4 @@ At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-empl
 | v1.8 | Reframed and closed condition 2 (§12): D-1/D-2/D-3 (advance recovery mechanism, perquisite tax treatment, GST override authority) are each customer's own Finance-team policy decision, not an Opsmeld build blocker — the system already requires configurable support for all three (FR-14, FR-27, FR-34, FR-39). No Opsmeld-internal Finance/Compliance sign-off needed on a specific global answer, since there isn't meant to be one; Opsmeld ships sensible defaults/templates, customers configure the authoritative values. 5 of 6 conditions now closed — only condition 1 (BC SME sandbox testing) remains, and it cannot be closed by further design work. |
 | v1.9 | Closed condition 1 (§11, §15, §17, Council review) via direct BC architecture decisions rather than pending sandbox validation: BC-1 (GST-bearing lines post via Purchase Invoice, not Journal), BC-8 (approval/DOFA fully `OPSMELD_NATIVE`), BC-11 (Purchase Invoice/Journal APIs first, custom AL API page as a known fallback). BC-7 (advance/employee ledger) architecturally addressed with a genuine per-customer choice — native Employee, Employee-as-Vendor (leverages BC's mature Vendor Ledger Application), or app-side tracking — added to §10.5's mapping table and §7.12's `mapping_definition.representation_type` enum. Updated the Accounting Treatment Matrix (§15) with the posting-mechanism column. **All six council conditions now closed.** |
 | v1.10 | BC-expert and Domain-Expert re-review of v1.9 found two overclaims, both corrected: (1) BC-1's Purchase Invoice decision was asserted, not verified, against this doc's own earlier standard for BC feature maturity ("feature UI ships ahead of its API") — corrected from "closed" to "de-risked, one small fast API check remaining" (POST a test Purchase Invoice line with India GST fields via API v2.0). (2) Condition 2's reframing correctly closed the "who decides" mechanism but missed that Opsmeld's own shipped default templates (default Sec 17(5) blocked-credit list, sample DOFA) still need real tax/compliance review before shipping — split off as new condition 2b. Net: 4 of 6 conditions genuinely closed (3, 4, 5, 6); conditions 1 and 2 each reduced to one small, bounded, real-person action rather than either the original large ask or a false "fully closed" claim. |
+| v1.11 | Revised GST architecture: Opsmeld no longer computes GST tax amounts (dropped `OPSMELD_NATIVE` for GST/ITC computation, §7.3.1's GST configuration row now `HYBRID`). Opsmeld resolves classification only (GST Group Code, HSN/SAC Code, Tax Area, driven by ITC-eligibility decisions) and pushes it on the Purchase Invoice line; BC's own Tax Engine computes CGST/SGST/IGST from that classification using the customer's GST Posting Setup. Updated FR-31/32/33 (§6.7), BC-1 (§11), §17's Build Decision Gate, and §2.0's framing accordingly. This further de-risks BC-1's remaining check — the API question shifts from "does it accept a computed tax amount" to "does it accept standard classification fields" — and reduces Opsmeld's liability for tax-math correctness, since that arithmetic is Microsoft's maintained localization logic, not Opsmeld's own. |
