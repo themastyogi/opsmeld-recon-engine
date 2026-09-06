@@ -1,4 +1,4 @@
-# Expense Agent — Design Spec for SME Review v1.4
+# Expense Agent — Design Spec for SME Review v1.5
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council review (Go/No-Go) completed 2026-09-06; see §13 for
@@ -150,12 +150,24 @@ Out of scope for this doc:
   present (see BC-1).
 - As of the release-plan documentation reviewed on 2026-09-06, Expense
   Agent public preview geography lists the US and then Australia, New
-  Zealand, and UK; India is not listed. Treat Indian availability as a
-  deployment question to verify, not an assumed capability.
+  Zealand, and UK; India is not listed. A later search that same day
+  (aggregated results summarizing Microsoft's "Copilot and agents
+  country/region availability" page — see source below) reported more
+  specifically that "environments in the UK, India, and Australia are
+  excluded from an initial rollout and will receive updates at a later
+  date." **Confidence note, per BC-expert review**: this second claim
+  comes from an aggregated search summary, not a direct fetch of
+  Microsoft's own page (blocked by network egress in this environment)
+  — treat it as higher-confidence than "not listed" but not
+  primary-source-verified. Either way, don't plan around Indian
+  Expense-Agent-UI availability without checking the live page yourself
+  before it matters.
 
 Sources: Microsoft Dynamics 365 Blog (Expense Agent, Apr 2026); Microsoft
 Learn — Expense Management Overview, Expense Agent Overview, Set Up
-Expense Categories and Rules, Release Plan 2026W1.
+Expense Categories and Rules, Release Plan 2026W1, Copilot and agents
+country/region availability and supported languages (accessed via
+aggregated search, not direct fetch).
 
 ## 4A. Verified: this codebase has no BC write path today
 
@@ -353,7 +365,13 @@ it will be settled:
 - FR-57: Every posting attempt is auditable by idempotency key,
   request/response status, BC company/tenant, resulting BC references.
 - FR-58: Periodic reconciliation between operational state and BC
-  accounting state creates a finding on divergence.
+  accounting state creates a finding on divergence. **Exception, per
+  BC-expert review**: if the BC-7 advance fallback is used (advance
+  tracked application-side, only net settlement posted via Journal),
+  the original advance's BC Employee Ledger Entry stays permanently
+  Open/unapplied from BC's own perspective — this is an **expected
+  structural divergence**, not an anomaly, and reconciliation must
+  recognize it as such rather than flagging it every cycle.
 - FR-59: Corrections after posting use reversal/adjustment workflows,
   never mutation of historical evidence.
 - FR-60: Compliance evidence retained outside BC remains linkable to the
@@ -395,18 +413,41 @@ native module instead of the safe Journal fallback.
 - **BC-7 (default)**: If Employee Ledger Entry application isn't
   API-exposed (plausible per the sharpened note below), we track
   advance-vs-settlement ourselves and post only the *net* settlement
-  amount as a plain journal line (per FR-18's existing fallback). This
-  needs no special access either — it's the same Journal API as BC-11.
-- **BC-1 (default)**: Already effectively resolved — the BC-expert
-  review's own finding (see the native-path note below) treats
-  `OPSMELD_NATIVE` for GST/ITC computation as the probable outcome
-  regardless, so BC's Expense Line tax engine isn't a dependency for the
-  default path. Nothing to test here.
+  amount as a plain journal line — a fallback consistent with FR-18's
+  intent (FR-18 says not to duplicate BC's advance subledger if BC's own
+  mechanics suffice; it doesn't itself spell out the net-journal-line
+  mechanic, corrected per BC-expert review). This needs no special
+  access either — it's the same Journal API as BC-11. **Residual risk to
+  carry forward (per BC-expert review)**: if this fallback is used, the
+  original advance disbursement's Employee Ledger Entry in BC stays
+  permanently Open/unapplied from BC's own perspective, since nothing
+  calls BC's Application API — BC-native employee-balance reports will
+  diverge from the app's view indefinitely unless a human periodically
+  applies it in the BC client. FR-58's reconciliation must treat this as
+  an **expected, structural divergence pattern** when the fallback path
+  is chosen, not flag it as an anomaly every cycle.
+- **BC-1 (default) — partially resolved, one real question remains
+  (per second BC-expert re-review)**: GST/ITC *computation* is
+  `OPSMELD_NATIVE` regardless of BC's Expense Line tax engine, so that
+  part needed no test. But standard BC API v2.0's `generalJournalLines`
+  entity is generic (US/CA-style tax fields) — India localization fields
+  (GST Group Code, HSN/SAC Code, GST Jurisdiction Type) live in the
+  India localization app, and country localization apps often extend
+  client *pages* without extending the corresponding API *page*. **New,
+  testable-today, non-blocking-for-schema question**: does the Journal
+  API accept India-GST-specific fields on a line, or only the BC client
+  does? This determines whether GST detail can land structurally in
+  BC's own ledgers (for BC-side GSTR-1/2A/3B filing) or has to stay in
+  our own system with only a summary amount posted to BC — i.e., who
+  owns GST-return prep: this tool, or BC directly. That ownership
+  question needs an explicit answer from whoever owns GST filing before
+  it's locked in either way.
 
 **Optional exploration — only if pursuing BC's native Expense Report
 module instead of the Journal fallback; needs Wave 1 access, and the
-Expense Agent Copilot UI specifically is excluded from India in the
-current rollout (confirmed 2026-09-06)**
+Expense Agent Copilot UI specifically is reported as excluded from
+India in the current rollout (per §4's confidence note — aggregated
+search, not primary-source-verified; re-check before it matters)**
 - **BC-11 (native path)**: Does BC 2026W1's Expense Report/Expense Line
   expose a supported write-capable API that produces the expected native
   ledger behavior? New BC feature UI surfaces routinely ship 1–2 release
@@ -509,7 +550,11 @@ so these no longer require Wave 1 / India-inclusion access to close:
   expected — no Wave 1 needed.
 - BC-7: Confirm advance-vs-settlement can be tracked application-side
   with net settlement posted via Journal (default) — no Wave 1 needed.
-- BC-1: Resolved by default (`OPSMELD_NATIVE`) — no BC dependency.
+- BC-1: GST/ITC computation resolved by default (`OPSMELD_NATIVE`), but
+  confirm whether the Journal API accepts India GST-specific fields
+  (GST Group Code, HSN/SAC, Jurisdiction Type) — determines whether GST
+  detail can land in BC natively or must stay app-side with only a
+  summary posted (see §8's sharpened BC-1 note).
 - BC-8: Native approval conditions versus a small supplemental
   grade/band lookup.
 - Mapping ownership: the semantic-to-BC mapping model, validation
@@ -632,10 +677,12 @@ doesn't need to replicate BC's native Expense Report module — it only
 needs BC's long-standing General/Payment Journal API to post the final
 transaction, which needs no Wave 1 or India-inclusion access to confirm
 (that access simply isn't available yet — the Expense Agent Copilot UI
-is confirmed excluded from India in the current rollout). **First
-concrete next step, revised**: confirm the Journal API posting path
-(BC-11 default) and advance-vs-settlement tracking with net Journal
-settlement (BC-7 default) on whatever BC access is already available —
+is reported as excluded from India in the current rollout, per §4's
+confidence note). **First concrete next step, revised**: confirm the
+Journal API posting path (BC-11 default), including whether it accepts
+India GST-specific fields (BC-1's remaining open question), and
+advance-vs-settlement tracking with net Journal settlement (BC-7
+default) on whatever BC access is already available —
 no need to chase Wave 1 access first. The native-path exploration of
 BC's new Expense Report module remains available later if it's ever
 worth pursuing instead of the Journal fallback.
@@ -651,3 +698,4 @@ worth pursuing instead of the Journal fallback.
 | v1.2 | Full council Go/No-Go review (§13): approved for design/validation phase only, not for build. New finding — this repo's persistence layer today is JSON files, no DB/framework, which the 40-table schema assumes but doesn't name as a prerequisite. Six conditions set before schema/code work: BC SME sandbox answers (BC-1/7/8/11), Finance/Compliance sign-off (D-1/2/3), infra decision, enforced multi-tenant isolation (not just a column), per-tenant LLM/OCR cost estimate, explicit reuse of `LLMInterpreter` for OCR/extraction. |
 | v1.3 | Added §2.0 ("inspiration, not replication") clarifying this design doesn't need to mirror BC's native Expense Report module — the only hard BC dependency is posting via BC's long-standing General/Payment Journal API. Split BC-11/BC-7/BC-1 in §8 into a default path (testable on any existing BC access, no Wave 1/India-inclusion needed) and an optional native-path exploration (needs Wave 1, and Expense Agent Copilot UI confirmed excluded from India in the current rollout). Updated §11's Build Decision Gate and §13's next-step guidance accordingly — resolves the "I don't have Wave 1 access" blocker by removing the dependency on it. |
 | v1.4 | Closed council conditions 3 and 6 (§13): infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate, now sharper since OCR is confirmed a distinct cost line from the reused pattern). |
+| v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent" (FR-18 doesn't literally specify the net-journal-line mechanic); (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
