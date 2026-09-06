@@ -1,9 +1,13 @@
-# Expense Agent — Design Spec for SME Review v1.6
+# Expense Agent — Design Spec for SME Review v1.7
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council review (Go/No-Go) completed 2026-09-06; see §13 for
-the CEO synthesis and the six conditions that must close before any
-schema work or production code starts. This is the lean, decision-focused
+the CEO synthesis and conditions. **4 of 6 conditions closed as of v1.7**
+(infrastructure decision, `LLMInterpreter` reuse, row-level isolation
+design, LLM/OCR cost estimate). **2 remain open and cannot be closed by
+further design work** — BC SME sandbox answers (§8) and Finance/
+Compliance sign-off (§9) both need a real person outside this loop. This
+is the lean, decision-focused
 version of the design: architecture, scope,
 functional requirements, and the open questions that actually need
 expert judgment. The full 40-table engineering schema, conversational
@@ -652,17 +656,27 @@ schema is treated as final.
    and `MCP/modules/data_trust_engine/llm_interpreter.py`'s
    provider-failover + cost-tracking pattern (extended for vision/OCR
    calls) — this also closes condition 6 below.
-4. **Multi-tenant isolation as an enforced boundary, not just a column**:
-   every table in §7 (of the blueprint) carries `tenant_id` +
-   `bc_company_id`, but nothing yet describes row-level authorization
-   checks or states whether this reuses
-   `MCP/modules/data_trust_engine/authorization.py`, which already
-   exists in this repo. Also: `expense_source` stores receipt
-   images/PII with no data-retention or access-control statement yet.
-5. **Rough per-tenant monthly LLM/OCR cost estimate** — Data Trust's
-   `LLMMetadata` already tracks `estimated_cost` per call as precedent,
-   but nobody has multiplied that by expected expense-line volume per
-   tenant.
+4. **CLOSED 2026-09-06 — full design in blueprint §19.** Two-layer
+   model: an app-layer authorization gate ported from
+   `MCP/core/authorization.py`'s six-gate shape (Session → Org →
+   Subscription → Permission → Company ACL → BC probe — correcting an
+   earlier citation of `data_trust_engine/authorization.py`, which is
+   Data Trust's narrower company-discovery variant, not the general
+   engine this design generalizes from), plus **new** PostgreSQL
+   Row-Level Security enforcing `tenant_id`/`bc_company_id` at the
+   database level — impossible with JSON files, which is why this
+   waited on the infra decision (condition 3). Verification test stated
+   explicitly: an app-role DB connection scoped to tenant A running
+   `SELECT * FROM expense` with no `WHERE` clause must return zero rows
+   for tenant B, regardless of query shape.
+5. **CLOSED 2026-09-06 — full model in blueprint §20.** Reuses
+   `LLMInterpreter`'s cost-tracking formula extended to vision/OCR,
+   using current Claude Haiku 4.5/Sonnet 5 pricing (verified via the
+   `claude-api` skill) and an image-tokenization formula (verified via
+   web search). Estimate: **~$1–2/month for a 50-employee tenant to
+   ~$18–25/month for 1,000 employees** — a minor cost line at any
+   realistic scale. Stated plainly: infrastructure/engineering cost is
+   the real driver here, not per-call LLM pricing.
 6. **CLOSED 2026-09-06 — see condition 3.** OCR/extraction and the
    conversational-intake AI layer reuse `LLMInterpreter`'s
    provider-failover and cost-tracking pattern, copied/adapted into the
@@ -722,3 +736,4 @@ worth pursuing instead of the Journal fallback.
 | v1.4 | Closed council conditions 3 and 6 (§13): infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate, now sharper since OCR is confirmed a distinct cost line from the reused pattern). |
 | v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent" (FR-18 doesn't literally specify the net-journal-line mechanic); (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
 | v1.6 | Third BC-expert pass, attempting to close the §4 confidence gap directly: a second `WebFetch` to `learn.microsoft.com` was independently blocked (same limitation, different review session — corroborates it's real). Aggregated search surfaced two India-availability claims that don't fully reconcile: a general "July 2026" regional-expansion date for Expense Agent vs. a narrower claim about a specific GPT-5.3-chat *model-version* rollout excluding India/UK/Australia (not necessarily the feature itself). Documented both in §4 rather than picking one, and added the concrete recommendation: someone with actual BC admin-center/tenant portal access should check the live "Feature availability by country/region" page directly — the primary source no search-based review could reach. If the July 2026 date is accurate and feature-wide, it would change §8's "optional native-path exploration" timing. |
+| v1.7 | Closed council conditions 4 and 5 (§13) — full designs in blueprint §19/§20. Row-level isolation: app-layer gate ported from `MCP/core/authorization.py`'s six-gate shape (corrected a prior citation of `data_trust_engine/authorization.py`, which is Data Trust's narrower company-discovery variant) plus new PostgreSQL Row-Level Security enforcing tenant/company isolation at the DB level, with a concrete verification test. Cost estimate: current Claude Haiku 4.5/Sonnet 5 pricing (verified via the `claude-api` skill) and an image-tokenization formula (verified via web search) yield ~$1–25/month per tenant across 50–1,000 employees — stated plainly as a minor cost line, not the real cost driver. 4 of 6 conditions now closed; the remaining 2 (BC SME sandbox, Finance/Compliance sign-off) cannot be closed by further design work. |

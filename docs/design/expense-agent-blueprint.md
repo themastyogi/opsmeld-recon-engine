@@ -1,12 +1,14 @@
-# Expense Agent — Engineering Blueprint v1.6
+# Expense Agent — Engineering Blueprint v1.7
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council Go/No-Go review completed 2026-09-06 — see the
-"Council Go/No-Go Review" section at the end of this document for the
-CEO synthesis and the six conditions that must close (BC SME sandbox
-answers, Finance/Compliance sign-off, an actual infra decision, enforced
-multi-tenant isolation, LLM/OCR cost estimate, explicit `LLMInterpreter`
-reuse) before any of this schema is built. Structurally consolidated
+"Council Go/No-Go Review" section for the CEO synthesis and conditions.
+**4 of 6 conditions closed as of v1.7** (infra decision, `LLMInterpreter`
+reuse, row-level isolation design, LLM/OCR cost estimate — §19/§20).
+**2 remain open and cannot be closed by further design work**: BC SME
+sandbox answers to BC-11/7/1/8 (§11), and Finance/Compliance sign-off on
+D-1/2/3 (§12) — both need a real person outside this design loop.
+Structurally consolidated
 from the v0.9 blueprint candidate; numbering collisions and misplaced
 sections have been corrected (see "Structural corrections" below). v1.1
 folded in BC-expert review findings (§4A, §11, §16) — same content as
@@ -29,7 +31,9 @@ numbers) or any substantive content:
   Contract, then Engineering Blueprint Contract) → the second is now
   **Section 18**.
 - Two sections were both numbered "15" (Accounting Treatment Matrix,
-  then Change Log) → the second is now **Section 19**.
+  then Change Log) → the second was renumbered to Section 19 in this
+  pass, then to **Section 21** when v1.7 inserted two new sections
+  (Row-Level Tenant Isolation Design, LLM/OCR Cost Model) ahead of it.
 - Section 7.4's subsections reused **7.3.1–7.3.6**, colliding with the
   earlier 7.3.1–7.3.5 under Configuration Control Plane → renumbered to
   **7.4.1–7.4.6**.
@@ -4035,17 +4039,24 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
    and `MCP/modules/data_trust_engine/llm_interpreter.py`'s
    provider-failover + cost-tracking pattern (extended for vision/OCR
    calls) — this also closes condition 6 below.
-4. **Multi-tenant isolation as an enforced boundary, not just a column**:
-   every table in §7 carries `tenant_id` + `bc_company_id`, but nothing
-   yet describes row-level authorization checks or states whether this
-   reuses `MCP/modules/data_trust_engine/authorization.py`, which
-   already exists in this repo. Also: `expense_source` (§7.11) stores
-   receipt images/PII with no data-retention or access-control statement
-   yet.
-5. **Rough per-tenant monthly LLM/OCR cost estimate** — Data Trust's
-   `LLMMetadata` already tracks `estimated_cost` per call as precedent,
-   but nobody has multiplied that by expected expense-line volume per
-   tenant.
+4. **CLOSED 2026-09-06 — see §19.** Two-layer design: an app-layer
+   authorization gate ported/adapted from `MCP/core/authorization.py`'s
+   six-gate shape (Session → Org → Subscription → Permission → Company
+   ACL → BC probe — the correct file; `data_trust_engine/authorization.py`
+   is Data Trust's narrower company-discovery variant, not the one this
+   design generalizes from), plus **new** PostgreSQL Row-Level Security
+   enforcing `tenant_id` (and nested `bc_company_id`) at the database
+   level — not achievable with JSON files, which is exactly why this was
+   open before the infra decision (condition 3) closed. §19.5 states the
+   concrete verification test. `expense_source` PII now has a stated
+   per-tenant object-storage scoping model (§19.4).
+5. **CLOSED 2026-09-06 — see §20.** Reuses `LLMInterpreter`'s
+   cost-tracking formula, extended to vision/OCR pricing (Claude Haiku
+   4.5 primary, per current `claude-api` skill pricing) and a stated
+   image-tokenization formula. Rough estimate: ~$1–2/month (50
+   employees) to ~$18–25/month (1,000 employees) — a minor cost line at
+   any realistic scale; §20.5 states this plainly so it isn't mistaken
+   for the real cost driver (infrastructure/engineering is).
 6. **CLOSED 2026-09-06 — see condition 3.** OCR/extraction and the
    conversational-intake AI layer (§2.3A, §10C, §10E) reuse
    `LLMInterpreter`'s provider-failover and cost-tracking pattern,
@@ -4084,7 +4095,127 @@ fields (BC-1's remaining open question), and advance-vs-settlement
 tracking with net Journal settlement (BC-7 default) on whatever BC
 access is already available — no need to chase Wave 1 access first.
 
-## 19. Change Log
+## 19. Row-Level Tenant Isolation Design (closes council condition 4)
+
+Two independent, stacked layers — not a `tenant_id` column alone.
+
+### 19.1 Layer 1: app-layer authorization gate (ported from this repo)
+
+Directly modeled on `MCP/core/authorization.py`'s `CentralAuthorizationEngine.authorize()` — verified by reading the actual file, not assumed. That engine evaluates six sequential gates: Session → Organization Status → Module Subscription → User Permission → Company ACL → BC backend probe. This shape is **ported/adapted into the new repo as a FastAPI dependency**, not imported as a package dependency (same reuse philosophy as condition 3):
+
+```python
+async def require_context(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> RequestContext:
+    if not session or session.is_expired():
+        raise HTTPException(401, "UNAUTHENTICATED")
+    if not org_is_active(session.organization_id):
+        raise HTTPException(403, "ORGANIZATION_SUSPENDED")
+    if not module_subscribed(session.organization_id, "expense_agent"):
+        raise HTTPException(403, "MODULE_NOT_SUBSCRIBED")
+    if permission and permission not in session.permissions:
+        raise HTTPException(403, "USER_NOT_PERMITTED")
+    if company_id and company_id not in session.allowed_companies:
+        raise HTTPException(403, "COMPANY_NOT_PERMITTED")
+    return RequestContext(tenant_id=session.tenant_id, bc_company_id=company_id, ...)
+```
+
+This layer decides *business* authorization (is this user allowed to act on this tenant/company at all) — same as the original.
+
+### 19.2 Layer 2: PostgreSQL Row-Level Security (new — JSON files couldn't do this)
+
+This is what actually answers the council's finding ("isolation as an enforced boundary, not just a column"). Every tenant-scoped table gets RLS enabled and a policy:
+
+```sql
+ALTER TABLE expense ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON expense
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+-- Repeat for every table in §7's inventory that carries tenant_id.
+```
+
+The FastAPI dependency above, once it resolves `RequestContext`, sets the session variable for that request's transaction before any query runs:
+
+```python
+async def db_session(ctx: RequestContext = Depends(require_context)):
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL app.current_tenant_id = :tid"), {"tid": str(ctx.tenant_id)})
+        yield conn
+```
+
+**The critical property**: the database role the application connects as must **not** have `BYPASSRLS`. That means even a bug in application code — a forgotten `WHERE tenant_id = ...` clause, a copy-pasted query, a new endpoint someone forgot to scope — **cannot leak cross-tenant rows**, because Postgres enforces the policy regardless of what the query asks for. This is the fail-closed backstop the app-layer gate alone can't guarantee (a gate is only as strong as every code path remembering to call it; RLS doesn't depend on that).
+
+### 19.3 Company-level scoping (nested under tenant)
+
+A tenant can have multiple BC companies (`bc_company_id`), so a single `tenant_id` policy isn't sufficient everywhere. Tables scoped to a specific company add a second policy clause checking `bc_company_id` against a session-scoped allow-list (a `SET LOCAL app.current_company_ids` array, populated from `session.allowed_companies` after Gate 5 above), mirroring the Company ACL check `core/authorization.py` already does at the app layer — just enforced twice now.
+
+### 19.4 Receipt/PII object storage
+
+`expense_source` (§7.11) stores receipt images/PII, called out as a gap in the council review. Object storage keys are prefixed by `tenant_id` (`s3://.../{tenant_id}/{expense_id}/...`), bucket policy denies cross-prefix access by IAM role, and any signed URL issued to a client is generated only after the same `require_context` gate passes — never by predictable/guessable path alone.
+
+### 19.5 How this gets verified
+
+A security review should be able to connect to Postgres as the application's normal (non-bypass) role, scope a session to tenant A, and run `SELECT * FROM expense` with **no** `WHERE` clause — RLS must return zero rows belonging to tenant B, regardless of query shape. That's the concrete, repeatable test this design commits to being checkable against, not just described.
+
+## 20. LLM/OCR Cost Model (closes council condition 5)
+
+### 20.1 Methodology and grounding
+
+Reuses `MCP/modules/data_trust_engine/llm_interpreter.py`'s failover chain (Anthropic Claude primary → OpenAI secondary → Gemini tertiary → deterministic fallback) and its cost-tracking formula (`estimated_cost = input_tokens × rate_in + output_tokens × rate_out`, verified by reading the actual file), extended to a vision call for OCR rather than the current text-only tool-use interpretation.
+
+**Pricing sources — verified via the `claude-api` skill (Anthropic) and existing repo code (OpenAI), not training-memory recall**:
+
+| Model | Input $/1M tokens | Output $/1M tokens | Source |
+|---|---|---|---|
+| Claude Haiku 4.5 (primary, matches `llm_interpreter.py`'s existing choice) | $1.00 | $5.00 | `claude-api` skill pricing table (cached 2026-06-24 — confirm before commercial commitments) |
+| Claude Sonnet 5 (fallback tier, if higher accuracy needed) | $2.00 | $10.00 | Same source |
+| OpenAI gpt-4o-mini (secondary, per existing failover) | $0.15 | $0.60 | Existing constants in `llm_interpreter.py` line 104 — **not independently reverified this session** (outside the `claude-api` skill's scope); confirm current OpenAI pricing before relying on this figure |
+
+**Image tokenization** (verified via web search, not assumed): Claude's vision token cost approximates `(width_px × height_px) / 750`, with the long edge resized down to a model-dependent cap (~1568px for the Haiku/Sonnet tier) before tokenization. A typical smartphone receipt photo, resized to fit that cap, lands around **1,500–2,500 input tokens**; this model uses **2,000 tokens/image** as the central estimate.
+
+### 20.2 Per-call cost
+
+**OCR/extraction call** (Haiku 4.5, one call per captured receipt — matches FR-2's single-pass extraction):
+- Input: ~2,000 image tokens + ~400 tokens (system prompt + tool schema) = 2,400 tokens
+- Output: ~200 tokens (structured JSON extraction, similar scale to the existing `record_candidate_interpretation` tool's 512-token cap)
+- Cost = 2,400 × $0.000001 + 200 × $0.000005 = **$0.0034/receipt**
+
+**Conversational intake turn** (Haiku 4.5, text-only — Teams/Outlook intent/entity extraction, §2.3A):
+- Input: ~600 tokens, Output: ~150 tokens
+- Cost = 600 × $0.000001 + 150 × $0.000005 = **$0.00135/turn**
+
+Duplicate/fraud detection (FR-28–30) is signal-based (hash/vendor/amount/date matching), not an LLM call, so it adds no LLM cost.
+
+### 20.3 Assumptions (adjustable — flag before treating as final)
+
+| Assumption | Value | Basis |
+|---|---|---|
+| Receipts/employee/month | 4 | Rough blended estimate (field-heavy roles higher, office roles lower) — **replace with real pilot data as soon as available** |
+| % of captures via conversational intake (vs. app/photo direct) | 30% | Estimate, no data yet |
+| Conversational turns per captured expense | 2 | Intent classification + confirmation |
+| Primary-model (Haiku) success rate | ~95% | Assumed; failover overflow to OpenAI/Gemini not separately modeled below |
+
+### 20.4 Per-tenant monthly estimate
+
+| Tenant size | Receipts/month | OCR cost | Conversational cost | **Total/month** |
+|---|---|---|---|---|
+| Small (50 employees) | 200 | $0.68 | $0.16 | **~$0.84** |
+| Medium (200 employees) | 800 | $2.72 | $0.65 | **~$3.37** |
+| Large (1,000 employees) | 4,000 | $13.60 | $3.24 | **~$16.84** |
+
+Add a 20–30% buffer for retries on low-quality images, multi-page bills, and failover overflow to costlier providers: realistic range **~$1–$2 (small)**, **~$4–$6 (medium)**, **~$18–$25/month (large)**.
+
+### 20.5 The actual finding
+
+At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-employee tenant costs roughly the same as a single SaaS seat license, not a meaningful driver of unit economics. **The CFO question that actually matters is infrastructure and engineering cost (the new Postgres/FastAPI service, ongoing maintenance, human review time for exceptions), not per-call LLM pricing.** Worth saying plainly rather than letting a "cost estimate" checkbox imply LLM spend is the risk here.
+
+### 20.6 What's not modeled (caveats)
+
+- Failover overflow cost if Haiku is unavailable and Gemini/OpenAI carry more volume than the assumed 5%.
+- `llm_interpreter.py`'s Gemini branch doesn't currently set `estimated_cost` at all (verified by reading the file) — a gap worth fixing when this pattern is ported, not just carried forward silently.
+- Vision-capable OCR is a materially different workload from the existing tool-use text interpretation this pattern was built for — real production numbers should replace this estimate once pilot volume exists.
+
+## 21. Change Log
 
 | Version | Change |
 |---|---|
@@ -4100,3 +4231,4 @@ access is already available — no need to chase Wave 1 access first.
 | v1.4 | Closed council conditions 3 and 6: infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate). |
 | v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent"; (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
 | v1.6 | Third BC-expert pass, attempting to close the §4 confidence gap directly: a second `WebFetch` to `learn.microsoft.com` was independently blocked (same limitation, different review session — corroborates it's real). Aggregated search surfaced two India-availability claims that don't fully reconcile: a general "July 2026" regional-expansion date for Expense Agent vs. a narrower claim about a specific GPT-5.3-chat *model-version* rollout excluding India/UK/Australia (not necessarily the feature itself). Documented both in §4 rather than picking one, and added the concrete recommendation: someone with actual BC admin-center/tenant portal access should check the live "Feature availability by country/region" page directly. If the July 2026 date is accurate and feature-wide, it would change §11's "optional native-path exploration" timing. |
+| v1.7 | Closed council conditions 4 and 5 — the two remaining conditions answerable without a real BC SME or Finance/Compliance sign-off. Added §19 (Row-Level Tenant Isolation Design): a two-layer model — an app-layer gate ported from `MCP/core/authorization.py`'s six-gate shape (correcting the council's citation of `data_trust_engine/authorization.py`, which is Data Trust's narrower company-discovery variant, not the general-purpose engine) plus new PostgreSQL Row-Level Security enforcing tenant/company isolation at the DB level, with a concrete verification test. Added §20 (LLM/OCR Cost Model): current Claude Haiku 4.5/Sonnet 5 pricing verified via the `claude-api` skill, an image-tokenization formula verified via web search, and a per-tenant monthly estimate (~$1–25/month across 50–1,000 employees) — with the finding stated plainly that LLM cost is a minor line item, not the real cost driver. |
