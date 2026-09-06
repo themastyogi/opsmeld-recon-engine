@@ -1,15 +1,20 @@
-# Expense Agent — Engineering Blueprint v1.9
+# Expense Agent — Engineering Blueprint v1.11
 
-Status: **ALL SIX COUNCIL CONDITIONS CLOSED (2026-09-06).** Infra
-decision, `LLMInterpreter` reuse, row-level isolation design, LLM/OCR
-cost estimate, D-1/D-2/D-3 (reframed as customer-configurable policy),
-and BC-1/BC-7/BC-8/BC-11 (resolved by architecture decision — Purchase
-Invoice for GST lines §11, `OPSMELD_NATIVE` approval, Employee-as-Vendor
-as a per-customer option §10.5/§7.12, custom-API fallback if needed)
-are all closed. **This clears the pre-build gate — it is not itself a
-green light to build the full 40-table schema in one pass.** The
-Product Manager's original finding still holds: start with a thin
-vertical slice, not the whole schema at once. Structurally consolidated
+Status: **4 of 6 council conditions genuinely closed (3, 4, 5, 6) —
+corrected 2026-09-06 after re-review found two overclaims in v1.9.**
+Infra decision, row-level isolation design, LLM/OCR cost estimate, and
+`LLMInterpreter` reuse hold up under direct file/line verification.
+**Condition 1 is de-risked, not closed**: BC-8 and BC-7's mapping
+option are solid, but BC-1's Purchase Invoice decision was asserted,
+not verified — one small, fast API check remains (§11), not the
+original full BC SME sandbox session. **Condition 2 is split**: the
+"who decides" mechanism (D-1/D-2/D-3 as customer-configurable policy)
+is genuinely closed, but a new narrower item (2b) — real tax/compliance
+review of the specific default templates Opsmeld ships — was missed in
+the earlier reframing. **Do not treat this as a green light to build
+the full 40-table schema regardless of condition count** — the
+Product Manager's finding still holds: start with a thin vertical
+slice, not the whole schema at once. Structurally consolidated
 from the v0.9 blueprint candidate; numbering collisions and misplaced
 sections have been corrected (see "Structural corrections" below). v1.1
 folded in BC-expert review findings (§4A, §11, §16) — same content as
@@ -81,7 +86,9 @@ plug into that module's internals.** The application's own domain model
 (§7) is independent of BC's schema by design.
 
 The one hard BC dependency this design actually has: **posting a
-finished, GST-computed, dimension-tagged transaction into BC's ledgers.**
+finished, GST-classified, dimension-tagged transaction into BC's
+ledgers** — BC's own Tax Engine computes the actual GST amounts from
+that classification (revised 2026-09-06, §6.7/§11), Opsmeld doesn't.
 That posting can go through BC's long-standing General/Payment Journal
 API (stable since BC API v2.0, ~2019, and how most third-party expense
 tools already integrate with BC) rather than through the new 2026W1
@@ -461,12 +468,28 @@ it will be settled.
   confidence, not only a binary duplicate flag.
 
 ### 6.7 India compliance
-- FR-31: Capture vendor GSTIN and tax breakup (CGST/SGST/IGST) per line
-  where applicable.
-- FR-32: Separate tax calculation, invoice validity, and ITC eligibility.
+
+**Revised 2026-09-06 — Opsmeld classifies, BC computes.** Opsmeld does
+not calculate GST tax amounts (CGST/SGST/IGST) itself. It captures the
+transaction and resolves the correct **classification** — GST Group
+Code, HSN/SAC Code, Tax Area — pushed to BC on the Purchase Invoice
+line (§7, §11). BC's own Tax Engine, using that customer's GST Posting
+Setup, computes the actual tax split. This reduces Opsmeld's liability
+surface (tax arithmetic is Microsoft's maintained India-localization
+logic) and makes GST handling a mapping problem like Cost
+Center/Department (§10.5), not a calculation engine.
+
+- FR-31: Capture vendor GSTIN and resolve the correct classification
+  (GST Group Code, HSN/SAC Code, Tax Area) per line — not the tax
+  amount, which BC computes.
+- FR-32: Separate classification resolution, invoice validity, and ITC
+  eligibility as distinct decisions. Tax *calculation* is out of scope
+  for Opsmeld.
 - FR-33: Each taxable line carries an ITC eligibility decision (Yes, No,
   Blocked, Review) plus reason code, rule-set/version, and decision
-  provenance.
+  provenance. This decision drives *which classification* is sent to
+  BC (e.g., routing a blocked-credit category to a non-recoverable
+  classification) — a classification input, not a tax computation.
 - FR-34: Sec 17(5) blocked-credit defaults must allow a controlled
   override path for applicable statutory carve-outs; overrides require
   reason and reviewer evidence.
@@ -670,7 +693,7 @@ employee creation for Expense Users.
 | Dimension mapping | Cost Center / Department / Project / other semantic concepts to BC | Not a single native expense setup concept | OPSMELD_NATIVE configuration + BC mapping |
 | Project strategy | Dimension-only / Job-only / Both | BC supports Project + Project Task on expenses | HYBRID |
 | Employee assignments | Eligible/default departments, cost centers, projects/jobs, effective dates | Employee/user defaults exist but not sufficient for our multi-project model | OPSMELD_NATIVE |
-| GST configuration | GSTIN, tax components, ITC rules, blocked-credit rules, overrides, evidence | India-specific gap to validate for Expense Management | OPSMELD_NATIVE |
+| GST configuration | GSTIN, classification mapping (category → GST Group Code/HSN-SAC), ITC-eligibility rules, blocked-credit rules, overrides, evidence | Tax *computation* is BC's native Tax Engine (revised 2026-09-06); classification/eligibility rules are India-specific and not part of documented Expense Management setup | HYBRID — classification/eligibility `OPSMELD_NATIVE`, tax computation `MICROSOFT_NATIVE` |
 | TDS configuration | Sections, thresholds, rates, vendor/AP routing rules | India-specific expense capability gap to validate | OPSMELD_NATIVE |
 | Payroll tax treatment | Allowance/perquisite categories, regime-aware treatment, payroll handoff rules | Not part of the documented Expense setup surface | OPSMELD_NATIVE |
 | Duplicate/fraud policy | Signals, confidence, thresholds, cross-employee scope, reviewer actions | Agent has duplicate handling, but product policy control is broader | OPSMELD_NATIVE / HYBRID |
@@ -3364,19 +3387,38 @@ plug into BC's new 2026W1 Expense Report/Expense Line module — these
 decisions go further and pick specific, well-established BC document
 types for posting instead.
 
-### BC-1 — CLOSED: post GST-bearing lines via Purchase Invoice, not Journal
+### BC-1 — DE-RISKED FURTHER, one narrow check remains: post GST classification via Purchase Invoice; BC computes the tax
 
 **Decision**: expense lines that carry GST/tax detail post to BC as a
 **Purchase Invoice**, not a General/Payment Journal line. This resolves
-the "does the Journal API expose India GST fields" question by not
-depending on Journal for tax-bearing lines at all — Purchase documents
-are core, guaranteed BC functionality that runs through the full
-GST/Tax engine (Tax Area, GST Group Code, HSN/SAC, GST Posting Setup),
-unlike the newer Expense Report/Line objects or generic Journal lines.
-Non-tax-bearing lines may still use the simpler Journal path — see the
-updated Accounting Treatment Matrix (§15). GST/ITC *computation*
-remains `OPSMELD_NATIVE` as before; this decision is about *where the
-computed result lands* in BC, not who computes it.
+the specific worry it targeted — "does the Journal API expose India
+GST fields" — by not depending on Journal for tax-bearing lines at
+all. Non-tax-bearing lines may still use the simpler Journal path — see
+the Accounting Treatment Matrix (§15).
+
+**Revised 2026-09-06 — classification, not computation.** GST/ITC
+computation is no longer `OPSMELD_NATIVE`. Opsmeld resolves the
+classification (GST Group Code, HSN/SAC Code, Tax Area) and pushes it
+on the Purchase Invoice line; BC's own Tax Engine, using that
+customer's GST Posting Setup, computes CGST/SGST/IGST. This is a real
+de-risking of the remaining check, not just reframing: the API question
+shifts from "does `purchaseInvoiceLines` accept a pre-computed tax
+amount" (unusual, less likely exposed) to "does it accept classification
+codes that drive BC's own calculation" (standard, setup-driven fields).
+ITC eligibility (Sec 17(5)) remains an Opsmeld classification decision
+— it determines which GST classification is sent, not the tax math.
+
+**Corrected 2026-09-06, per BC-expert re-review (still applies to the
+classification fields specifically)**: this document previously warned
+that "new BC feature UI surfaces routinely ship 1–2 release waves ahead
+of their public API v2.0 write endpoints" (about Expense Report/Line)
+and should have applied the same skepticism to Purchase Invoice — it
+hadn't been checked. **Remaining test — smaller now, not a full
+sandbox session**: POST one test Purchase Invoice line with GST Group
+Code and HSN/SAC Code via API v2.0 against real (even trial) BC access,
+and confirm BC computes the expected tax split. If unavailable, the
+custom-AL-API fallback (BC-11 below) still applies — a "no" here
+changes the implementation path, not the design.
 
 ### BC-7 — Architecturally addressed, genuinely tricky, stays a per-customer implementation choice
 
@@ -3430,11 +3472,13 @@ Opsmeld. No BC-side validation needed.
 
 ### Net effect
 
-These decisions close BC-1, BC-8, and BC-11 outright, and turn BC-7
-from "needs a BC SME sandbox session before build" into "a per-customer
-mapping choice made during implementation, not a single global
-unknown." **No BC-N item remains a genuine pre-build blocker.** See the
-Council Go/No-Go Review section's updated condition 1.
+**Corrected 2026-09-06**: BC-8 closes outright. BC-11 turns from "needs
+a BC SME sandbox session before build" into "implementation-time
+engineering with an identified fallback." BC-7 turns into "a
+per-customer mapping choice made during implementation, not a single
+global unknown." **BC-1 is de-risked, not closed** — see the corrected
+note above; one narrow, fast API check remains a genuine pre-build
+item. See the Council Go/No-Go Review section's updated condition 1.
 
 Costing-method awareness (FIFO/Standard/Average) does not apply to this
 domain — employee expense/reimbursement has no inventory costing
@@ -3625,25 +3669,35 @@ decision (§11), not left as pre-build unknowns:**
 - BC-7: **Architecturally addressed, resolved per-customer at
   implementation time.** Native Employee, Employee-as-Vendor, or
   app-side tracking, chosen per customer's actual BC configuration.
-- BC-1: **Closed.** GST-bearing lines post via Purchase Invoice, which
-  runs through BC's full GST/Tax engine. GST/ITC computation remains
-  `OPSMELD_NATIVE`.
+- BC-1: **De-risked further, not fully closed.** GST-bearing lines post
+  via Purchase Invoice carrying GST classification (Group Code,
+  HSN/SAC, Tax Area) — BC's own Tax Engine computes CGST/SGST/IGST from
+  that classification, revised 2026-09-06 (Opsmeld no longer computes
+  tax amounts; see §6.7, §11). This narrows the remaining check to
+  whether `purchaseInvoiceLines` accepts classification fields — more
+  likely exposed than a computed-value field. One fast test remains:
+  POST a test line with these fields via API v2.0 and confirm BC
+  computes the expected split.
 - BC-8: **Closed.** Approval/DOFA is fully `OPSMELD_NATIVE`.
 - Mapping ownership: the semantic-to-BC mapping model now also includes
   the Employee-as-Vendor option (§10.5, §7.12) alongside Dimension/
-  Job/Job Task for Project.
-- Tax ownership: **closed** — compliance assessment stays
-  application-owned (`OPSMELD_NATIVE`); the computed tax amount lands in
-  BC via Purchase Invoice per BC-1.
+  Job/Job Task for Project, and the GST classification mapping
+  (category → GST Group Code/HSN-SAC) per BC-1.
+- Tax ownership: **revised** — GST *computation* is BC's (its own Tax
+  Engine, driven by Opsmeld's classification); ITC-eligibility
+  classification decisions and TDS assessment stay application-owned
+  (`OPSMELD_NATIVE`) as inputs to that classification, not independent
+  tax math.
 - Accounting ownership: confirmed — BC remains the source of truth for
   final posted financial amounts, posted via Purchase Invoice or
   Journal per scenario, always Finance-reviewed before posting (FR-16).
 
-**No item in this gate remains a genuine pre-build blocker.** The
-per-customer choices (Employee-as-Vendor vs. native Employee vs.
-app-side tracking) are implementation-time configuration, resolved
-during each customer's onboarding — not open architecture questions
-requiring resolution before any build starts.
+**Corrected 2026-09-06: one item in this gate remains a genuine
+pre-build item — BC-1's narrow API check — but it's small and fast, not
+the original full BC SME sandbox session, and has a fallback either
+way.** The per-customer choices (Employee-as-Vendor vs. native Employee
+vs. app-side tracking) remain implementation-time configuration,
+resolved during each customer's onboarding.
 
 ## 18. Engineering Blueprint Contract
 
@@ -4053,20 +4107,29 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
 
 ### Six conditions before build starts
 
-1. **CLOSED 2026-09-06 — see §11.** BC-1, BC-8, and BC-11 resolved by
-   architecture decision (Purchase Invoice for GST-bearing lines,
-   `OPSMELD_NATIVE` approval, custom-API fallback if standard APIs prove
-   insufficient) rather than pending a BC SME sandbox session. BC-7
-   (advance/employee ledger modeling) is architecturally addressed with
-   a genuine per-customer choice (native Employee, Employee-as-Vendor,
-   or app-side tracking) rather than a single unresolved global
-   question. No BC-N item remains a pre-build blocker.
-2. **CLOSED 2026-09-06 — reframed as out of scope, not deferred.** D-1,
-   D-2, D-3 (§12) are each customer's own Finance-team policy decisions,
-   not an Opsmeld build blocker. The system already requires
-   configurable support for all three (FR-14, FR-27, FR-34, FR-39); no
-   Opsmeld-internal Finance/Compliance sign-off is needed on a specific
-   global answer, because there isn't meant to be one.
+1. **CORRECTED 2026-09-06 — de-risked, not closed.** BC-8 and BC-11
+   are closed by architecture decision (`OPSMELD_NATIVE` approval,
+   custom-API fallback). BC-7 is architecturally addressed as a
+   genuine per-customer choice. **BC-1's Purchase Invoice decision was
+   asserted, not verified**, against this doc's own earlier standard
+   for BC feature maturity — see §11's corrected note. One small, fast
+   remaining test: POST a test Purchase Invoice line with India GST
+   fields via API v2.0 against real (even trial) BC access. This is far
+   smaller than the original full sandbox session, and the custom-API
+   fallback still applies if the answer is no.
+2. **SPLIT 2026-09-06, per Domain Expert re-review.** The "who decides"
+   mechanism is genuinely closed: D-1, D-2, D-3 (§12) are each
+   customer's own Finance-team policy decisions, not an Opsmeld build
+   blocker — the system already requires configurable support for all
+   three (FR-14, FR-27, FR-34, FR-39). **New condition 2b**: Opsmeld
+   intends to ship default templates (a default Sec 17(5) blocked-
+   credit list, a sample DOFA — §12) as a convenience that most SME
+   customers will never touch. If Opsmeld's own shipped default is
+   legally wrong, that's Opsmeld's liability regardless of
+   configurability — the customer never exercised the override. Get
+   real Indian tax/compliance review of the *specific default content*
+   before those templates ship — smaller and more bounded than the
+   original D-1/D-2/D-3 ask, but still a real-person requirement.
 3. **Infrastructure decision — CLOSED 2026-09-06.** The Expense Agent
    will be a **new standalone repository**, not a module inside
    opsmeld-recon-engine, on **Python/FastAPI + PostgreSQL**. Rationale:
@@ -4129,17 +4192,21 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
 Scope creep from "approve the design direction" into "approve full
 build" without conditions 1–3 closing first.
 
-**Update (2026-09-06, superseded — all six conditions now closed):**
-§2.0/§11 clarified this design doesn't need to replicate BC's native
-Expense Report module. Going further, BC-1/BC-7/BC-8/BC-11 are now
-closed by direct architecture decision (Purchase Invoice for GST lines,
-`OPSMELD_NATIVE` approval, Employee-as-Vendor as a per-customer option,
-custom-API fallback) rather than pending a BC SME sandbox session. The
-scope-creep risk this section named is now the live concern in the
-other direction: **all six conditions being closed clears the pre-build
-gate, but is not itself authorization to build the full 40-table schema
-in one pass.** The Product Manager's original finding still holds —
-start with a thin vertical slice, not the whole schema at once.
+**Update (2026-09-06, corrected after re-review — this is exactly the
+risk this section warned about, caught in the act):** §2.0/§11
+clarified this design doesn't need to replicate BC's native Expense
+Report module. BC-8 and BC-11 are closed by direct decision. BC-7 is
+architecturally addressed as a per-customer implementation choice.
+**BC-1's Purchase Invoice decision was asserted, not verified**,
+against this doc's own previously-stated standard for BC feature
+maturity — a real instance of the rounding-up risk this section exists
+to catch. Condition 1 is corrected from "closed" to "de-risked, one
+small fast API check remaining" (§11). Condition 2 is split: the
+configurability mechanism is genuinely closed, but Opsmeld's own
+shipped default-content correctness (new condition 2b) still needs
+real review. **4 of 6 conditions genuinely closed; two require small,
+bounded, real-person actions — not more design-session inference, and
+not another rounding-up to "fully cleared" either.**
 
 ## 19. Row-Level Tenant Isolation Design (closes council condition 4)
 
@@ -4280,3 +4347,5 @@ At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-empl
 | v1.7 | Closed council conditions 4 and 5 — the two remaining conditions answerable without a real BC SME or Finance/Compliance sign-off. Added §19 (Row-Level Tenant Isolation Design): a two-layer model — an app-layer gate ported from `MCP/core/authorization.py`'s six-gate shape (correcting the council's citation of `data_trust_engine/authorization.py`, which is Data Trust's narrower company-discovery variant, not the general-purpose engine) plus new PostgreSQL Row-Level Security enforcing tenant/company isolation at the DB level, with a concrete verification test. Added §20 (LLM/OCR Cost Model): current Claude Haiku 4.5/Sonnet 5 pricing verified via the `claude-api` skill, an image-tokenization formula verified via web search, and a per-tenant monthly estimate (~$1–25/month across 50–1,000 employees) — with the finding stated plainly that LLM cost is a minor line item, not the real cost driver. |
 | v1.8 | Reframed and closed condition 2 (§12): D-1/D-2/D-3 (advance recovery mechanism, perquisite tax treatment, GST override authority) are each customer's own Finance-team policy decision, not an Opsmeld build blocker — the system already requires configurable support for all three (FR-14, FR-27, FR-34, FR-39). No Opsmeld-internal Finance/Compliance sign-off needed on a specific global answer, since there isn't meant to be one; Opsmeld ships sensible defaults/templates, customers configure the authoritative values. 5 of 6 conditions now closed — only condition 1 (BC SME sandbox testing) remains, and it cannot be closed by further design work. |
 | v1.9 | Closed condition 1 (§11, §15, §17, Council review) via direct BC architecture decisions rather than pending sandbox validation: BC-1 (GST-bearing lines post via Purchase Invoice, not Journal), BC-8 (approval/DOFA fully `OPSMELD_NATIVE`), BC-11 (Purchase Invoice/Journal APIs first, custom AL API page as a known fallback). BC-7 (advance/employee ledger) architecturally addressed with a genuine per-customer choice — native Employee, Employee-as-Vendor (leverages BC's mature Vendor Ledger Application), or app-side tracking — added to §10.5's mapping table and §7.12's `mapping_definition.representation_type` enum. Updated the Accounting Treatment Matrix (§15) with the posting-mechanism column. **All six council conditions now closed.** |
+| v1.10 | BC-expert and Domain-Expert re-review of v1.9 found two overclaims, both corrected: (1) BC-1's Purchase Invoice decision was asserted, not verified, against this doc's own earlier standard for BC feature maturity ("feature UI ships ahead of its API") — corrected from "closed" to "de-risked, one small fast API check remaining" (POST a test Purchase Invoice line with India GST fields via API v2.0). (2) Condition 2's reframing correctly closed the "who decides" mechanism but missed that Opsmeld's own shipped default templates (default Sec 17(5) blocked-credit list, sample DOFA) still need real tax/compliance review before shipping — split off as new condition 2b. Net: 4 of 6 conditions genuinely closed (3, 4, 5, 6); conditions 1 and 2 each reduced to one small, bounded, real-person action rather than either the original large ask or a false "fully closed" claim. |
+| v1.11 | Revised GST architecture: Opsmeld no longer computes GST tax amounts (dropped `OPSMELD_NATIVE` for GST/ITC computation, §7.3.1's GST configuration row now `HYBRID`). Opsmeld resolves classification only (GST Group Code, HSN/SAC Code, Tax Area, driven by ITC-eligibility decisions) and pushes it on the Purchase Invoice line; BC's own Tax Engine computes CGST/SGST/IGST from that classification using the customer's GST Posting Setup. Updated FR-31/32/33 (§6.7), BC-1 (§11), §17's Build Decision Gate, and §2.0's framing accordingly. This further de-risks BC-1's remaining check — the API question shifts from "does it accept a computed tax amount" to "does it accept standard classification fields" — and reduces Opsmeld's liability for tax-math correctness, since that arithmetic is Microsoft's maintained localization logic, not Opsmeld's own. |
