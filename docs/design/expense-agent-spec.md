@@ -212,6 +212,53 @@ table/page extensions + dimensions) rather than introducing a parallel
 custom data model, which should make it easier to upgrade-safe across BC
 releases and easier for a BC consultant to support later.
 
+### 7.1 Alternative: keep enrichment/workflow data outside BC entirely
+
+This repo's own Data Trust capability already establishes a working
+precedent for this, and it should be treated as the default rather than
+the AL-table-extension approach above, pending BC-11 below:
+
+- `DataTrustFinding` (`MCP/modules/data_trust_engine/models.py:48-68`)
+  stores locally-owned records (JSON-backed, no SQL/ORM in this repo
+  today — see `requirements.txt`) carrying workflow state BC has no
+  concept of (Open/Under Review/Confirmed/False Positive/Ignored), linked
+  back to BC via `StructuredEvidence` (`entity_table`, `record_id`,
+  `field_name`) and synthetic keys such as `IC-ILE-{ile_id}`
+  (`acquisition.py:333`) tied to a BC ledger entry number.
+- `DataAcquirer` (`acquisition.py:104-267`) is strictly read-only against
+  BC's OData v2.0 endpoints — no AL extension, no per-tenant app install.
+
+Applying the same pattern here:
+
+- **Own tables (linked to BC by key, not posted into BC's schema)**: OCR
+  extraction + confidence, duplicate-detection hashes, GSTIN/HSN/tax
+  breakup working data, ITC-eligibility computation + reason code, TDS
+  flag, perquisite flag, Advance Request lifecycle + aging, the
+  DOFA/approval-matrix configuration, approval workflow audit trail,
+  policy-exception reason codes.
+- **Must still post into BC** (not a design choice — Companies Act books
+  of account and any GST-return prep that reads BC directly require it):
+  the final approved financial transaction — G/L Entry / Employee Ledger
+  Entry / Vendor Ledger Entry — and the Dimensions on it.
+- Post the clean, approved result via BC's standard journal/ledger API
+  surface (the same class of API this repo's staged/unposted draft
+  documents already use), rather than writing into Expense Line/Report
+  via a table extension. If achievable, this removes the need for **any**
+  AL extension, and with it the upgrade-collision risk in BC-5/BC-6.
+- "Maintain" = a periodic pull-based reconciliation between our own state
+  (e.g., Advance Request outstanding balance) and BC's actual ledger
+  entries, using the same acquisition/findings-diff pattern Data Trust
+  already runs — to catch drift if a BC record is edited or corrected
+  outside this workflow after posting.
+- Trade-off to make explicitly with whoever owns GST filing: if their
+  return-prep process queries BC directly rather than through this
+  engine, ITC-eligibility/TDS flags kept only in our tables won't be
+  visible there. Given this product's positioning as the
+  reconciliation/compliance layer over BC, the default assumption is that
+  this tool is the source of truth for compliance flags and BC is the
+  source of truth for posted amounts — but confirm this is acceptable
+  before committing to it.
+
 ## 8. Open questions for BC Expert
 
 - **BC-1**: Does the native Expense Line table already run through BC's
@@ -245,6 +292,13 @@ releases and easier for a BC consultant to support later.
   agent is available there).
 - **BC-10**: Any known India-localization roadmap for this module we
   should wait on rather than build ourselves?
+- **BC-11**: Does BC 2026W1's native Expense Report/Expense Line expose a
+  write-capable API (so we could post clean, pre-validated data and let
+  BC's own engine generate the ledger entries), or would posting have to
+  go directly through the standard General/Payment Journal API instead,
+  bypassing Expense Report/Line entirely? This decides whether the
+  Section 7.1 "no AL extension" approach is viable as described, or needs
+  adjustment.
 
 ## 9. Open questions for Domain Expert (accounting / Indian compliance)
 
