@@ -1,4 +1,4 @@
-# Expense Agent — Engineering Blueprint v1.5
+# Expense Agent — Engineering Blueprint v1.6
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council Go/No-Go review completed 2026-09-06 — see the
@@ -274,12 +274,34 @@ Out of scope for this doc:
   Indian Expense-Agent-UI availability without checking the live page
   yourself before it matters.
 
+**Update, per second BC-expert re-review (attempted to close this
+exact gap, still open)**: a direct `WebFetch` to `learn.microsoft.com`
+was blocked by network egress in that review's environment too —
+independently corroborating that this limitation is real, not an
+excuse, across two separate review sessions. A further aggregated
+search surfaced two claims that don't fully reconcile: (a) "public
+preview is available in English and the US only, but following with
+these countries/regions in July 2026" — a general regional-expansion
+date for Expense Agent; and (b) a narrower claim that "UK, India, and
+Australia [are] excluded from the GPT-5.3-chat model update for
+agents," which is about a specific *model-version* rollout, not
+necessarily Expense-Agent-*feature* availability itself. **These two
+aggregated, non-primary-source snippets can't be reconciled from search
+alone.** If (a) is accurate and applies to the feature (not just the
+model), Wave 1/India access could arrive well before this design
+reaches build — which would change the "optional native-path
+exploration" calculus in §11. **Recommended next step**: someone with
+actual BC admin-center/tenant portal access should check the live
+"Feature availability by country/region" page directly — that's the
+primary source neither this review nor the prior one could reach.
+
 Sources: Microsoft Dynamics 365 Blog (Expense Agent, Apr 2026); Microsoft
 Learn — Expense Management Overview, Expense Agent Overview, Set Up
 Expense Categories and Rules, Release Plan 2026W1 (Manage employee
 expenses using expense reports; Manage expenses using Expense Agent),
 Copilot and agents country/region availability and supported languages
-(accessed via aggregated search, not direct fetch).
+(accessed via aggregated search, not direct fetch — direct fetch
+attempted twice, blocked both times).
 
 ## 4A. Verified: this codebase has no BC write path today
 
@@ -4077,3 +4099,4 @@ access is already available — no need to chase Wave 1 access first.
 | v1.3 | Added §2.0 ("inspiration, not replication") clarifying this design doesn't need to mirror BC's native Expense Report module — the only hard BC dependency is posting via BC's long-standing General/Payment Journal API. Split BC-11/BC-7/BC-1 in §11 into a default path (testable on any existing BC access, no Wave 1/India-inclusion needed) and an optional native-path exploration. Updated §17's Build Decision Gate and the Council review's next-step guidance accordingly — resolves the "no Wave 1 access" blocker by removing the dependency on it. |
 | v1.4 | Closed council conditions 3 and 6: infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate). |
 | v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent"; (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
+| v1.6 | Third BC-expert pass, attempting to close the §4 confidence gap directly: a second `WebFetch` to `learn.microsoft.com` was independently blocked (same limitation, different review session — corroborates it's real). Aggregated search surfaced two India-availability claims that don't fully reconcile: a general "July 2026" regional-expansion date for Expense Agent vs. a narrower claim about a specific GPT-5.3-chat *model-version* rollout excluding India/UK/Australia (not necessarily the feature itself). Documented both in §4 rather than picking one, and added the concrete recommendation: someone with actual BC admin-center/tenant portal access should check the live "Feature availability by country/region" page directly. If the July 2026 date is accurate and feature-wide, it would change §11's "optional native-path exploration" timing. |
