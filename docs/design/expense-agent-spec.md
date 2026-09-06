@@ -1,42 +1,116 @@
-# Expense Agent — Design Spec v0.2
+# Expense Agent — Design Spec for SME Review v1.0
 
-Status: DRAFT — reviewed once internally (BC Expert + Domain Expert
-personas); pending external SME review before any build decision.
+Status: DRAFT — for review by BC Expert and Domain Expert. This is the
+lean, decision-focused version of the design: architecture, scope,
+functional requirements, and the open questions that actually need
+expert judgment. The full 40-table engineering schema, conversational
+workflow walkthroughs, and reporting/dashboard design live in the
+companion document `expense-agent-blueprint.md` in this same folder —
+reference it only if you need implementation-level detail; it is not
+needed to answer the P0/P1 questions below.
 Author: Vikas (via Claude design session)
 Date: 2026-09-06
 
 ## 1. Purpose
 
 Design an AI-assisted expense management capability for Business Central
-customers (India-first, globally applicable) that lets employees capture and
-submit expenses continuously, handles mixed company-paid/employee-paid
+customers (India-first, globally applicable) that lets employees capture
+and submit expenses continuously, handles mixed company-paid/employee-paid
 funding, advances, and India statutory compliance (GST ITC, TDS,
-perquisite), and posts cleanly into BC's ledgers.
+payroll/perquisite treatment), and records the final approved accounting
+transaction in BC.
 
-This is a **design spec**, not an implementation plan. No code is written
-against this yet. Goal of this document is to get correctness feedback from
-a BC/ERP expert and an accounting/Indian-compliance domain expert before any
-build decision.
+This is a design spec, not an implementation plan. No production code is
+written against this yet. The goal is correctness feedback from a BC/ERP
+expert and an accounting/Indian-compliance domain expert before any build
+decision.
 
-## 2. Scope
+## 2. Core Architecture Decision
+
+### 2.1 System-of-record boundary
+
+| Data / responsibility | System of record | Notes |
+|---|---|---|
+| Expense capture and source evidence | Expense system | Receipt/image, extracted fields, employee input |
+| OCR / extraction / AI interpretation | Expense system | AI output plus confidence and evidence |
+| Policy evaluation | Expense system | Rule evaluation and decision provenance |
+| GST / TDS / payroll tax assessment | Expense system | Versioned compliance assessment; final accounting remains in BC |
+| Approval workflow state / audit trail | Expense system | Unless deliberately delegated to native BC workflow |
+| Operational advance request | Expense system | Request, purpose, approval, expected settlement |
+| Accounting advance balance | BC | Prefer native Employee Ledger Entry/application mechanics if confirmed by BC SME |
+| Final accounting transaction | BC | Accounting system of record |
+| G/L Entry / Employee Ledger Entry / Vendor Ledger Entry | BC | Native posting result |
+| Dimensions | BC | Must flow to posted entries |
+| Reconciliation state / evidence | Expense system | Links application state back to BC transaction keys |
+
+**Principle:** the Expense capability owns capture, decisioning,
+compliance assessment, workflow evidence, and reconciliation state;
+Business Central owns the accounting result for approved financial
+transactions. The Expense capability should not create a parallel
+subledger for amounts BC already owns natively.
+
+This follows the same pattern this repo's own Data Trust module already
+uses in production: local records (`DataTrustFinding`) linked back to BC
+by key, with BC read via API and never written to directly via table
+extension.
+
+### 2.2 Provider abstraction
+
+Rather than hard-coding either "we own everything" or "BC owns
+everything," each configurable capability (expense categories, payment
+methods, approval policy, GST/ITC rules, dimension mapping, etc.) is
+assigned one of three provider modes:
+
+| Provider mode | Meaning | When used |
+|---|---|---|
+| `MICROSOFT_NATIVE` | Opsmeld stores canonical config and syncs it to BC native setup; BC executes | BC has the native capability and we trust it |
+| `OPSMELD_NATIVE` | Opsmeld evaluates and executes; only the resulting accounting data crosses into BC | BC lacks the capability, is unavailable in India, or lacks sufficient API |
+| `HYBRID` | Opsmeld owns the canonical policy/evaluation; supported portions project to BC | Native BC capability exists but isn't sufficient alone |
+
+This is a per-capability, per-tenant, per-company selection, not a
+global switch. The reason for this layer: it lets a future Microsoft
+release (e.g. native India GST support) get adopted by changing a
+mapping/provider record, without restructuring the expense, report,
+compliance, or audit schema. **This is a real scope decision, not free**
+— it's a deliberate choice to build a configuration control plane now
+rather than a direct mapping like earlier drafts of this spec had. Full
+schema for this is in the blueprint doc (§2.4, §7.3, §7.5).
+
+### 2.3 Channel independence
+
+The same core expense/advance domain model supports app/photo, email,
+Teams, Outlook, or future channels — a conversational message (Teams,
+Outlook) is unstructured input into a common intake layer that resolves
+identity, classifies intent, extracts attributes, validates against
+setup/BC reference data, and requires explicit user confirmation before
+creating a financial request when interpretation isn't already
+deterministic. AI may extract/propose; it may not independently approve,
+override policy, or post financial records.
+
+## 3. Scope
 
 In scope:
 - Expense capture (as-and-when) and expense report submission (batched)
 - Company-paid vs. employee-paid vs. split vs. advance-funded expenses
-- Advance request → disbursement → netting → settlement
+- Advance request → approval → BC journal creation → BC journal posting
+  → advance outstanding → netting → settlement
 - Approval workflow (interim/final, delegation, exceptions)
-- India GST ITC eligibility, GSTIN/branch matching, TDS flag, perquisite flag
-- Mapping of new data to BC objects: native tables, Dimensions, or new
-  custom (AL extension) tables
+- India GST ITC eligibility, GSTIN/branch matching, TDS assessment,
+  payroll/perquisite assessment
+- Mapping of final accounting data to BC native objects / APIs
+- Application-side operational, compliance, workflow, evidence, and
+  reconciliation data model
+- Auditability, idempotency, and reconciliation
 
-Out of scope (for this doc):
+Out of scope for this doc:
 - Actual AL/table/page implementation
-- Payroll system integration details (only the handoff point is specified)
-- Corporate card statement auto-reconciliation logic (noted as a dependency,
-  not designed here)
+- Payroll system integration details (only the handoff point is
+  specified)
+- Corporate card statement auto-reconciliation logic (dependency, not
+  designed here)
 - Non-BC ERPs
 
-## 3. Reference: what BC ships natively (2026 Wave 1)
+## 4. Reference: what BC ships natively (2026 Wave 1)
 
 - **Native "Expense Reports" module**: Expense Categories, two Posting
   Groups, Expense Reports (header) + Expense Lines, itemization,
@@ -45,20 +119,23 @@ Out of scope (for this doc):
   Approval → Employee Ledger Entries + Expense Ledger Entries → G/L →
   reimbursement run.
 - **Expense Agent** (Copilot layer, public preview May 2026, US-English
-  only at launch): submission via Outlook/Teams/M365 Copilot Chat/web app,
-  OCR + auto-categorization + itemization, continuous policy validation,
-  interim + final approval.
+  only at launch): submission via Outlook/Teams/M365 Copilot Chat/web
+  app, OCR + auto-categorization + itemization, continuous policy
+  validation, interim + final approval.
 - Neither the release notes nor Microsoft Learn pages reviewed mention
-  India localization (GST/TDS) hooks for this module as of this writing —
-  **treat India compliance fields as a gap to be confirmed, not assumed
-  present.** (See open question BC-1.)
+  India localization (GST/TDS) hooks for this module as of this writing
+  — treat India compliance fields as a gap to be confirmed, not assumed
+  present (see BC-1).
+- As of the release-plan documentation reviewed on 2026-09-06, Expense
+  Agent public preview geography lists the US and then Australia, New
+  Zealand, and UK; India is not listed. Treat Indian availability as a
+  deployment question to verify, not an assumed capability.
 
 Sources: Microsoft Dynamics 365 Blog (Expense Agent, Apr 2026); Microsoft
-Learn — Expense Management Overview, Expense Agent Overview, Set Up Expense
-Categories and Rules, Release Plan 2026W1 (Manage employee expenses using
-expense reports; Manage expenses using Expense Agent).
+Learn — Expense Management Overview, Expense Agent Overview, Set Up
+Expense Categories and Rules, Release Plan 2026W1.
 
-## 4. Actors
+## 5. Actors
 
 - **Employee** — captures/submits expenses, requests advances
 - **Approver (manager)** — interim/final approval, exception review
@@ -67,366 +144,316 @@ expense reports; Manage expenses using Expense Agent).
 - **Delegate** — submits/approves on behalf of another user
 - **Expense Agent (system)** — OCR, categorization, policy validation,
   duplicate/fraud checks
+- **Compliance/Rule owner** — maintains rule versions and approves rule
+  changes
 
-## 5. Functional requirements
+## 6. Functional Requirements
 
-### 5.1 Capture (continuous)
+### 6.1 Capture (continuous)
 - FR-1: Employee can submit a single expense at any time via
   app/photo/email-forward, independent of any report.
-- FR-2: System extracts vendor, date, amount, tax breakup (where present)
-  and proposes a category; employee/approver can override.
+- FR-2: System extracts vendor, date, amount, currency, tax breakup
+  (where present), and proposes a category; employee/approver can
+  override.
 - FR-3: Captured-but-unsubmitted expenses are visible in a running
   "pending" list per employee.
+- FR-4: Each captured expense has a lifecycle independent of the report
+  lifecycle: Captured, Processing, Needs Review, Ready, Attached,
+  Submitted, Rejected, Archived.
+- FR-5: Source evidence is retained and linked to the expense.
 
-### 5.2 Report submission (batched)
-- FR-4: Employee can bundle any subset of pending expenses into an
+### 6.2 Report submission (batched)
+- FR-6: Employee can bundle any subset of pending expenses into an
   Expense Report and submit for approval at any time (ad hoc).
-- FR-5: System supports configurable submission nudges: trip-end based,
-  monthly-cutoff based (aligned to GST filing cutoff), and
-  pending-value-threshold based. Nudges are reminders, never hard blocks
-  on ad hoc submission (FR-4 always available).
-- FR-6: A report may contain lines with different reimbursement types
-  (see 5.3) in any combination.
+- FR-7: Configurable submission nudges: trip-end based, monthly cutoff
+  based, pending-value-threshold based, and financial-year-end ITC sweep
+  reminder.
+- FR-8: Nudges are reminders, never hard blocks on ad hoc submission
+  unless a separate explicit policy rule is configured.
+- FR-9: A report may contain lines with different funding/settlement
+  types in any combination.
+- FR-9A–FR-9F: All configurable capabilities have a canonical Opsmeld
+  representation and a provider mode (§2.2); rules/policies are
+  versioned and immutable once used by a decision; setup sync to BC is
+  idempotent and reconcilable.
 
-### 5.3 Funding / reimbursement type (line-level attribute)
-- FR-7: Every expense line carries one Reimbursement Type: `Employee Paid`,
-  `Company Paid`, or `Advance Offset`.
-- FR-8: A single source invoice can be itemized into multiple lines with
-  different Reimbursement Types (e.g., hotel bill: business nights =
-  Company Paid, personal extension = Employee Paid).
-- FR-9: `Advance Offset` lines net against a specific Advance Request
-  (5.4); only the balance (if any) is reimbursed or recovered.
+### 6.3 Funding and settlement model
 
-### 5.4 Advance requests
-- FR-10: Employee can raise an Advance Request (amount, purpose, linked
-  trip/project, expected settlement date) before or independent of any
-  expense report.
-- FR-11: Approved advances are disbursed and tracked as outstanding
-  against the employee until settled.
-- FR-12: One or more Expense Reports can be submitted against a single
-  Advance Request (partial settlement supported).
-- FR-13: On settlement: Report total > Advance → reimburse difference.
-  Report total < Advance → recover difference (repayment or payroll
-  deduction — recovery *mechanism* is a domain-expert decision, D-1).
-  Equal → close advance, no payment either direction.
-- FR-14: System flags advances outstanding beyond a configurable age
-  (e.g., 30/60/90 days) for finance follow-up.
-- FR-15: New Advance Request is blocked if employee has an overdue
-  unsettled advance beyond a configurable threshold (policy-configurable,
-  can be disabled).
+Do not use one field to represent both how an expense was funded and how
+it will be settled:
 
-### 5.5 Approval
-- FR-16: Approval matrix is configurable by role/grade/department/category/
-  amount, intended to mirror the company's existing Delegation of
-  Financial Authority (DOFA) document rather than a single global rule.
-- FR-17: Approver can approve/reject at line level (interim) without
-  blocking the rest of the report; final approval closes the report.
-- FR-18: Delegation: an approver can nominate a delegate (leave coverage);
-  a user can submit on behalf of another (assistant-for-executive).
-- FR-19: Out-of-policy lines (over limit, missing receipt above
-  threshold, duplicate suspicion, weekend/holiday date) are flagged, not
-  auto-rejected, and routed to an explicit exception-approval step with a
-  mandatory reason code.
-- FR-20: Duplicate detection compares vendor+amount+date+receipt-image
-  hash across the employee's history (and optionally org-wide, to catch
-  the same bill submitted by two people).
+| Funding Source | Settlement Method / Result |
+|---|---|
+| Employee | Employee Reimbursement |
+| Corporate Card | Card Settlement |
+| Company Paid | No Settlement |
+| Employee Advance | Employee Recovery |
 
-### 5.6 India compliance
-- FR-21: Capture vendor GSTIN and tax breakup (CGST/SGST/IGST) per line
-  where applicable.
-- FR-22: Each line carries an ITC Eligible flag (Yes/No/Blocked) with a
-  reason code for blocked credit (Sec 17(5) CGST Act categories — e.g.,
-  employee food & beverages, outdoor catering, non-mandated employee
-  insurance) — default per category, employee/finance can review.
-- FR-23: Resolve the correct company GSTIN for a claim by matching the
-  expense's location/branch (see §7 — proposal: reuse BC Location master)
-  against the vendor/place-of-supply state.
-- FR-24: Flag lines where a TDS obligation may arise from an employee-
-  mediated payment (e.g., professional fees paid in cash by employee)
-  for finance review before reimbursement.
-- FR-25: Flag lines/categories that exceed statutory tax-exempt
-  reimbursement limits (conveyance, telephone/internet, LTA, medical) for
-  payroll perquisite handling; do not silently treat as a clean
-  non-taxable reimbursement.
-- FR-26: Support receipt-less self-declaration below a configurable
-  per-instance and monthly-aggregate threshold.
+- FR-10: Every expense allocation/line records one Funding Source and
+  one expected Settlement Method.
+- FR-11: A single source invoice can be itemized into multiple
+  lines/allocations with different funding sources.
+- FR-12: Employee Advance allocations must reference a specific Advance
+  Request / accounting advance reference.
+- FR-13: On advance settlement: Report total > usable advance →
+  reimburse difference; Report total < usable advance → recover
+  difference; Equal → close with no payment either direction.
+- FR-14: Under-spent advance recovery must support an installment
+  schedule where payroll deduction is used (Payment of Wages Act
+  constraint); a one-shot deduction must not be assumed.
 
-### 5.7 Posting
-- FR-27: Approved reports generate Employee Ledger Entries / G/L Entries
-  (and Vendor Ledger Entries where a corporate-card statement match
-  applies) consistent with native BC posting behavior.
-- FR-28: Dimensions relevant to the line (cost center, department,
-  project/job, billable customer, trip) flow to the posted entries.
-- FR-29: Reimbursement payments are batchable into a payment run
-  (bank transfer or payroll-carried).
+### 6.4 Advance requests
+- FR-15: Employee can raise an Advance Request before or independent of
+  an expense report.
+- FR-16: Approved advances generate a BC Payment Journal
+  instruction/reference but are **not automatically posted by Opsmeld**
+  — Finance reviews and posts the journal through normal process. Once
+  BC confirms the journal is posted, Opsmeld treats the advance as
+  `OUTSTANDING`. Opsmeld does not independently verify cash was
+  physically received unless a future payment integration is enabled.
+- FR-17: One or more Expense Reports can settle a single Advance Request
+  (partial settlement supported).
+- FR-18: The application must not create a duplicate advance subledger
+  if BC Employee Ledger Entry/application mechanics can represent the
+  accounting balance. **Confirm with BC SME before build (BC-7).**
+- FR-19: System flags advances beyond a configurable age, anchored to
+  trip/project expected settlement date; recommended default review
+  bands are 15/30/45 days (tightened from generic AP aging norms).
+- FR-20: New Advance Request may be blocked if an employee has an
+  overdue unsettled advance beyond a configurable threshold.
 
-## 6. State machine
+### 6.5 Approval
+- FR-21: Approval matrix configurable by category, amount, department,
+  employee grade/band, and organisational hierarchy, aligned to DOFA.
+- FR-22: Approval routing is versioned so historical decisions can be
+  explained against the policy in force at the time.
+- FR-23: Approver can approve/reject at line level (interim) without
+  blocking the rest of the report.
+- FR-24: Final approval closes the business approval lifecycle;
+  successful accounting posting is a separate state.
+- FR-25: Delegation supported (approver nominates delegate; submit
+  on-behalf-of).
+- FR-26: Out-of-policy lines are flagged, not auto-rejected by default,
+  and routed to an explicit exception-approval step with a mandatory
+  reason code.
+- FR-27: DOFA must support an explicit named override authority above
+  the top monetary slab.
 
-```
-[Draft line] --bundle--> [Draft report] --submit--> [Pending approval]
-   --interim review--> (exceptions flagged/resolved)
-   --final approval--> [Approved] --advance netting--> [Posted]
-   --payment run--> [Reimbursed | Recovered]
+### 6.6 Duplicate / fraud signals
+- FR-28: Duplicate detection supports exact and near-duplicate signals;
+  receipt-image hash is one signal, not the sole algorithm.
+- FR-29: Signals may include vendor, amount, date, currency,
+  invoice/reference number, image hash, OCR similarity, employee, and
+  organisation-wide matches.
+- FR-30: Result is a risk assessment with evidence and confidence, not
+  only a binary flag.
 
-Rejected report --resubmit (versioned)--> [Draft report]
+### 6.7 India compliance
+- FR-31: Capture vendor GSTIN and tax breakup (CGST/SGST/IGST) per line.
+- FR-32: Separate tax calculation, invoice validity, and ITC
+  eligibility as distinct decisions.
+- FR-33: Each taxable line carries an ITC eligibility decision (Yes, No,
+  Blocked, Review) plus reason code, rule-set/version, and provenance.
+- FR-34: Sec 17(5) blocked-credit defaults allow a controlled override
+  path for statutory carve-outs; overrides require reason and reviewer
+  evidence.
+- FR-35: Receipt-less self-declared lines default to ITC No (no tax
+  invoice exists); the receipt threshold is internal-control policy, not
+  a statutory minimum.
+- FR-36: Resolve the relevant company GSTIN by matching expense
+  location/branch against vendor/place-of-supply, subject to BC SME
+  confirmation of the Location pattern (BC-4).
+- FR-37: TDS assessment supports applicability, section, threshold,
+  rate/amount where determinable, and review status — not a boolean.
+- FR-38: Policy rule redirects employee-mediated vendor cash payments
+  above a configured threshold to AP instead of employee reimbursement.
+- FR-39: Payroll tax treatment distinguishes actual business-expense
+  reimbursement (never a perquisite) from taxable allowance/perquisite
+  treatment, and is regime-aware per employee.
+- FR-40: Compliance rules are versioned; historical decisions retain
+  the rule-set version and input/decision evidence used at the time.
 
-[Advance Request] --approve--> [Disbursed/Outstanding]
-   --report(s) settle against it--> [Partially settled | Closed]
-   --aging threshold exceeded--> [Flagged for finance]
-```
+### 6.8 Mapping and accounting dimensions
+- FR-41: Mapping configured per tenant + BC company by semantic business
+  concept — no concept may depend on a hard-coded Global Dimension 1/2
+  assumption.
+- FR-42: Cost Center/Department mappings identify the actual BC
+  Dimension Code the customer uses and the valid Dimension Values.
+- FR-43: Project mapping supports Dimension-only, Job-only, and Both
+  modes, maintained independently.
+- FR-44: Employee mapping assignments are effective-dated and support
+  multiple eligible projects/jobs simultaneously, plus an optional
+  default.
+- FR-45: Mapping resolution precedence: explicit selection → contextual
+  default → employee default → company default → ambiguity requires
+  review (never silently guessed).
+- FR-46: Each allocation persists an immutable resolved mapping snapshot
+  before posting.
+- FR-47: Project/job mapping supports allocating one expense across
+  multiple projects/jobs.
+- FR-48: Invalid or missing required mappings block posting and create
+  an auditable exception.
 
-## 7. Mapping new data to Business Central objects
+### 6.9 Posting and settlement
+- FR-49: Approved reports transition to Ready to Post; approval alone
+  does not imply posting success.
+- FR-50: Posting uses supported BC API/journal mechanisms confirmed by
+  BC SME (BC-11).
+- FR-51: Every externally initiated posting action requires a durable
+  idempotency key.
+- FR-52: Retry logic first establishes whether the intended transaction
+  already posted before creating another.
+- FR-53: Final approved financial transactions post to BC so G/L /
+  Employee Ledger / Vendor Ledger Entries are the accounting system of
+  record.
+- FR-54: Dimensions relevant to the expense flow to the posted entries.
+- FR-55: Reimbursement/recovery instructions are batchable.
 
-This is the question this doc most needs BC-expert eyes on. Proposed
-default split — **confirm or correct each row**:
+### 6.10 Audit and reconciliation
+- FR-56: Every material decision has provenance: who/what, when, which
+  rule/policy version, input snapshot, override or not.
+- FR-57: Every posting attempt is auditable by idempotency key,
+  request/response status, BC company/tenant, resulting BC references.
+- FR-58: Periodic reconciliation between operational state and BC
+  accounting state creates a finding on divergence.
+- FR-59: Corrections after posting use reversal/adjustment workflows,
+  never mutation of historical evidence.
+- FR-60: Compliance evidence retained outside BC remains linkable to the
+  final BC transaction.
 
-| Need | Proposed BC mechanism | Why | Confirm? |
+## 7. Accounting Treatment Matrix
+
+Intentionally conceptual until BC-11 and BC-7 are confirmed.
+
+| Scenario | Expense funding | Employee settlement | Expected BC accounting result |
 |---|---|---|---|
-| Cost center | Global Dimension 1 (or existing shortcut dim) | Standard analytical tag, needs to flow to G/L/Employee Ledger like any journal | BC-2 |
-| Department | Global Dimension 2 / shortcut dimension | Same as above | BC-2 |
-| Project/Job | Dimension, or actual `Job No.` if Jobs module is in use | If billable-to-customer is needed, Jobs module may be the correct object, not just a dimension | BC-3 |
-| Billable customer (rebill) | Dimension, or Job's Bill-to Customer if Jobs module used | Same as above | BC-3 |
-| Trip/batch reference | Dimension value (e.g., "Trip: MUM-2609") | Lightweight cross-report grouping for reporting/reminders | — |
-| Branch / which company GSTIN applies | **Existing BC `Location` master** (India localization already carries GST Registration No. per Location) | Avoids inventing new master data; reuses a table that already exists and is already GST-aware in most IN-localized installs | BC-4 |
-| GSTIN of vendor, HSN/SAC, tax breakup, ITC eligibility + reason | New fields — likely a **table extension on Expense Line** (not a dimension; this is structured compliance data with its own validation, not an analytical tag) | Dimensions aren't the right fit for data with lifecycle/validation rules (reason codes, computed eligibility) | BC-1, BC-5 |
-| TDS flag/section, perquisite flag | Table extension on Expense Line | Same reasoning | BC-1, BC-6 |
-| Advance Request (header + status + aging) | **New table** — no clear native equivalent found; "Cash Advance" in the native module appears to be a *payment method classification on a line*, not a trackable advance-with-aging object | Needs an outstanding-balance-per-employee view that a payment-method tag alone doesn't give | BC-7 |
-| Duplicate hash / OCR confidence / exception reason code | Table extension on Expense Line, or a companion table | Operational/audit metadata, not reporting-dimension data | — |
-| Approval matrix (role/grade/category/amount → approver) | Reuse BC's native Workflow + Approval User Setup **if it supports this granularity**; else a new configuration table | Don't build a custom approval engine if native Workflow already covers it — needs BC-expert confirmation | BC-8 |
-| Participants (shared bill) | Native — release notes say the 2026W1 module already has a Participants concept | Reuse, don't rebuild | BC-9 (confirm it's usable pre-agent / matches our participant model) |
+| Employee-paid expense | Employee | Reimbursement | Expense + employee payable/reimbursement |
+| Company-paid expense | Company | None | Expense accounting without employee reimbursement |
+| Corporate-card expense | Corporate Card | Card settlement | Expense + card/vendor settlement path |
+| Advance-funded expense | Employee Advance | Advance application | Expense + application against employee advance |
+| Expense > advance | Employee Advance + employee | Reimburse difference | Apply advance + employee payable for difference |
+| Expense < advance | Employee Advance | Recover difference | Apply expense against advance + employee recovery |
+| Split invoice | Mixed | Mixed | Itemized accounting/settlement by allocation |
+| TDS-required vendor payment | Employee-mediated | AP/TDS path where threshold met | Route to supported AP/vendor tax process |
 
-### General principle being proposed
-- **Dimensions** = cross-cutting analytical tags with no independent
-  lifecycle (cost center, department, project, trip, billable customer).
-  They should flow automatically to ledger entries the way any BC
-  dimension does.
-- **Table extensions on existing BC tables** (Expense Line, Expense
-  Report) = compliance/data fields that belong to that specific record
-  and need validation (GSTIN, ITC flag, TDS flag).
-- **New custom tables** = only where no native object plausibly covers
-  the need after checking (Advance Request/aging is the clearest
-  candidate; approval matrix is a "maybe," pending BC-8).
+## 8. Open Questions for BC Expert
 
-This keeps the design close to standard BC extensibility patterns (AL
-table/page extensions + dimensions) rather than introducing a parallel
-custom data model, which should make it easier to upgrade-safe across BC
-releases and easier for a BC consultant to support later.
+**Priority P0 — must resolve before architecture/build decision**
+- **BC-11** — Posting path: Does BC 2026W1's Expense Report/Expense Line
+  expose a supported write-capable API that produces the expected native
+  ledger behavior, or must posting go through General/Payment Journal
+  APIs?
+- **BC-7** — Advances: Is the Employee Ledger Entry + application
+  mechanism sufficient to represent disbursed employee advances,
+  remaining amount, aging, and application to expense reports, leaving
+  only a thin operational request layer in the application?
+- **BC-1** — Tax: Does native Expense Line participate in the BC
+  GST/Tax engine in the deployed India-localized scenario, including tax
+  breakup and posting behavior?
 
-### 7.1 Alternative: keep enrichment/workflow data outside BC entirely
+BC-11 + BC-7 + BC-1 jointly determine how much data needs to exist in BC
+versus the application.
 
-This repo's own Data Trust capability already establishes a working
-precedent for this, and it should be treated as the default rather than
-the AL-table-extension approach above, pending BC-11 below:
+**Priority P1**
+- BC-8: Can native Workflow conditions express category AND amount
+  logic together, and can a grade/band lookup supplement manager
+  hierarchy without a custom approval engine?
+- BC-2: Can the mapping layer discover/resolve the actual BC Dimension
+  Code used for Cost Center and Department in each customer/company?
+  What API validates allowed Dimension Values?
+- BC-3: Should billable/rebillable expenses use Job No./Job Task when
+  Jobs is licensed?
+- BC-4: Confirm BC Location with GST Registration No. as the appropriate
+  branch-GSTIN resolution mechanism.
+- BC-5/BC-6: If extensions are needed, what's the supported extension
+  pattern for Expense Line/Report that stays safe across Expense Agent
+  writes/upgrades?
+- BC-9: Confirm Participants semantics and whether usable independently
+  of the Copilot Expense Agent.
+- BC-10: Any India-localization roadmap that would materially change
+  this design?
 
-- `DataTrustFinding` (`MCP/modules/data_trust_engine/models.py:48-68`)
-  stores locally-owned records (JSON-backed, no SQL/ORM in this repo
-  today — see `requirements.txt`) carrying workflow state BC has no
-  concept of (Open/Under Review/Confirmed/False Positive/Ignored), linked
-  back to BC via `StructuredEvidence` (`entity_table`, `record_id`,
-  `field_name`) and synthetic keys such as `IC-ILE-{ile_id}`
-  (`acquisition.py:333`) tied to a BC ledger entry number.
-- `DataAcquirer` (`acquisition.py:104-267`) is strictly read-only against
-  BC's OData v2.0 endpoints — no AL extension, no per-tenant app install.
+## 9. Open Questions for Domain Expert
 
-Applying the same pattern here:
+**Priority P0**
+- D-1: Under-spent advance recovery — preferred mechanism and
+  installment rules for payroll/direct repayment/carry-forward; confirm
+  legal (Payment of Wages Act) and company-policy constraints.
+- D-2: Current tax treatment/limits and review cadence for
+  allowance/perquisite categories, including tax-regime handling (old
+  vs. new regime).
+- D-3: GST blocked-credit configuration — which rules are hard blocks,
+  which allow documented statutory override, and who authorizes it?
+- D-4: Typical receipt-less internal-control thresholds by
+  company/sector — confirm these are policy norms, not statutory minima.
+- D-7: Threshold/routing policy for employee-mediated vendor payments
+  that should go to AP for TDS handling instead of reimbursement.
 
-- **Own tables (linked to BC by key, not posted into BC's schema)**: OCR
-  extraction + confidence, duplicate-detection hashes, GSTIN/HSN/tax
-  breakup working data, ITC-eligibility computation + reason code, TDS
-  flag, perquisite flag, Advance Request lifecycle + aging, the
-  DOFA/approval-matrix configuration, approval workflow audit trail,
-  policy-exception reason codes.
-- **Must still post into BC** (not a design choice — Companies Act books
-  of account and any GST-return prep that reads BC directly require it):
-  the final approved financial transaction — G/L Entry / Employee Ledger
-  Entry / Vendor Ledger Entry — and the Dimensions on it.
-- Post the clean, approved result via BC's standard journal/ledger API
-  surface (the same class of API this repo's staged/unposted draft
-  documents already use), rather than writing into Expense Line/Report
-  via a table extension. If achievable, this removes the need for **any**
-  AL extension, and with it the upgrade-collision risk in BC-5/BC-6.
-- "Maintain" = a periodic pull-based reconciliation between our own state
-  (e.g., Advance Request outstanding balance) and BC's actual ledger
-  entries, using the same acquisition/findings-diff pattern Data Trust
-  already runs — to catch drift if a BC record is edited or corrected
-  outside this workflow after posting.
-- Trade-off to make explicitly with whoever owns GST filing: if their
-  return-prep process queries BC directly rather than through this
-  engine, ITC-eligibility/TDS flags kept only in our tables won't be
-  visible there. Given this product's positioning as the
-  reconciliation/compliance layer over BC, the default assumption is that
-  this tool is the source of truth for compliance flags and BC is the
-  source of truth for posted amounts — but confirm this is acceptable
-  before committing to it.
+**Priority P1**
+- D-5: Advance-aging policy anchored to trip/project expected
+  settlement date; validate 15/30/45-day review bands.
+- D-6: DOFA structure — category, department, grade/band, amount, and
+  named override authority.
+- D-8: Monthly GST operational submission cutoff plus financial-year-end
+  ITC sweep timing (Sec 16(4) time-bar) — the system should support both
+  the operational cutoff and the statutory time-bar.
 
-## 8. Open questions for BC Expert
+## 10. Risks
 
-- **BC-1**: Does the native Expense Line table already run through BC's
-  GST/Tax engine (Tax Area/Tax Group as on Purchase Lines), or does it
-  post without tax breakup today? This determines whether GST fields are
-  a genuine gap or already present.
-- **BC-2**: Confirm whether reusing Global Dimensions 1/2 for cost
-  center/department is safe, or whether customers' existing dimension
-  usage (many IN-localized installs already use Global Dim 1/2 for other
-  purposes) means we should default to unused shortcut dimensions
-  instead.
-- **BC-3**: Should billable/rebillable expenses ride on the Jobs module
-  (Job No./Job Task) rather than a plain dimension, when Jobs is
-  licensed?
-- **BC-4**: Confirm `Location` (with GST Registration No.) is in fact the
-  right/only native object for branch-GSTIN resolution, and that it's
-  populated in typical IN-localized installs (not just available but
-  unused).
-- **BC-5/BC-6**: Best-practice pattern for extending Expense Line via
-  table extension without breaking the native Expense Agent's own
-  writes/upgrades to that table.
-- **BC-7**: Is there really no native "Cash Advance" ledger/aging object,
-  or did we miss one? (Payment Method Reimbursement Type = `Cash Advance`
-  looks like a line classification, not an outstanding-balance tracker.)
-- **BC-8**: What granularity does native Approval Workflow / Approval
-  User Setup actually support — can it express "category X + grade Y +
-  amount > Z → approver role W," or does it only do amount-based limits?
-- **BC-9**: Confirm what the native Participants feature captures today
-  (names only, or business purpose too) and whether it's usable
-  independent of the Copilot Expense Agent (i.e., in India before that
-  agent is available there).
-- **BC-10**: Any known India-localization roadmap for this module we
-  should wait on rather than build ourselves?
-- **BC-11**: Does BC 2026W1's native Expense Report/Expense Line expose a
-  write-capable API (so we could post clean, pre-validated data and let
-  BC's own engine generate the ledger entries), or would posting have to
-  go directly through the standard General/Payment Journal API instead,
-  bypassing Expense Report/Line entirely? This decides whether the
-  Section 7.1 "no AL extension" approach is viable as described, or needs
-  adjustment.
+- **R1** — Native BC capability may reduce custom scope if BC supports
+  enough natively; some application tables become mapping/audit layers
+  rather than primary workflow stores.
+- **R2** — Native BC capability may be insufficient; if Expense Report
+  APIs can't accept the required data, posting may need a journal-based
+  route — must not be hidden behind assumptions.
+- **R3** — Duplicate accounting risk: any retryable BC call without
+  durable idempotency/reconciliation can create duplicate postings.
+- **R4** — Compliance rule drift: GST/TDS/payroll decisions without
+  versioned rules and input snapshots become hard to defend historically.
+- **R5** — Two-system disagreement: if compliance results live outside
+  BC while tax filing reads BC directly, a formal reconciliation/
+  exception mechanism is required — don't declare either system
+  universally "legal truth" without Finance/Tax sign-off.
+- **R6** — Employee advance duplication: don't build an application-side
+  monetary advance ledger until BC confirms native Employee Ledger
+  Entry/application mechanics can't cover it.
 
-## 9. Open questions for Domain Expert (accounting / Indian compliance)
+## 11. Build Decision Gate
 
-- **D-1**: Preferred recovery mechanism when an employee under-spends an
-  advance — payroll deduction, direct repayment, or carry-forward against
-  next advance? Does this vary by advance type (travel vs. project
-  imprest)?
-- **D-2**: Current statutory tax-exempt limits to encode for conveyance,
-  telephone/internet, LTA (including block-year rules), and medical
-  reimbursement — and how often these need review (Finance Act changes).
-- **D-3**: Should the Sec 17(5) blocked-credit default list be
-  configurable per company, or should some companies be allowed to
-  voluntarily claim and reverse instead of blocking upfront?
-- **D-4**: Typical receipt-less self-declaration thresholds (per instance
-  and monthly aggregate) seen in practice — is ₹200–500/instance a
-  reasonable default?
-- **D-5**: What advance-aging thresholds (30/60/90 days) and audit
-  sampling rate are typical for a company this size/sector?
-- **D-6**: Does a DOFA (Delegation of Financial Authority) document
-  typically key approval limits off category, grade, department, or some
-  combination — need a representative example structure to validate
-  FR-16.
-- **D-7**: For TDS-on-behalf-of-vendor scenarios via employee
-  reimbursement (FR-24), how commonly does this actually arise in
-  practice, and is flag-for-review sufficient or does it need to block
-  reimbursement until resolved?
-- **D-8**: GSTR-2B/3B filing cutoff timing to calibrate the monthly
-  submission nudge (FR-5) — confirm the practical "must be submitted by"
-  date finance actually needs, not just the statutory filing date.
+No implementation should start until the following are answered:
 
-## 10. Assumptions / risks
+- BC-11: Supported BC posting path.
+- BC-7: Native employee advance accounting/application capability.
+- BC-1: Native tax/GST behaviour of Expense Lines.
+- BC-8: Native approval conditions versus a small supplemental
+  grade/band lookup.
+- Mapping ownership: the semantic-to-BC mapping model, validation
+  source, and whether project mapping uses Dimension, Job/Job Task, or
+  both.
+- Tax ownership: whether compliance assessment stays application-owned
+  with reconciliation to BC, or required compliance attributes must also
+  persist in BC.
+- Accounting ownership: confirmation that BC remains the source of truth
+  for final posted financial amounts and ledger balances.
 
-- Assumes the company already licenses BC's Expense Management module
-  (2026 Wave 1) as the posting backbone; this design layers on top of it
-  rather than replacing it.
-- Assumes India localization for GST/TDS may need to be extended
-  independently of when/whether the Copilot Expense Agent reaches India
-  (per search results, only US at May 2026 preview, UK from July 2026 —
-  no India date found).
-- Risk: if BC-7 finds a native advance-tracking object we missed, the
-  proposed new Advance Request table becomes redundant duplication —
-  must confirm before building.
-- Risk: if BC-8 finds native Approval Workflow can't express
-  category+grade matrices, the approval engine becomes a larger custom
-  build than currently scoped.
+Once confirmed, remaining implementation design should derive from the
+approved architecture rather than creating parallel BC-like objects in
+the application.
 
-## 11. Internal review notes (BC Expert + Domain Expert personas, v0.1 → v0.2)
+## 12. Companion document
 
-These are corrections from a first internal review pass. They should be
-validated by real BC/domain SMEs, not treated as settled — but they change
-the design enough to record before anyone reads v0.1 in isolation.
+The full engineering blueprint — 40-table schema, provider/setup table
+definitions, two end-to-end conversational reference workflows (advance
+request and expense submission via Teams/Outlook), reporting/dashboard
+design, API contract catalogue, idempotency/state-machine contracts, and
+build gates — is in `expense-agent-blueprint.md` in this folder. It's
+the internal build reference once the P0 questions above are answered;
+it isn't needed to review this document.
 
-**BC — likely wrong assumption in Section 7/BC-7:** Employee Ledger
-Entries already support Open/Closed status, Remaining Amount, and
-Application (same mechanics as Customer/Vendor Ledger Entries) — this
-predates 2026W1. An advance can plausibly be posted as a Payment Journal
-line (Account Type = Employee) and later applied against the Employee
-Ledger Entry the settling Expense Report generates. **Before building a
-new Advance Request ledger table, verify whether native application/aging
-on Employee Ledger Entry already covers FR-11/FR-13/FR-14** — if so, only
-a thin request/approval UI is needed on top, not a parallel ledger.
+## Change Log
 
-**BC — BC-4 upgraded from "confirm" to "reasonably confident":**
-GST Registration No. on Location is an established BC India-localization
-pattern, not just a guess.
-
-**BC — BC-8 narrowed:** native Workflow conditions plus Approval User
-Setup limits plus the existing employee/manager hierarchy plausibly cover
-category+amount branching without a custom engine. The real gap is a
-grade/band concept independent of reporting-line hierarchy, which needs a
-small lookup, not a full custom approval engine. Re-scope BC-8 to ask
-specifically whether one Workflow can condition on Category AND Amount
-together.
-
-**Domain — FR-25 conflates two different legal concepts.** "Reimbursement
-of actual expense" (e.g., telephone bill, actual official-duty conveyance)
-is not a perquisite at all when backed by a bill — no exemption limit
-applies because it was never income. A fixed "allowance" (e.g., conveyance
-allowance) is taxable salary, exempt only up to a Sec 10(14) statutory cap.
-Separately, "medical reimbursement" as its own exempt category is largely
-obsolete since FY 2018-19 (folded into the ₹50,000 standard deduction), and
-most such exemptions don't apply at all if the employee is on the **new
-tax regime** (the default since FY 2023-24). **Action: split FR-25 into
-reimbursement-of-actual-expense vs. allowance, and make exemption logic
-regime-aware per employee**, rather than one shared "tax-free limit"
-concept.
-
-**Domain — FR-13 needs a legal constraint added.** Recovering an
-under-spent advance via payroll isn't a free design choice — Payment of
-Wages Act, 1936 (Sec 7(2)(f) and deduction caps) generally requires
-installment-based recovery of advances from wages, not a single lump-sum
-deduction. **Action: FR-13 should support an installment schedule, not
-just one-shot recovery.**
-
-**Domain — FR-22 needs an explicit override path.** Sec 17(5) blocked
-credits have a carve-out: ITC becomes eligible where a service is
-government-notified as obligatory for the employer to provide under law
-(e.g., certain statutory insurance). Keep the default-block behavior but
-make sure the reason-code mechanism allows this override, not a hard rule.
-
-**Domain — FR-26 should link to FR-22.** A receipt-less self-declared line
-has no invoice, therefore ITC eligibility should default to **No**
-automatically, not be evaluated separately. Also, D-4's ₹200–500/instance
-range is an internal-control norm, not a statutory minimum — state that
-explicitly so it isn't mistaken for a compliance requirement later.
-
-**Domain — D-5 default is too loose.** 30/60/90-day advance aging is
-borrowed from AP/vendor aging norms and understates the cash-leakage risk
-of employee advances, which are usually tied to a known trip/project
-end-date. Recommend a tighter default such as 15/30/45 days
-(still policy-configurable).
-
-**Domain — D-7 should be a hard policy cap, not just a flag.** TDS-on-
-behalf-of-vendor via employee reimbursement is expensive to unwind after
-the fact (gross-up, Sec 201 interest exposure on short deduction).
-**Action: add a policy rule redirecting single-vendor cash payments above
-a threshold to AP instead of employee reimbursement**, in addition to the
-existing flag-for-review behavior.
-
-**Domain — D-8 is missing the deadline that actually matters.** The
-monthly GST-filing-cutoff nudge (FR-5) is good hygiene but not the
-compliance-critical deadline. **Sec 16(4) CGST Act time-bars an ITC claim
-by 30th November of the following financial year** (or the annual return
-date, if earlier) — missing it loses the credit permanently, not just
-delays it. **Action: add a financial-year-end sweep reminder** alongside
-the monthly nudge.
-
-**Domain — D-6 confirmed**, with one addition: real DOFA documents
-typically also name a specific override authority above the top monetary
-slab, not just "escalate to next role up." FR-16 should allow for a named
-override authority, not only a role-based chain.
+| Version | Change |
+|---|---|
+| v0.1 | Initial functional design and brainstorm. |
+| v0.2 | Added internal review corrections (advance ledger reuse, funding vs. settlement split, FY-end ITC sweep, Sec 17(5) override, receipt-less ITC default, installment recovery, named override authority, TDS-to-AP redirect) and the non-BC storage architecture option (§2.1 here), following this repo's existing Data Trust pattern. |
+| v1.0 | Split from the consolidated v0.9 draft into this lean SME-review document plus the full `expense-agent-blueprint.md`. Provider abstraction (§2.2) kept in scope per explicit decision. No FR/BC-N/D-N content dropped — only re-scoped for reviewer audience. |
