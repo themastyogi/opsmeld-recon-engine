@@ -1,7 +1,8 @@
-# Expense Agent — Design Spec for SME Review v1.0
+# Expense Agent — Design Spec for SME Review v1.1
 
-Status: DRAFT — for review by BC Expert and Domain Expert. This is the
-lean, decision-focused version of the design: architecture, scope,
+Status: DRAFT — reviewed by BC Expert (v1.1: sharpened BC-1/BC-7/BC-11
+per that review, plus a verified codebase finding — see §4A and §8).
+This is the lean, decision-focused version of the design: architecture, scope,
 functional requirements, and the open questions that actually need
 expert judgment. The full 40-table engineering schema, conversational
 workflow walkthroughs, and reporting/dashboard design live in the
@@ -134,6 +135,22 @@ Out of scope for this doc:
 Sources: Microsoft Dynamics 365 Blog (Expense Agent, Apr 2026); Microsoft
 Learn — Expense Management Overview, Expense Agent Overview, Set Up
 Expense Categories and Rules, Release Plan 2026W1.
+
+## 4A. Verified: this codebase has no BC write path today
+
+Confirmed by direct code inspection (`MCP/core/bc_mcp_client.py`), not
+inference: `_execute_bc_rest` (line 277) and `_execute_bc_rest_url`
+(line 321) are the only two methods that call BC's REST API directly,
+and both build their `urllib.request.Request` without a `method=`
+argument — which defaults to GET. There is a POST in this file (line
+214), but it targets the MCP JSON-RPC server itself, not BC's REST
+surface. **There is no POST/PATCH against BC anywhere in this codebase
+today** — not "read-only by convention," but no write method exists at
+all.
+
+Practical consequence: FR-49–FR-55 (posting, idempotency, retry
+reconciliation) are greenfield engineering for this codebase, not an
+extension of an existing capability. Scope/estimate accordingly.
 
 ## 5. Actors
 
@@ -342,17 +359,40 @@ Intentionally conceptual until BC-11 and BC-7 are confirmed.
 - **BC-11** — Posting path: Does BC 2026W1's Expense Report/Expense Line
   expose a supported write-capable API that produces the expected native
   ledger behavior, or must posting go through General/Payment Journal
-  APIs?
+  APIs? **Sharpened per BC-expert review**: new BC feature UI surfaces
+  routinely ship 1–2 release waves ahead of their public API v2.0 write
+  endpoints. Confirming the feature works in the BC client sandbox is
+  not evidence of a supported write API. Confirm the specific API page
+  is documented as write-capable and stable — and plan the General/
+  Payment Journal API as the **realistic day-1 posting path**, not a
+  fallback contingency.
 - **BC-7** — Advances: Is the Employee Ledger Entry + application
   mechanism sufficient to represent disbursed employee advances,
   remaining amount, aging, and application to expense reports, leaving
-  only a thin operational request layer in the application?
+  only a thin operational request layer in the application? **Sharpened
+  per BC-expert review**: Employee Ledger Entries (Table 5217) support
+  Open/Application status in the BC client the same way Vendor/Customer
+  Ledger Entries do, but the public API has historically exposed
+  `employeeLedgerEntries` **read-only** in several BC versions, with no
+  `applyEmployeeEntries`-equivalent write action. Ask specifically
+  whether **Employee Ledger Entry application** (not just the entries)
+  is exposed via API — if not, the app needs its own advance-application
+  logic regardless of what the UI shows, and the "thin operational
+  layer" outcome this doc prefers isn't available.
 - **BC-1** — Tax: Does native Expense Line participate in the BC
   GST/Tax engine in the deployed India-localized scenario, including tax
-  breakup and posting behavior?
+  breakup and posting behavior? **Sharpened per BC-expert review**:
+  India GST/tax engine hooks have historically lagged non-core document
+  types, and Expense Reports is a newer, HR-adjacent object rather than
+  a core Purchase/Sales document. Treat `OPSMELD_NATIVE` for GST as the
+  **probable outcome**, not a coin-flip open question, and plan the GST
+  compliance layer (§6.7) as owned by the application from the start.
 
 BC-11 + BC-7 + BC-1 jointly determine how much data needs to exist in BC
-versus the application.
+versus the application. Costing-method awareness (FIFO/Standard/Average)
+does not apply to this domain — employee expense/reimbursement has no
+inventory costing dimension — confirmed by BC-expert review, no action
+needed.
 
 **Priority P1**
 - BC-8: Can native Workflow conditions express category AND amount
@@ -405,7 +445,10 @@ versus the application.
   rather than primary workflow stores.
 - **R2** — Native BC capability may be insufficient; if Expense Report
   APIs can't accept the required data, posting may need a journal-based
-  route — must not be hidden behind assumptions.
+  route — must not be hidden behind assumptions. Confirmed: this
+  codebase has no BC write path today (§4A) — plan the posting layer as
+  new engineering effort from day one, not as extending an existing
+  write capability, regardless of how BC-11 resolves.
 - **R3** — Duplicate accounting risk: any retryable BC call without
   durable idempotency/reconciliation can create duplicate postings.
 - **R4** — Compliance rule drift: GST/TDS/payroll decisions without
@@ -457,3 +500,4 @@ it isn't needed to review this document.
 | v0.1 | Initial functional design and brainstorm. |
 | v0.2 | Added internal review corrections (advance ledger reuse, funding vs. settlement split, FY-end ITC sweep, Sec 17(5) override, receipt-less ITC default, installment recovery, named override authority, TDS-to-AP redirect) and the non-BC storage architecture option (§2.1 here), following this repo's existing Data Trust pattern. |
 | v1.0 | Split from the consolidated v0.9 draft into this lean SME-review document plus the full `expense-agent-blueprint.md`. Provider abstraction (§2.2) kept in scope per explicit decision. No FR/BC-N/D-N content dropped — only re-scoped for reviewer audience. |
+| v1.1 | Folded in BC-expert review: added §4A verified finding (no BC write path exists in this codebase today — confirmed by reading `bc_mcp_client.py`), sharpened BC-11 (confirm documented write-API stability, not sandbox behavior; plan Journal API as day-1 path), BC-7 (ask specifically about Employee Ledger Entry *application* API access, historically read-only), and BC-1 (treat OPSMELD_NATIVE for GST as the probable outcome, not a coin flip). Updated R2 accordingly. |
