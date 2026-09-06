@@ -225,18 +225,24 @@ class DataAcquirer:
             token = self.client.get_access_token()
             comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
+                logger.warning(f"Inventory Costing acquisition failed for company_id={company_id}: "
+                               f"token_acquired={bool(token)}, comp_guid_resolved={bool(comp_guid)}")
                 return [], "DATA_UNAVAILABLE"
 
             try:
                 # Step A: Retrieve Item Ledger Entries
                 ile_resp = self.client._execute_bc_rest(f"companies({comp_guid})/itemLedgerEntries")
                 if isinstance(ile_resp, dict) and (ile_resp.get("is_error") or "error" in ile_resp):
+                    logger.warning(f"Inventory Costing: itemLedgerEntries query failed for company_id={company_id}: "
+                                   f"{ile_resp.get('error', 'unknown error')}")
                     return [], "DATA_UNAVAILABLE"
                 ile_raw = ile_resp.get("value", []) if isinstance(ile_resp, dict) else []
 
                 # Step B: Retrieve Value Entries
                 ve_resp = self.client._execute_bc_rest(f"companies({comp_guid})/valueEntries")
                 if isinstance(ve_resp, dict) and (ve_resp.get("is_error") or "error" in ve_resp):
+                    logger.warning(f"Inventory Costing: valueEntries query failed for company_id={company_id}: "
+                                   f"{ve_resp.get('error', 'unknown error')}")
                     return [], "DATA_UNAVAILABLE"
                 ve_raw = ve_resp.get("value", []) if isinstance(ve_resp, dict) else []
 
@@ -249,6 +255,7 @@ class DataAcquirer:
                 logger.error(f"Inventory Costing acquisition exception: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
+        logger.warning(f"Inventory Costing acquisition failed for company_id={company_id}: no BC client configured (mode={self.mode})")
         return [], "DATA_UNAVAILABLE"
 
     def _filter_by_lookback(self, txs: List[Dict[str, Any]], lookback_months: float) -> List[Dict[str, Any]]:

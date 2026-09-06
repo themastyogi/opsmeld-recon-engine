@@ -418,6 +418,56 @@ class TestInventoryCostingPhase3(unittest.TestCase):
         self.assertEqual(prov_df, "SNAPSHOT_SEED")
         self.assertTrue(len(txs_df) > 0)
 
+    def test_inventory_costing_diagnostic_logging_distinguishes_failure_causes(self):
+        """Confirm logger.warning is emitted on all silent failure paths and distinguishes the specific cause."""
+        # 1. Token or Company GUID resolution failure
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = None
+        acquirer = DataAcquirer(mcp_client=mock_client, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+            txs, prov = acquirer.acquire_inventory_cost_transactions(company_id="Sandbox")
+            self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertTrue(any("token_acquired=False" in log and "comp_guid_resolved=False" in log for log in cm.output))
+
+        # 2. itemLedgerEntries query failure
+        mock_client2 = MagicMock()
+        mock_client2.get_access_token.return_value = "valid_token"
+        mock_client2._execute_bc_rest.side_effect = lambda ep: (
+            {"value": [{"id": "GUID-SANDBOX", "name": "Sandbox"}]}
+            if ep == "companies"
+            else {"is_error": True, "error": "HTTP 404: Table not found"}
+        )
+        acquirer2 = DataAcquirer(mcp_client=mock_client2, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm2:
+            txs2, prov2 = acquirer2.acquire_inventory_cost_transactions(company_id="Sandbox")
+            self.assertEqual(prov2, "DATA_UNAVAILABLE")
+        self.assertTrue(any("itemLedgerEntries query failed for company_id=Sandbox: HTTP 404: Table not found" in log for log in cm2.output))
+
+        # 3. valueEntries query failure
+        mock_client3 = MagicMock()
+        mock_client3.get_access_token.return_value = "valid_token"
+        mock_client3._execute_bc_rest.side_effect = lambda ep: (
+            {"value": [{"id": "GUID-SANDBOX", "name": "Sandbox"}]}
+            if ep == "companies"
+            else (
+                {"value": [{"id": "ILE-1", "entryNo": 101}]}
+                if "itemLedgerEntries" in ep
+                else {"is_error": True, "error": "HTTP 403: Forbidden"}
+            )
+        )
+        acquirer3 = DataAcquirer(mcp_client=mock_client3, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm3:
+            txs3, prov3 = acquirer3.acquire_inventory_cost_transactions(company_id="Sandbox")
+            self.assertEqual(prov3, "DATA_UNAVAILABLE")
+        self.assertTrue(any("valueEntries query failed for company_id=Sandbox: HTTP 403: Forbidden" in log for log in cm3.output))
+
+        # 4. No client configured
+        acquirer4 = DataAcquirer(mcp_client=None, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm4:
+            txs4, prov4 = acquirer4.acquire_inventory_cost_transactions(company_id="Sandbox")
+            self.assertEqual(prov4, "DATA_UNAVAILABLE")
+        self.assertTrue(any("no BC client configured" in log for log in cm4.output))
+
     # -------------------------------------------------------------------------
     # 6. Boolean Normalization & Materiality Tests
     # -------------------------------------------------------------------------
