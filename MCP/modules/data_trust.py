@@ -7,6 +7,8 @@ if str(REPO_ROOT) not in sys.path:
 
 import logging
 logger = logging.getLogger('opsmeld.data_trust')
+
+ACQUISITION_SCHEMA_VERSION = 2  # bump this any time acquisition fail-closed behavior changes
 """
 Opsmeld Reconciliation Engine - Data Trust Engine Module (Thin Compatibility Façade)
 Delegates all rule execution, orchestration, models, configuration, and fixtures to modular data_trust_engine package.
@@ -97,19 +99,24 @@ class DataTrustEngine:
         txs, _ = acquirer.acquire_transactions()
         return txs
 
-    def _load_from_disk(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
+    def _load_from_disk(self, company_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[str], int]:
         p = self.get_findings_file_path(company_id=company_id)
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
-                        return data.get("active_findings", []), data.get("_audit_history", []), data.get("data_source")
+                        return (
+                            data.get("active_findings", []),
+                            data.get("_audit_history", []),
+                            data.get("data_source"),
+                            data.get("acquisition_schema_version", 0)
+                        )
                     elif isinstance(data, list):
-                        return data, [], None
+                        return data, [], None, 0
             except Exception:
                 pass
-        return [], [], None
+        return [], [], None, 0
 
     def load_stored_findings(self, company_id: Optional[str] = None) -> List[Dict[str, Any]]:
         target_comp = company_id
@@ -123,11 +130,21 @@ class DataTrustEngine:
         if not target_comp:
             target_comp = "ac6b97ba-bc8f-f111-832d-7c1e5233db45"
 
-        active_findings, _, stored_ds = self._load_from_disk(company_id=target_comp)
+        active_findings, _, stored_ds, stored_version = self._load_from_disk(company_id=target_comp)
         data_source = stored_ds
+        is_stale = stored_version < ACQUISITION_SCHEMA_VERSION
 
         p = self.get_findings_file_path(company_id=target_comp)
-        if not p.exists():
+        if is_stale and p.exists():
+            logger.warning(
+                f"Stale findings file for company_id={target_comp} "
+                f"(schema_version={stored_version}, current={ACQUISITION_SCHEMA_VERSION}); "
+                f"discarding and forcing fresh acquisition."
+            )
+            active_findings = []
+            data_source = None
+
+        if not p.exists() or is_stale:
             from modules.data_trust_engine.engine import DataTrustEngineOrchestrator
             orchestrator = DataTrustEngineOrchestrator(mcp_client=self.client, client_key=self.client_key)
             mode = "TEST_FIXTURE" if self.client is None else "AUTO"
@@ -170,6 +187,7 @@ class DataTrustEngine:
             "client_key": self.client_key,
             "company_id": target_comp,
             "data_source": eff_ds,
+            "acquisition_schema_version": ACQUISITION_SCHEMA_VERSION,
             "last_reconciled_at": datetime.now().isoformat(),
             "active_findings": findings,
             "_audit_history": audit_history or []
@@ -196,7 +214,7 @@ class DataTrustEngine:
                 return {"status": "CONFIGURATION_MISSING", "error": "Missing mandatory company_id parameter."}
             company_id = "FIXTURE_COMPANY"
 
-        active_findings, audit_history, existing_ds = self._load_from_disk(company_id=company_id)
+        active_findings, audit_history, existing_ds, _ = self._load_from_disk(company_id=company_id)
         updated = False
         for f in active_findings:
             if f.get("id") == finding_id:
@@ -230,7 +248,7 @@ class DataTrustEngine:
         resolved_company_id = res.get("company_id") or company_id
 
         # Load existing company-scoped disk snapshot to preserve historical audit evaluations
-        existing_findings_raw, existing_audit_history, _ = self._load_from_disk(company_id=resolved_company_id)
+        existing_findings_raw, existing_audit_history, _, _ = self._load_from_disk(company_id=resolved_company_id)
 
         # Build current run audit record to append to non-destructive _audit_history
         now_iso = datetime.now().isoformat()

@@ -605,3 +605,136 @@ class TestDataTrustWebAPIs(unittest.TestCase):
             self.assertIn("data_source", data)
             self.assertEqual(data["data_source"], "DATA_UNAVAILABLE")
             self.assertEqual(data["findings"], [])
+
+    def test_save_stored_findings_persists_schema_version(self):
+        """Verify save_stored_findings writes acquisition_schema_version = 2 to disk payload."""
+        from modules.data_trust import ACQUISITION_SCHEMA_VERSION
+        engine = DataTrustEngine(client_key="test_schema_version_save")
+        comp_id = "test-comp-schema-v2"
+        engine.save_stored_findings([{"id": "TEST-1"}], company_id=comp_id, data_source="TEST_FIXTURE")
+
+        p = engine.get_findings_file_path(company_id=comp_id)
+        self.assertTrue(p.exists())
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data.get("acquisition_schema_version"), ACQUISITION_SCHEMA_VERSION)
+            self.assertEqual(data.get("acquisition_schema_version"), 2)
+        finally:
+            if p.exists():
+                p.unlink()
+
+    def test_stale_findings_file_triggers_invalidation_and_reacquisition(self):
+        """Verify that a findings file with legacy schema (version 0 / missing version) triggers
+        staleness warning, discards stale findings, and triggers fresh acquisition."""
+        from modules.data_trust import ACQUISITION_SCHEMA_VERSION
+
+        engine = DataTrustEngine(client_key="test_stale_invalidation")
+        comp_id = "test-comp-stale-001"
+        p = engine.get_findings_file_path(company_id=comp_id)
+
+        # Write a stale findings file simulating legacy schema version (no acquisition_schema_version)
+        stale_finding = {
+            "id": "STALE-FINDING-999",
+            "dedup_key": "KEY-STALE-999",
+            "rule_pack": "Posting-Date Policy",
+            "classification": "Policy Violation",
+            "severity": "HIGH",
+            "data_source": "TEST_FIXTURE"
+        }
+        legacy_payload = {
+            "client_key": engine.client_key,
+            "company_id": comp_id,
+            "data_source": "TEST_FIXTURE",
+            "last_reconciled_at": "2026-01-01T00:00:00",
+            "active_findings": [stale_finding],
+            "_audit_history": []
+            # Note: acquisition_schema_version is intentionally omitted (defaults to 0)
+        }
+        try:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(legacy_payload, f)
+
+            with self.assertLogs("opsmeld.data_trust", level="WARNING") as log_ctx:
+                loaded_findings = engine.load_stored_findings(company_id=comp_id)
+
+            # Verify staleness warning was logged
+            warning_msg = f"Stale findings file for company_id={comp_id} (schema_version=0, current={ACQUISITION_SCHEMA_VERSION}); discarding and forcing fresh acquisition."
+            self.assertTrue(any(warning_msg in r.getMessage() for r in log_ctx.records), f"Expected warning '{warning_msg}' in logs: {[r.getMessage() for r in log_ctx.records]}")
+
+            # Verify stale finding was discarded and fresh recon findings were loaded
+            loaded_ids = [f.get("id") for f in loaded_findings]
+            self.assertNotIn("STALE-FINDING-999", loaded_ids)
+
+            # Verify file on disk now has the current schema version
+            with open(p, "r", encoding="utf-8") as f:
+                updated_data = json.load(f)
+            self.assertEqual(updated_data.get("acquisition_schema_version"), ACQUISITION_SCHEMA_VERSION)
+        finally:
+            if p.exists():
+                p.unlink()
+
+    def test_current_version_findings_file_loaded_without_reacquisition(self):
+        """Verify that a findings file with current schema version (version 2) is loaded directly
+        without re-running reconciliation or logging staleness warning."""
+        from modules.data_trust import ACQUISITION_SCHEMA_VERSION
+        from unittest.mock import patch
+
+        engine = DataTrustEngine(client_key="test_current_version_load")
+        comp_id = "test-comp-current-002"
+        p = engine.get_findings_file_path(company_id=comp_id)
+
+        custom_current_finding = {
+            "id": "CUSTOM-CURRENT-FINDING-123",
+            "dedup_key": "KEY-CUSTOM-123",
+            "rule_pack": "Posting-Date Policy",
+            "classification": "Policy Violation",
+            "severity": "HIGH",
+            "data_source": "LIVE_BUSINESS_CENTRAL"
+        }
+        try:
+            engine.save_stored_findings([custom_current_finding], company_id=comp_id, data_source="LIVE_BUSINESS_CENTRAL")
+
+            # Verify file has ACQUISITION_SCHEMA_VERSION
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data.get("acquisition_schema_version"), ACQUISITION_SCHEMA_VERSION)
+
+            # Patch DataTrustEngineOrchestrator to ensure run_recon is NOT called
+            with patch("modules.data_trust_engine.engine.DataTrustEngineOrchestrator.run_recon") as mock_recon:
+                loaded_findings = engine.load_stored_findings(company_id=comp_id)
+                mock_recon.assert_not_called()
+
+            self.assertEqual(len(loaded_findings), 1)
+            self.assertEqual(loaded_findings[0]["id"], "CUSTOM-CURRENT-FINDING-123")
+            self.assertEqual(engine.data_source, "LIVE_BUSINESS_CENTRAL")
+        finally:
+            if p.exists():
+                p.unlink()
+
+    def test_update_finding_status_and_run_recon_unpack_4tuple(self):
+        """Verify update_finding_status and run_recon handle 4-tuple _load_from_disk without error."""
+        engine = DataTrustEngine(client_key="test_tuple_unpack")
+        comp_id = "test-comp-tuple"
+        p = engine.get_findings_file_path(company_id=comp_id)
+        finding = {
+            "id": "TUPLE-TEST-1",
+            "status": "Open",
+            "rule_pack": "Posting-Date Policy",
+            "classification": "Policy Violation",
+            "severity": "HIGH",
+            "data_source": "TEST_FIXTURE"
+        }
+        try:
+            engine.save_stored_findings([finding], company_id=comp_id, data_source="TEST_FIXTURE")
+
+            # Test update_finding_status
+            res = engine.update_finding_status("TUPLE-TEST-1", "Under Review", company_id=comp_id)
+            self.assertEqual(res.get("status"), "OK")
+
+            # Test run_recon
+            recon_res = engine.run_recon(company_id=comp_id)
+            self.assertIsInstance(recon_res, list)
+        finally:
+            if p.exists():
+                p.unlink()
