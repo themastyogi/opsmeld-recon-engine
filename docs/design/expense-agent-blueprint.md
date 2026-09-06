@@ -1,4 +1,4 @@
-# Expense Agent — Engineering Blueprint v1.3
+# Expense Agent — Engineering Blueprint v1.4
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council Go/No-Go review completed 2026-09-06 — see the
@@ -3954,9 +3954,22 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
    Expense Report module.
 2. **D-1, D-2, D-3** (§12) confirmed by real Finance/Compliance, not
    assumed.
-3. **Infrastructure decision** — actual database and web framework —
-   made and documented before schema-freeze; JSON-file persistence
-   cannot support FR-51/52 or FR-58 as designed.
+3. **Infrastructure decision — CLOSED 2026-09-06.** The Expense Agent
+   will be a **new standalone repository**, not a module inside
+   opsmeld-recon-engine, on **Python/FastAPI + PostgreSQL**. Rationale:
+   this repo's architecture (JSON files, stdlib `http.server`, read-only
+   reconciliation conventions) is a scale/risk mismatch for a
+   write-capable, financially-sensitive, always-on system — matches the
+   Solution Architect/Tech Expert finding in the Council Go/No-Go Review
+   below. A separate deployable keeps blast radius and release cadence
+   independent. PostgreSQL gives real transactions (needed for FR-51/52)
+   and row-level security (feeds condition 4 below) rather than a
+   `tenant_id` column alone. **What's reused isn't the repo — it's two
+   patterns, copied/adapted, not imported as a dependency**:
+   `MCP/core/bc_mcp_client.py`'s MSAL auth/token/company-discovery logic,
+   and `MCP/modules/data_trust_engine/llm_interpreter.py`'s
+   provider-failover + cost-tracking pattern (extended for vision/OCR
+   calls) — this also closes condition 6 below.
 4. **Multi-tenant isolation as an enforced boundary, not just a column**:
    every table in §7 carries `tenant_id` + `bc_company_id`, but nothing
    yet describes row-level authorization checks or states whether this
@@ -3968,14 +3981,15 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
    `LLMMetadata` already tracks `estimated_cost` per call as precedent,
    but nobody has multiplied that by expected expense-line volume per
    tenant.
-6. **State explicitly that OCR/extraction and the conversational-intake
-   AI layer (§2.3A, §10C, §10E) reuse `LLMInterpreter`'s existing
-   provider-failover and cost-tracking pattern** (`llm_interpreter.py`)
-   rather than silently implying a new AI layer gets built. OCR (receipt
-   image → structured fields) is a materially different task from the
-   tool-use classification `llm_interpreter.py` currently does —
-   vision-capable model calls at receipt volume need their own
-   cost/latency line.
+6. **CLOSED 2026-09-06 — see condition 3.** OCR/extraction and the
+   conversational-intake AI layer (§2.3A, §10C, §10E) reuse
+   `LLMInterpreter`'s provider-failover and cost-tracking pattern,
+   copied/adapted into the new standalone repo rather than imported as a
+   dependency on this one. Still open: OCR (receipt image → structured
+   fields) is a materially different task from the tool-use
+   classification `llm_interpreter.py` currently does — vision-capable
+   model calls at receipt volume need their own cost/latency line (feeds
+   condition 5, still open).
 
 ### What was validated as sound
 
@@ -4017,3 +4031,4 @@ available — no need to chase Wave 1 access first.
 | v1.1 | Folded in BC-expert review: added §4A verified finding (no BC write path exists in this codebase today — `bc_mcp_client.py`'s `_execute_bc_rest`/`_execute_bc_rest_url` are GET-only), sharpened BC-11 (API write-capability must be confirmed as documented/stable, not inferred from sandbox behavior; plan Journal API as day-1 path), BC-7 (ask specifically about Employee Ledger Entry *application* API, not just entry read access — historically read-only), and BC-1 (treat OPSMELD_NATIVE for GST as the probable outcome). Updated R2 accordingly. |
 | v1.2 | Full council Go/No-Go review: approved for design/validation phase only, not for build. New finding — this repo's persistence layer today is JSON files, no DB/framework, which the schema assumes but didn't name as a prerequisite. Six conditions set before schema/code work (see "Council Go/No-Go Review" section above). |
 | v1.3 | Added §2.0 ("inspiration, not replication") clarifying this design doesn't need to mirror BC's native Expense Report module — the only hard BC dependency is posting via BC's long-standing General/Payment Journal API. Split BC-11/BC-7/BC-1 in §11 into a default path (testable on any existing BC access, no Wave 1/India-inclusion needed) and an optional native-path exploration. Updated §17's Build Decision Gate and the Council review's next-step guidance accordingly — resolves the "no Wave 1 access" blocker by removing the dependency on it. |
+| v1.4 | Closed council conditions 3 and 6: infrastructure decision made — new standalone repository (not a module in opsmeld-recon-engine), Python/FastAPI + PostgreSQL. Reuses two proven patterns from this repo (`bc_mcp_client.py`'s MSAL auth, `llm_interpreter.py`'s provider-failover/cost-tracking), copied/adapted rather than imported as a dependency. Remaining open conditions: 1 (BC default-path testing), 2 (Finance/Compliance sign-off), 4 (row-level isolation design), 5 (LLM/OCR cost estimate). |
