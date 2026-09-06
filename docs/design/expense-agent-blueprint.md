@@ -1,10 +1,16 @@
-# Expense Agent — Engineering Blueprint v1.1
+# Expense Agent — Engineering Blueprint v1.2
 
-Status: DRAFT — internal engineering reference. Structurally consolidated
+Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
+BUILD.** Full council Go/No-Go review completed 2026-09-06 — see the
+"Council Go/No-Go Review" section at the end of this document for the
+CEO synthesis and the six conditions that must close (BC SME sandbox
+answers, Finance/Compliance sign-off, an actual infra decision, enforced
+multi-tenant isolation, LLM/OCR cost estimate, explicit `LLMInterpreter`
+reuse) before any of this schema is built. Structurally consolidated
 from the v0.9 blueprint candidate; numbering collisions and misplaced
 sections have been corrected (see "Structural corrections" below). v1.1
-folds in BC-expert review findings (see §4A, §11, §16) — same content as
-`expense-agent-spec.md` v1.1, kept in sync. This is the detailed build
+folded in BC-expert review findings (§4A, §11, §16) — same content as
+`expense-agent-spec.md`, kept in sync. This is the detailed build
 reference; for the document intended for BC-expert and domain-expert
 review, see `expense-agent-spec.md` in this folder.
 Author: Vikas (via Claude design session)
@@ -3877,6 +3883,79 @@ the main design rather than left only as review notes:
 - Treat employee project/job membership as many-to-many, effective-dated
   assignments, with transaction-time mapping snapshots.
 
+## Council Go/No-Go Review (2026-09-06)
+
+**Verdict: Approve with conditions — scoped to continuing the
+design/validation phase. Not approved to start this schema's build or
+write production code.** Full review convened all twelve advisory
+personas plus CEO synthesis; investigation read this document's
+structure plus the full domain-model section through table 7.26, and
+cross-checked claims against the live repo rather than trusting the
+docs' own assertions.
+
+### New finding from this review (not previously in this document)
+
+This repo's actual persistence layer today is JSON files
+(`open(path, "w")` in `data_trust.py`/`config.py`) — no ORM, no
+Postgres/MySQL driver, no web framework (`server.py` runs on stdlib
+`http.server`). Section 7's 40-table relational schema with UUID PKs,
+effective-dated versioning, and idempotent posting (FR-51/52) and
+reconciliation (FR-58) assumes infrastructure — a real RDBMS,
+migrations, likely a real web framework — that doesn't exist in this
+codebase yet. Three roles (Product Manager, Solution Architect, Tech
+Expert) converged on this independently. **This is the actual source of
+build-scope risk, more than any BC limitation** — resolve it (pick a DB
++ framework) before this schema is treated as final.
+
+### Six conditions before build starts
+
+1. **BC-11, BC-7, BC-1, BC-8** (§11) answered by a real BC SME driving
+   an actual 2026W1 sandbox — not further design-session inference.
+2. **D-1, D-2, D-3** (§12) confirmed by real Finance/Compliance, not
+   assumed.
+3. **Infrastructure decision** — actual database and web framework —
+   made and documented before schema-freeze; JSON-file persistence
+   cannot support FR-51/52 or FR-58 as designed.
+4. **Multi-tenant isolation as an enforced boundary, not just a column**:
+   every table in §7 carries `tenant_id` + `bc_company_id`, but nothing
+   yet describes row-level authorization checks or states whether this
+   reuses `MCP/modules/data_trust_engine/authorization.py`, which
+   already exists in this repo. Also: `expense_source` (§7.11) stores
+   receipt images/PII with no data-retention or access-control statement
+   yet.
+5. **Rough per-tenant monthly LLM/OCR cost estimate** — Data Trust's
+   `LLMMetadata` already tracks `estimated_cost` per call as precedent,
+   but nobody has multiplied that by expected expense-line volume per
+   tenant.
+6. **State explicitly that OCR/extraction and the conversational-intake
+   AI layer (§2.3A, §10C, §10E) reuse `LLMInterpreter`'s existing
+   provider-failover and cost-tracking pattern** (`llm_interpreter.py`)
+   rather than silently implying a new AI layer gets built. OCR (receipt
+   image → structured fields) is a materially different task from the
+   tool-use classification `llm_interpreter.py` currently does —
+   vision-capable model calls at receipt volume need their own
+   cost/latency line.
+
+### What was validated as sound
+
+- The system-of-record boundary (§2.1) and provider-mode abstraction
+  (§2.2) explicitly refuse to duplicate BC's ledger (FR-18, R6) — the
+  right shape.
+- The AI/deterministic boundary (§2.3) matches how Data Trust actually
+  behaves in production — findings are read-only, human-reviewed, never
+  auto-acted.
+- The India compliance reasoning (§6.7) reflects real Indian SME
+  operational reality, not generic SaaS assumptions.
+- Reusing the "local record linked to BC by key, BC read via API, never
+  written via table extension" pattern from Data Trust is correct reuse.
+
+### Biggest risk named by the CEO synthesis
+
+Scope creep from "approve the design direction" into "approve full
+build" without conditions 1–3 closing first. First concrete next step:
+get a BC SME into a live 2026W1 sandbox to answer BC-11, BC-7, and BC-1
+against the actual Expense Report/Journal APIs.
+
 ## 19. Change Log
 
 | Version | Change |
@@ -3888,3 +3967,4 @@ the main design rather than left only as review notes:
 | v0.9 | Reporting plus consolidated engineering blueprint: persistence, APIs, events, BC adapter contract, sync, security, reliability, exceptions and traceability. |
 | v1.0 | Structural consolidation: fixed duplicate section numbers (10/14/15), fixed duplicate 7.3.1–7.3.6, filled missing 7.5/7.6, relocated 10E/10F to narrative order. No content changes. Split into this engineering blueprint plus a lean `expense-agent-spec.md` for SME review. |
 | v1.1 | Folded in BC-expert review: added §4A verified finding (no BC write path exists in this codebase today — `bc_mcp_client.py`'s `_execute_bc_rest`/`_execute_bc_rest_url` are GET-only), sharpened BC-11 (API write-capability must be confirmed as documented/stable, not inferred from sandbox behavior; plan Journal API as day-1 path), BC-7 (ask specifically about Employee Ledger Entry *application* API, not just entry read access — historically read-only), and BC-1 (treat OPSMELD_NATIVE for GST as the probable outcome). Updated R2 accordingly. |
+| v1.2 | Full council Go/No-Go review: approved for design/validation phase only, not for build. New finding — this repo's persistence layer today is JSON files, no DB/framework, which the schema assumes but didn't name as a prerequisite. Six conditions set before schema/code work (see "Council Go/No-Go Review" section above). |
