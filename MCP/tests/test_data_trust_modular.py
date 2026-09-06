@@ -175,6 +175,113 @@ class TestDataTrustModularFramework(unittest.TestCase):
         interp, meta = interpreter.interpret_candidate("Summary", "System")
         self.assertTrue(meta.call_count <= 1)
 
+    def test_gl_acquisition_fail_closed_and_diagnostics(self):
+        """Verify G/L acquisition fails closed to DATA_UNAVAILABLE with diagnostic logs and preserves fixtures."""
+        import logging
+
+        # 1. Missing client (AUTO mode)
+        acquirer_no_client = DataAcquirer(mcp_client=None, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+            txs, prov = acquirer_no_client.acquire_transactions(company_id="COMP-1")
+        self.assertEqual(txs, [])
+        self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertTrue(any("no BC client configured" in log for log in cm.output))
+
+        # 2. Token missing
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = None
+        acquirer = DataAcquirer(mcp_client=mock_client, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+            txs, prov = acquirer.acquire_transactions(company_id="COMP-1")
+        self.assertEqual(txs, [])
+        self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertTrue(any("token_acquired=False" in log for log in cm.output))
+
+        # 3. Exception in live REST query
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+        with patch.object(acquirer.company_resolver, "resolve_company_guid", return_value="GUID-1"):
+            mock_client._execute_bc_rest.side_effect = RuntimeError("REST timeout")
+            with self.assertLogs("OpsmeldReconEngine.Acquisition", level="ERROR") as cm:
+                txs, prov = acquirer.acquire_transactions(company_id="COMP-1")
+            self.assertEqual(txs, [])
+            self.assertEqual(prov, "DATA_UNAVAILABLE")
+            self.assertTrue(any("Live G/L acquisition exception for company_id=COMP-1: REST timeout" in log for log in cm.output))
+
+        # 4. Endpoints return errors
+        with patch.object(acquirer.company_resolver, "resolve_company_guid", return_value="GUID-1"):
+            mock_client._execute_bc_rest.side_effect = None
+            mock_client._execute_bc_rest.return_value = {"is_error": True, "error": "HTTP 404"}
+            with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+                txs, prov = acquirer.acquire_transactions(company_id="COMP-1")
+            self.assertEqual(txs, [])
+            self.assertEqual(prov, "DATA_UNAVAILABLE")
+            self.assertTrue(any("no ledger entries available (HTTP 404)" in log for log in cm.output))
+
+        # 5. TEST_FIXTURE and DEMO_FIXTURE preserve fixtures
+        acq_test = DataAcquirer(mcp_client=None, mode="TEST_FIXTURE")
+        txs_t, prov_t = acq_test.acquire_transactions()
+        self.assertEqual(prov_t, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_t) > 0)
+
+        acq_demo = DataAcquirer(mcp_client=None, mode="DEMO_FIXTURE")
+        txs_d, prov_d = acq_demo.acquire_transactions()
+        self.assertEqual(prov_d, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_d) > 0)
+
+    def test_payment_acquisition_fail_closed_and_diagnostics(self):
+        """Verify payment acquisition fails closed to DATA_UNAVAILABLE with diagnostic logs and preserves fixtures."""
+        import logging
+
+        # 1. Missing client (AUTO mode)
+        acquirer_no_client = DataAcquirer(mcp_client=None, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+            txs, prov = acquirer_no_client.acquire_payment_transactions(company_id="COMP-1")
+        self.assertEqual(txs, [])
+        self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertTrue(any("no BC client configured" in log for log in cm.output))
+
+        # 2. Token missing
+        mock_client = MagicMock()
+        mock_client.get_access_token.return_value = None
+        acquirer = DataAcquirer(mcp_client=mock_client, mode="AUTO")
+        with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+            txs, prov = acquirer.acquire_payment_transactions(company_id="COMP-1")
+        self.assertEqual(txs, [])
+        self.assertEqual(prov, "DATA_UNAVAILABLE")
+        self.assertTrue(any("token_acquired=False" in log for log in cm.output))
+
+        # 3. Exception in live REST query
+        mock_client.get_access_token.return_value = "VALID_TOKEN"
+        with patch.object(acquirer.company_resolver, "resolve_company_guid", return_value="GUID-1"):
+            mock_client._execute_bc_rest.side_effect = RuntimeError("Payment query timeout")
+            with self.assertLogs("OpsmeldReconEngine.Acquisition", level="ERROR") as cm:
+                txs, prov = acquirer.acquire_payment_transactions(company_id="COMP-1")
+            self.assertEqual(txs, [])
+            self.assertEqual(prov, "DATA_UNAVAILABLE")
+            self.assertTrue(any("Payment acquisition exception for company_id=COMP-1: Payment query timeout" in log for log in cm.output))
+
+        # 4. Ledger query error with no acquired entries
+        with patch.object(acquirer.company_resolver, "resolve_company_guid", return_value="GUID-1"):
+            mock_client._execute_bc_rest.side_effect = None
+            mock_client._execute_bc_rest.return_value = {"is_error": True, "error": "HTTP 500"}
+            with self.assertLogs("OpsmeldReconEngine.Acquisition", level="WARNING") as cm:
+                txs, prov = acquirer.acquire_payment_transactions(company_id="COMP-1")
+            self.assertEqual(txs, [])
+            self.assertEqual(prov, "DATA_UNAVAILABLE")
+            self.assertTrue(any("ledger queries returned error and no transactions were acquired" in log for log in cm.output))
+
+        # 5. TEST_FIXTURE and DEMO_FIXTURE preserve fixtures
+        acq_test = DataAcquirer(mcp_client=None, mode="TEST_FIXTURE")
+        txs_t, prov_t = acq_test.acquire_payment_transactions()
+        self.assertEqual(prov_t, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_t) > 0)
+
+        acq_demo = DataAcquirer(mcp_client=None, mode="DEMO_FIXTURE")
+        txs_d, prov_d = acq_demo.acquire_payment_transactions()
+        self.assertEqual(prov_d, "SNAPSHOT_SEED")
+        self.assertTrue(len(txs_d) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -96,8 +96,9 @@ class DataAcquirer:
             token = self.client.get_access_token()
             comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
-                from modules.data_trust_engine.fixtures import get_sample_transactions
-                return get_sample_transactions(company_id=company_id), "SNAPSHOT_SEED"
+                logger.warning(f"G/L acquisition failed for company_id={company_id}: "
+                               f"token_acquired={bool(token)}, comp_guid_resolved={bool(comp_guid)}")
+                return [], "DATA_UNAVAILABLE"
 
             try:
                 gl_resp = self.client._execute_bc_rest(f"companies({comp_guid})/generalLedgerEntries")
@@ -113,10 +114,17 @@ class DataAcquirer:
                 if isinstance(purch_resp, dict) and not purch_resp.get("is_error") and "error" not in purch_resp and "value" in purch_resp:
                     return purch_resp["value"], "LIVE_BUSINESS_CENTRAL"
 
-                return [], "LIVE_BUSINESS_CENTRAL"
+                err_msg = ""
+                if isinstance(gl_resp, dict) and (gl_resp.get("is_error") or "error" in gl_resp):
+                    err_msg = str(gl_resp.get("error", "unknown error"))
+                logger.warning(f"G/L acquisition failed for company_id={company_id}: no ledger entries available ({err_msg})")
+                return [], "DATA_UNAVAILABLE"
             except Exception as e:
-                logger.error(f"Live G/L acquisition exception: {str(e)}")
-                return [], "LIVE_BUSINESS_CENTRAL"
+                logger.error(f"Live G/L acquisition exception for company_id={company_id}: {str(e)}")
+                return [], "DATA_UNAVAILABLE"
+
+        logger.warning(f"G/L acquisition failed for company_id={company_id}: no BC client configured (mode={self.mode})")
+        return [], "DATA_UNAVAILABLE"
 
     def acquire_payment_transactions(
         self,
@@ -139,7 +147,9 @@ class DataAcquirer:
             token = self.client.get_access_token()
             comp_guid = self.company_resolver.resolve_company_guid(self.client, company_id) if token else None
             if not token or not comp_guid:
-                return self._get_fixture_payment_transactions(company_id), "SNAPSHOT_SEED"
+                logger.warning(f"Payment acquisition failed for company_id={company_id}: "
+                               f"token_acquired={bool(token)}, comp_guid_resolved={bool(comp_guid)}")
+                return [], "DATA_UNAVAILABLE"
 
             try:
                 acquired: List[Dict[str, Any]] = []
@@ -192,6 +202,9 @@ class DataAcquirer:
 
                 if has_vle_error or has_cle_error:
                     if not acquired:
+                        logger.warning(f"Payment acquisition failed for company_id={company_id}: "
+                                       f"ledger queries returned error and no transactions were acquired "
+                                       f"(vle_error={has_vle_error}, cle_error={has_cle_error})")
                         return [], "DATA_UNAVAILABLE"
 
                 if lookback_months is not None and float(lookback_months) > 0:
@@ -199,9 +212,10 @@ class DataAcquirer:
 
                 return acquired, "LIVE_BUSINESS_CENTRAL"
             except Exception as e:
-                logger.error(f"Payment acquisition exception: {str(e)}")
+                logger.error(f"Payment acquisition exception for company_id={company_id}: {str(e)}")
                 return [], "DATA_UNAVAILABLE"
 
+        logger.warning(f"Payment acquisition failed for company_id={company_id}: no BC client configured (mode={self.mode})")
         return [], "DATA_UNAVAILABLE"
 
     def acquire_inventory_cost_transactions(
