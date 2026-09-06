@@ -1,4 +1,4 @@
-# Expense Agent — Design Spec for SME Review v1.2
+# Expense Agent — Design Spec for SME Review v1.3
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council review (Go/No-Go) completed 2026-09-06; see §13 for
@@ -29,6 +29,25 @@ expert and an accounting/Indian-compliance domain expert before any build
 decision.
 
 ## 2. Core Architecture Decision
+
+### 2.0 Inspiration, not replication
+
+This design takes workflow/UX inspiration from how BC (and Concur,
+Expensify, Zoho Expense) structure expense capture, approval, and
+settlement. **It does not attempt to mirror BC's specific Expense
+Report/Expense Line objects, replicate BC's Copilot Expense Agent, or
+plug into that module's internals.** The application's own domain model
+(§7 in the blueprint) is independent of BC's schema by design (§2.1's
+system-of-record boundary already established this — this section makes
+the consequence explicit).
+
+The one hard BC dependency this design actually has: **posting a
+finished, GST-computed, dimension-tagged transaction into BC's ledgers.**
+That's it. That posting can go through BC's long-standing General/Payment
+Journal API (stable since BC API v2.0, ~2019, and how most third-party
+expense tools already integrate with BC) rather than through the new
+2026W1 Expense Report/Line API. That materially changes which BC-N
+questions are actually blocking — see the note at the top of §8.
 
 ### 2.1 System-of-record boundary
 
@@ -357,44 +376,59 @@ Intentionally conceptual until BC-11 and BC-7 are confirmed.
 
 ## 8. Open Questions for BC Expert
 
-**Priority P0 — must resolve before architecture/build decision**
-- **BC-11** — Posting path: Does BC 2026W1's Expense Report/Expense Line
+**Reframed per §2.0 ("inspiration, not replication"):** this design does
+not need to plug into BC's new 2026W1 Expense Report/Expense Line module
+at all — it only needs to post a finished transaction via BC's
+long-standing General/Payment Journal API. That means the questions
+below split into a **default path that needs no Wave 1 / Expense Agent
+access** (testable on any existing BC environment, including an
+India-localized one on an older wave) and an **optional exploration**
+that only matters if we later decide it's worth leveraging BC's newer
+native module instead of the safe Journal fallback.
+
+**Default path — testable today, no Wave 1 needed**
+- **BC-11 (default)**: Confirm the General/Payment Journal API accepts
+  the fields this design needs (amount, dimensions, employee reference,
+  posting date) and actually posts to Employee Ledger Entry / G/L Entry
+  as expected. This is old, stable BC functionality — testable on
+  whatever BC access you already have right now.
+- **BC-7 (default)**: If Employee Ledger Entry application isn't
+  API-exposed (plausible per the sharpened note below), we track
+  advance-vs-settlement ourselves and post only the *net* settlement
+  amount as a plain journal line (per FR-18's existing fallback). This
+  needs no special access either — it's the same Journal API as BC-11.
+- **BC-1 (default)**: Already effectively resolved — the BC-expert
+  review's own finding (see the native-path note below) treats
+  `OPSMELD_NATIVE` for GST/ITC computation as the probable outcome
+  regardless, so BC's Expense Line tax engine isn't a dependency for the
+  default path. Nothing to test here.
+
+**Optional exploration — only if pursuing BC's native Expense Report
+module instead of the Journal fallback; needs Wave 1 access, and the
+Expense Agent Copilot UI specifically is excluded from India in the
+current rollout (confirmed 2026-09-06)**
+- **BC-11 (native path)**: Does BC 2026W1's Expense Report/Expense Line
   expose a supported write-capable API that produces the expected native
-  ledger behavior, or must posting go through General/Payment Journal
-  APIs? **Sharpened per BC-expert review**: new BC feature UI surfaces
-  routinely ship 1–2 release waves ahead of their public API v2.0 write
-  endpoints. Confirming the feature works in the BC client sandbox is
-  not evidence of a supported write API. Confirm the specific API page
-  is documented as write-capable and stable — and plan the General/
-  Payment Journal API as the **realistic day-1 posting path**, not a
-  fallback contingency.
-- **BC-7** — Advances: Is the Employee Ledger Entry + application
-  mechanism sufficient to represent disbursed employee advances,
-  remaining amount, aging, and application to expense reports, leaving
-  only a thin operational request layer in the application? **Sharpened
-  per BC-expert review**: Employee Ledger Entries (Table 5217) support
+  ledger behavior? New BC feature UI surfaces routinely ship 1–2 release
+  waves ahead of their public API v2.0 write endpoints — confirming the
+  feature works in the BC client sandbox is not evidence of a supported
+  write API.
+- **BC-7 (native path)**: Employee Ledger Entries (Table 5217) support
   Open/Application status in the BC client the same way Vendor/Customer
   Ledger Entries do, but the public API has historically exposed
   `employeeLedgerEntries` **read-only** in several BC versions, with no
-  `applyEmployeeEntries`-equivalent write action. Ask specifically
-  whether **Employee Ledger Entry application** (not just the entries)
-  is exposed via API — if not, the app needs its own advance-application
-  logic regardless of what the UI shows, and the "thin operational
-  layer" outcome this doc prefers isn't available.
-- **BC-1** — Tax: Does native Expense Line participate in the BC
-  GST/Tax engine in the deployed India-localized scenario, including tax
-  breakup and posting behavior? **Sharpened per BC-expert review**:
-  India GST/tax engine hooks have historically lagged non-core document
-  types, and Expense Reports is a newer, HR-adjacent object rather than
-  a core Purchase/Sales document. Treat `OPSMELD_NATIVE` for GST as the
-  **probable outcome**, not a coin-flip open question, and plan the GST
-  compliance layer (§6.7) as owned by the application from the start.
+  `applyEmployeeEntries`-equivalent write action — worth confirming if
+  the native path is ever pursued, but not blocking given the default
+  fallback above.
+- **BC-1 (native path)**: Does native Expense Line participate in the BC
+  GST/Tax engine at all? India GST/tax engine hooks have historically
+  lagged non-core document types, and Expense Reports is a newer,
+  HR-adjacent object — treat `OPSMELD_NATIVE` as the probable outcome
+  regardless, so this is confirmatory, not gating.
 
-BC-11 + BC-7 + BC-1 jointly determine how much data needs to exist in BC
-versus the application. Costing-method awareness (FIFO/Standard/Average)
-does not apply to this domain — employee expense/reimbursement has no
-inventory costing dimension — confirmed by BC-expert review, no action
-needed.
+Costing-method awareness (FIFO/Standard/Average) does not apply to this
+domain — employee expense/reimbursement has no inventory costing
+dimension — confirmed by BC-expert review, no action needed.
 
 **Priority P1**
 - BC-8: Can native Workflow conditions express category AND amount
@@ -465,11 +499,17 @@ needed.
 
 ## 11. Build Decision Gate
 
-No implementation should start until the following are answered:
+No implementation should start until the following are answered. Per
+§2.0/§8's reframing, BC-11/BC-7/BC-1 are satisfied by their **default
+path** (Journal API + `OPSMELD_NATIVE` GST) unless a deliberate later
+decision is made to pursue BC's native Expense Report module instead —
+so these no longer require Wave 1 / India-inclusion access to close:
 
-- BC-11: Supported BC posting path.
-- BC-7: Native employee advance accounting/application capability.
-- BC-1: Native tax/GST behaviour of Expense Lines.
+- BC-11: Confirm the Journal API posting path (default) works as
+  expected — no Wave 1 needed.
+- BC-7: Confirm advance-vs-settlement can be tracked application-side
+  with net settlement posted via Journal (default) — no Wave 1 needed.
+- BC-1: Resolved by default (`OPSMELD_NATIVE`) — no BC dependency.
 - BC-8: Native approval conditions versus a small supplemental
   grade/band lookup.
 - Mapping ownership: the semantic-to-BC mapping model, validation
@@ -520,8 +560,12 @@ schema is treated as final.
 
 ### Six conditions before build starts
 
-1. **BC-11, BC-7, BC-1, BC-8** answered by a real BC SME driving an
-   actual 2026W1 sandbox — not further design-session inference.
+1. **BC-11, BC-7, BC-1 (default paths) and BC-8** answered against
+   whatever BC access is already available — Wave 1 / India-inclusion
+   access is not required per the §2.0/§8 reframing, since the default
+   posting path uses BC's long-standing Journal API, not the new
+   Expense Report module. Not further design-session inference either
+   way — actually test the Journal API posting.
 2. **D-1, D-2, D-3** (advance recovery mechanism/legal constraint,
    perquisite tax treatment regime-awareness, GST blocked-credit override
    authority) confirmed by real Finance/Compliance, not assumed.
@@ -567,12 +611,20 @@ schema is treated as final.
 ### Biggest risk named by the CEO synthesis
 
 Scope creep from "approve the design direction" into "approve full
-build" without conditions 1–3 closing first. **First concrete next
-step**: get a BC SME into a live 2026W1 sandbox to answer BC-11, BC-7,
-and BC-1 against the actual Expense Report/Journal APIs — those three
-answers determine whether this is a thin mapping layer or a much bigger
-application-side ledger, and the infra decision and cost model both
-depend on that answer.
+build" without conditions 1–3 closing first.
+
+**Update (2026-09-06, post-review):** §2.0/§8 clarified this design
+doesn't need to replicate BC's native Expense Report module — it only
+needs BC's long-standing General/Payment Journal API to post the final
+transaction, which needs no Wave 1 or India-inclusion access to confirm
+(that access simply isn't available yet — the Expense Agent Copilot UI
+is confirmed excluded from India in the current rollout). **First
+concrete next step, revised**: confirm the Journal API posting path
+(BC-11 default) and advance-vs-settlement tracking with net Journal
+settlement (BC-7 default) on whatever BC access is already available —
+no need to chase Wave 1 access first. The native-path exploration of
+BC's new Expense Report module remains available later if it's ever
+worth pursuing instead of the Journal fallback.
 
 ## Change Log
 
@@ -583,3 +635,4 @@ depend on that answer.
 | v1.0 | Split from the consolidated v0.9 draft into this lean SME-review document plus the full `expense-agent-blueprint.md`. Provider abstraction (§2.2) kept in scope per explicit decision. No FR/BC-N/D-N content dropped — only re-scoped for reviewer audience. |
 | v1.1 | Folded in BC-expert review: added §4A verified finding (no BC write path exists in this codebase today — confirmed by reading `bc_mcp_client.py`), sharpened BC-11 (confirm documented write-API stability, not sandbox behavior; plan Journal API as day-1 path), BC-7 (ask specifically about Employee Ledger Entry *application* API access, historically read-only), and BC-1 (treat OPSMELD_NATIVE for GST as the probable outcome, not a coin flip). Updated R2 accordingly. |
 | v1.2 | Full council Go/No-Go review (§13): approved for design/validation phase only, not for build. New finding — this repo's persistence layer today is JSON files, no DB/framework, which the 40-table schema assumes but doesn't name as a prerequisite. Six conditions set before schema/code work: BC SME sandbox answers (BC-1/7/8/11), Finance/Compliance sign-off (D-1/2/3), infra decision, enforced multi-tenant isolation (not just a column), per-tenant LLM/OCR cost estimate, explicit reuse of `LLMInterpreter` for OCR/extraction. |
+| v1.3 | Added §2.0 ("inspiration, not replication") clarifying this design doesn't need to mirror BC's native Expense Report module — the only hard BC dependency is posting via BC's long-standing General/Payment Journal API. Split BC-11/BC-7/BC-1 in §8 into a default path (testable on any existing BC access, no Wave 1/India-inclusion needed) and an optional native-path exploration (needs Wave 1, and Expense Agent Copilot UI confirmed excluded from India in the current rollout). Updated §11's Build Decision Gate and §13's next-step guidance accordingly — resolves the "I don't have Wave 1 access" blocker by removing the dependency on it. |
