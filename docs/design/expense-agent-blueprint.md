@@ -1,14 +1,14 @@
-# Expense Agent — Engineering Blueprint v1.7
+# Expense Agent — Engineering Blueprint v1.8
 
 Status: **APPROVED FOR DESIGN/VALIDATION PHASE ONLY — NOT APPROVED FOR
 BUILD.** Full council Go/No-Go review completed 2026-09-06 — see the
 "Council Go/No-Go Review" section for the CEO synthesis and conditions.
-**4 of 6 conditions closed as of v1.7** (infra decision, `LLMInterpreter`
-reuse, row-level isolation design, LLM/OCR cost estimate — §19/§20).
-**2 remain open and cannot be closed by further design work**: BC SME
-sandbox answers to BC-11/7/1/8 (§11), and Finance/Compliance sign-off on
-D-1/2/3 (§12) — both need a real person outside this design loop.
-Structurally consolidated
+**5 of 6 conditions closed as of v1.8** (infra decision, `LLMInterpreter`
+reuse, row-level isolation design, LLM/OCR cost estimate, and D-1/D-2/D-3
+reframed as customer-configurable policy rather than an Opsmeld build
+blocker — §19/§20, §12). **1 remains open and cannot be closed by
+further design work**: BC SME sandbox answers to BC-11/7/1/8 (§11) need
+a real person with live BC tenant access. Structurally consolidated
 from the v0.9 blueprint candidate; numbering collisions and misplaced
 sections have been corrected (see "Structural corrections" below). v1.1
 folded in BC-expert review findings (§4A, §11, §16) — same content as
@@ -3443,14 +3443,32 @@ dimension — confirmed by BC-expert review, no action needed.
 
 ## 12. Domain Expert Questions
 
-**Priority P0**
-- D-1: Under-spent advance recovery: preferred mechanism and installment
-  rules for payroll/direct repayment/carry-forward; confirm legal and
-  company-policy constraints.
-- D-2: Current tax treatment/limits and review cadence for
-  allowance/perquisite categories, including tax-regime handling.
-- D-3: GST blocked-credit configuration: which rules are hard blocks,
-  which allow documented statutory override, and who can authorize it?
+**Reframed 2026-09-06 — D-1/D-2/D-3 are out of scope for Opsmeld to
+decide, and closed as build blockers.** These are each customer's
+Finance team's own policy decisions, not something Opsmeld's design or
+internal Finance/Compliance should pre-answer with one global value —
+different customers legitimately choose differently. The system's job
+is to **support** each as configurable policy, not to enforce Opsmeld's
+own answer:
+
+- D-1 (advance recovery mechanism) → FR-14 already requires the system
+  support an installment schedule (Payment of Wages Act constraint on
+  *how* recovery can happen structurally); *which* mechanism a given
+  customer uses is configured per tenant, not fixed by Opsmeld.
+- D-2 (perquisite tax treatment) → FR-39 already requires the system
+  distinguish reimbursement from allowance/perquisite and be
+  regime-aware per employee; the customer's payroll/tax team supplies
+  applicable limits and regime data.
+- D-3 (GST blocked-credit override authority) → FR-27/FR-34 already
+  require a configurable named override authority and a reason-coded
+  override path; *who* holds it is each customer's DOFA, configured at
+  onboarding, not an Opsmeld default.
+
+What Opsmeld still owns: shipping sensible starting defaults/templates
+as a convenience — but the authoritative answer for any deployment is
+customer-configured, never Opsmeld's internal decision.
+
+**Priority P0 (remaining)**
 - D-4: Typical receipt-less internal-control thresholds by
   company/sector; explicitly confirm these are policy norms, not
   statutory minima.
@@ -4021,8 +4039,12 @@ build-scope risk, more than any BC limitation** — resolve it (pick a DB
    access is not required per the §2.0/§11 reframing, since the default
    posting path uses BC's long-standing Journal API, not the new
    Expense Report module.
-2. **D-1, D-2, D-3** (§12) confirmed by real Finance/Compliance, not
-   assumed.
+2. **CLOSED 2026-09-06 — reframed as out of scope, not deferred.** D-1,
+   D-2, D-3 (§12) are each customer's own Finance-team policy decisions,
+   not an Opsmeld build blocker. The system already requires
+   configurable support for all three (FR-14, FR-27, FR-34, FR-39); no
+   Opsmeld-internal Finance/Compliance sign-off is needed on a specific
+   global answer, because there isn't meant to be one.
 3. **Infrastructure decision — CLOSED 2026-09-06.** The Expense Agent
    will be a **new standalone repository**, not a module inside
    opsmeld-recon-engine, on **Python/FastAPI + PostgreSQL**. Rationale:
@@ -4232,3 +4254,4 @@ At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-empl
 | v1.5 | Second BC-expert re-review of v1.3's reframing, folded in: (1) BC-1's "nothing to test" was overclaimed — restored a real, testable-today question about whether the Journal API exposes India GST-specific fields (GST Group Code/HSN-SAC/Jurisdiction Type), which decides who owns GST-return prep (this tool vs. BC); (2) softened "confirmed excluded from India" to "reported as excluded" with an explicit confidence note (aggregated search, not primary-source-verified) and reconciled §4's two differently-worded availability claims; (3) reworded the FR-18 citation on BC-7's fallback from "existing fallback" to "consistent with FR-18's intent"; (4) added a named residual risk to BC-7's default path and FR-58: the fallback leaves BC's own Employee Ledger Entry for the original advance permanently Open/unapplied — reconciliation must treat this as expected structural divergence, not an anomaly. |
 | v1.6 | Third BC-expert pass, attempting to close the §4 confidence gap directly: a second `WebFetch` to `learn.microsoft.com` was independently blocked (same limitation, different review session — corroborates it's real). Aggregated search surfaced two India-availability claims that don't fully reconcile: a general "July 2026" regional-expansion date for Expense Agent vs. a narrower claim about a specific GPT-5.3-chat *model-version* rollout excluding India/UK/Australia (not necessarily the feature itself). Documented both in §4 rather than picking one, and added the concrete recommendation: someone with actual BC admin-center/tenant portal access should check the live "Feature availability by country/region" page directly. If the July 2026 date is accurate and feature-wide, it would change §11's "optional native-path exploration" timing. |
 | v1.7 | Closed council conditions 4 and 5 — the two remaining conditions answerable without a real BC SME or Finance/Compliance sign-off. Added §19 (Row-Level Tenant Isolation Design): a two-layer model — an app-layer gate ported from `MCP/core/authorization.py`'s six-gate shape (correcting the council's citation of `data_trust_engine/authorization.py`, which is Data Trust's narrower company-discovery variant, not the general-purpose engine) plus new PostgreSQL Row-Level Security enforcing tenant/company isolation at the DB level, with a concrete verification test. Added §20 (LLM/OCR Cost Model): current Claude Haiku 4.5/Sonnet 5 pricing verified via the `claude-api` skill, an image-tokenization formula verified via web search, and a per-tenant monthly estimate (~$1–25/month across 50–1,000 employees) — with the finding stated plainly that LLM cost is a minor line item, not the real cost driver. |
+| v1.8 | Reframed and closed condition 2 (§12): D-1/D-2/D-3 (advance recovery mechanism, perquisite tax treatment, GST override authority) are each customer's own Finance-team policy decision, not an Opsmeld build blocker — the system already requires configurable support for all three (FR-14, FR-27, FR-34, FR-39). No Opsmeld-internal Finance/Compliance sign-off needed on a specific global answer, since there isn't meant to be one; Opsmeld ships sensible defaults/templates, customers configure the authoritative values. 5 of 6 conditions now closed — only condition 1 (BC SME sandbox testing) remains, and it cannot be closed by further design work. |
