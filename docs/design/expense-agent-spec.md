@@ -1,4 +1,4 @@
-# Expense Agent — Design Spec for SME Review v1.12
+# Expense Agent — Design Spec for SME Review v1.13
 
 Status: **4 of 6 council conditions genuinely closed (3, 4, 5, 6) —
 corrected 2026-09-06 after re-review found two overclaims.** Infra
@@ -730,14 +730,16 @@ build gates — is in `expense-agent-blueprint.md` in this folder. It's
 the internal build reference once the P0 questions above are answered;
 it isn't needed to review this document.
 
-**UI/UX mockups (2026-09-06):** five first-pass app screens are drafted
-covering the V1 app channel end to end — employee dashboard ("My
-Expenses"), OCR expense-capture confirmation, advance request +
-confirmation, expense report submission, and manager approval queue
-(desktop). Static/interactive mockups, not yet visually reviewed by a
-designer or end user; the Teams conversational channel (§2.3A) has no
-equivalent screens since it has no screens by design — its UX is the
-workflow text in blueprint §10C/§10E.
+**UI/UX mockups (2026-09-06):** seven first-pass mockups are drafted
+covering both V1 channels end to end. App channel (five screens):
+employee dashboard ("My Expenses"), OCR expense-capture confirmation,
+advance request + confirmation, expense report submission, and manager
+approval queue (desktop). Teams channel (two screens): the employee-side
+conversational advance request (message → clarification → confirmation
+card → sent-for-approval), and the approver-side card with a working
+Change Amount mini-dialog — both directly illustrating the dialog turns
+fleshed out in blueprint §10C.20/§10E.23. Static/interactive mockups,
+not yet visually reviewed by a designer or end user.
 
 ## 13. Council Go/No-Go Review (2026-09-06)
 
@@ -906,3 +908,4 @@ not more design-session inference, and not another rounding-up to
 | v1.10 | BC-expert and Domain-Expert re-review of v1.9 found two overclaims, both corrected: (1) BC-1's Purchase Invoice decision was asserted, not verified, against this doc's own earlier standard for BC feature maturity ("feature UI ships ahead of its API") — corrected from "closed" to "de-risked, one small fast API check remaining" (POST a test Purchase Invoice line with India GST fields via API v2.0). (2) Condition 2's reframing correctly closed the "who decides" mechanism but missed that Opsmeld's own shipped default templates (default Sec 17(5) blocked-credit list, sample DOFA) still need real tax/compliance review before shipping — split off as new condition 2b. Net: 4 of 6 conditions genuinely closed (3, 4, 5, 6); conditions 1 and 2 each reduced to one small, bounded, real-person action rather than either the original large ask or a false "fully closed" claim. |
 | v1.11 | Revised GST architecture: Opsmeld no longer computes GST tax amounts (dropped `OPSMELD_NATIVE` for GST/ITC computation). Opsmeld resolves classification only (GST Group Code, HSN/SAC Code, Tax Area, driven by ITC-eligibility decisions) and pushes it on the Purchase Invoice line; BC's own Tax Engine computes CGST/SGST/IGST from that classification using the customer's GST Posting Setup. Updated FR-31/32/33 (§6.7) and BC-1 (§8, §11) accordingly. This further de-risks BC-1's remaining check — the API question shifts from "does it accept a computed tax amount" to "does it accept standard classification fields," a more likely-to-work API surface — and reduces Opsmeld's liability for tax-math correctness, since that arithmetic is Microsoft's maintained localization logic, not Opsmeld's own. |
 | v1.12 | Design phase started: five UI/UX mockups drafted for the app channel (employee dashboard, OCR capture confirmation, advance request/confirmation, report submission, manager approval queue) — noted in §12. Explicit V1 channel-scope decision (§2.3, §3): V1 ships both the app and Teams conversational intake together, not app-first with Teams deferred — a direct user decision, with the effort tradeoff (roughly double the V1 UI surface) stated rather than assumed away. |
+| v1.13 | Two Teams conversational mockups added (§12), illustrating the dialog turns fleshed out in blueprint §10C.20/§10E.23 (ambiguous-amount confirmation, advance-limit escalation, the approver's Change Amount mini-dialog, duplicate-expense detection, GST/ITC review routing, send-back correction) — the blueprint content itself lives only in `expense-agent-blueprint.md`, not duplicated here. |

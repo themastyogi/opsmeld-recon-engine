@@ -1,4 +1,4 @@
-# Expense Agent — Engineering Blueprint v1.12
+# Expense Agent — Engineering Blueprint v1.13
 
 Status: **4 of 6 council conditions genuinely closed (3, 4, 5, 6) —
 corrected 2026-09-06 after re-review found two overclaims in v1.9.**
@@ -2623,6 +2623,120 @@ it can become another channel/provider without changing the canonical
 `advance_request` or approval model. The integration only changes at the
 channel/provider adapter layer.
 
+### 10C.20 Clarification, exception and correction turns (fleshed out)
+
+10C.4–10C.7 showed the happy path — one clarification, one project
+disambiguation, one confirmation. This section writes out the turns the
+happy path skips over, since these are the majority of real
+conversations, not the exception.
+
+**Ambiguous amount.** Rahul writes "need an advance for the Mumbai trip,
+around 30k should cover it." `Amount` extracts at low confidence (a
+rounded colloquial figure, not a stated exact value).
+
+```
+Bot:  Just to confirm the exact amount — should I request ₹30,000, or
+      would you like to enter a different figure?
+Rahul: 30000 is fine
+```
+
+Only the confirmed figure is written to `interaction_extraction.
+confirmed_by_user`; the original low-confidence value is retained
+alongside it, not overwritten.
+
+**Advance limit exceeded (hard block).** Rahul's configured advance
+policy caps a single travel advance at ₹25,000 for his grade; he asks
+for ₹30,000.
+
+```
+Bot:  ₹30,000 is above your approved advance limit of ₹25,000 for
+      Travel. I can submit a request for ₹25,000, or you can ask your
+      manager to authorize the higher amount directly with Finance.
+      Would you like to proceed with ₹25,000?
+Rahul: yes, 25000 is fine
+```
+
+The interaction stays `NEEDS_INFO` until Rahul responds; Opsmeld never
+silently caps the amount and submits without telling him. If policy is
+instead configured to *allow* an over-limit request with escalation
+(rather than hard-block), the bot says so explicitly and routes the
+approval to the escalated approver rather than substituting a number:
+
+```
+Bot:  ₹30,000 is above the standard ₹25,000 limit for Travel, so this
+      will need approval from your Finance Head in addition to your
+      manager. Shall I submit it for ₹30,000 on that basis?
+```
+
+**Overdue advance blocking.** Rahul has an existing advance from a prior
+trip that is 45 days past its expected settlement date, and policy
+blocks new advances while one is overdue.
+
+```
+Bot:  You have an advance of ₹18,000 from your Bangalore trip (AR-000098)
+      that was expected to be settled by 15-Aug-2026 and is still
+      outstanding. New advance requests are on hold until that one is
+      settled or an exception is granted. Would you like me to notify
+      you when you can submit your Mumbai trip's expenses to close it
+      out, or ask your manager for an exception?
+```
+
+This is a hard stop — no `advance_request` is created — logged as
+`interaction.outcome = BLOCKED_OVERDUE_ADVANCE` with a link to
+AR-000098, so the block itself is auditable even though nothing new was
+created.
+
+**Edit, from the confirmation card (10C.7).** Rahul taps `[ Edit ]`
+instead of `[ Submit for Approval ]`.
+
+```
+Bot:  Sure — what would you like to change? (amount, project, dates,
+      purpose, or settlement date)
+Rahul: change the amount to 28000 and dates to 11-15 Sep
+Bot:  ADVANCE REQUEST
+      Amount:            ₹28,000
+      Project:           Alpha
+      Purpose:           Mumbai client visit
+      Travel:            11–15 Sep 2026
+      Expected Settlement: 20-Sep-2026
+      [ Submit for Approval ] [ Edit ] [ Cancel ]
+```
+
+Edit re-runs validation (10C.5) against the changed fields only — it
+does not re-ask for fields Rahul didn't touch — and produces a new
+confirmation card. Each edit is appended to `interaction`, not
+overwritten, so the request's full drafting history survives even
+though only the final confirmed version becomes AR-000123.
+
+**Approver "Change Amount" (10C.11).** Anita taps `[ CHANGE AMOUNT ]`
+on the approval card rather than typing a number cold.
+
+```
+Bot (to Anita): What amount would you like to approve, and a short
+                reason for the change?
+Anita: 25000, trip is 4 nights not 5 as originally stated
+```
+
+This produces the `APPROVED_WITH_CHANGE` record shown in 10C.11 — the
+reason is mandatory for a change, the same way a reject reason is
+mandatory, since both alter the financial outcome from what the
+employee actually asked for.
+
+**No response (reminder, not escalation-by-default).** If Anita hasn't
+acted within the configured SLA window (e.g. 48 hours):
+
+```
+Bot (to Anita): Reminder — Rahul's advance request AR-000123 for
+                ₹25,000 (Project Alpha, travel 10–14 Sep) is still
+                awaiting your decision. Travel starts in 3 days.
+```
+
+A single configurable reminder is sent; auto-escalation to the next
+approver in the route is a separate configured policy (delegation/DOFA,
+§10C.1), not an implicit behavior of the reminder itself — silently
+reassigning an approval the approver hasn't seen is a policy decision
+for the customer to opt into, not a default.
+
 ## 10D. Advance processing control and responsibility boundary
 
 The advance workflow intentionally stops short of bank/payment
@@ -3139,6 +3253,113 @@ Teams / Outlook Approval
 - Provider-independent domain model. The conversational expense workflow
   remains unchanged whether a capability is executed by Microsoft BC,
   Opsmeld, or a hybrid provider.
+
+### 10E.23 Clarification, exception and correction turns (fleshed out)
+
+10E.2–10E.9 showed the happy path — clean OCR, low duplicate risk, no
+policy exceptions. This section writes out the turns that fire when
+those don't hold, since real receipts are frequently blurry, duplicated,
+or borderline on policy.
+
+**Duplicate expense detected.** Rahul, unsure whether his earlier
+message went through, resends the hotel receipt.
+
+```
+Bot:  This looks similar to an expense you already submitted — Taj
+      Hotels, ₹14,160, 12-Sep-2026 (added 4 minutes ago). Is this the
+      same receipt, or a different charge?
+      [ SAME — DISCARD THIS ONE ] [ DIFFERENT EXPENSE ]
+```
+
+If Rahul confirms it's the same, the second interaction is recorded but
+no second expense is created — `interaction.outcome =
+DUPLICATE_DISCARDED`, linked to the original expense. If he confirms
+it's different (e.g. a second, same-vendor charge for a second room),
+both stand, each retaining its own duplicate-check evidence, since a
+"low confidence, LOW duplicate risk" outcome in 10E.6 is the common
+case, not the only one.
+
+**Low-confidence OCR on more than one field.** A crumpled taxi receipt
+yields a readable amount but not vendor or date.
+
+```
+Bot:  Got the taxi receipt — ₹2,000 came through clearly, but I
+      couldn't read the vendor name or date. Was this during your
+      Mumbai trip (10–14 Sep)? And is there a vendor name on the
+      receipt, or should I mark it as a local cab operator?
+Rahul: yes during the trip, 13th, no vendor name visible
+Bot:  EXPENSE CAPTURE
+      -----------------------------
+      Taxi – Mumbai (unnamed operator)
+      Amount          ₹2,000
+      Date            13-Sep-2026
+      Project         Alpha
+      Payment         Employee Paid
+      Receipt         Attached
+      [ SUBMIT ] [ EDIT ] [ CANCEL ]
+```
+
+Every field Rahul supplies conversationally is stored in
+`interaction_extraction` with `confidence = 1.0` and
+`confirmed_by_user = true` — it's user-asserted, not OCR-asserted, and
+is treated as authoritative accordingly even though the source receipt
+itself remains illegible on those fields.
+
+**GST/ITC review, not auto-eligible.** The client-dinner receipt's GSTIN
+doesn't match any of the company's registered branch GSTINs on file
+(10E.8's `GSTIN = PASS/REVIEW` outcome).
+
+```
+Bot:  This receipt's GST number doesn't match any of your company's
+      registered locations, so I can't confirm ITC eligibility
+      automatically — I've flagged it for Finance to review before
+      it's claimed. The expense itself isn't held up; only the GST/ITC
+      classification is pending.
+```
+
+The expense proceeds to `READY_FOR_REPORT` with
+`itc_status = REVIEW`; it is not blocked, since ITC eligibility is a
+tax classification concern (§6.7/§8), not a reimbursement concern — the
+two must not be conflated into one blocking gate.
+
+**Policy exception at report level — missing receipt under
+self-declaration threshold.** At report submission (10E.12), one of
+Rahul's captured expenses (a ₹180 auto-rickshaw fare) has no receipt.
+
+```
+Bot:  Your auto-rickshaw fare of ₹180 has no receipt attached. Your
+      company's policy allows self-declaration for cash expenses under
+      ₹200 — would you like to self-declare this one so it's included
+      in the report?
+Rahul: yes
+```
+
+The line is included with `receipt_status = SELF_DECLARED`, logged with
+the policy rule version that permitted it (10E.8's versioned-decision
+pattern), rather than silently waived or silently dropped from the
+report.
+
+**Send-back correction and resubmission (10E.15).** Anita sends the
+report back rather than rejecting it outright, because the client
+dinner amount looks high for a two-person meal.
+
+```
+Bot (to Rahul): Anita sent your Mumbai Client Visit report back for a
+                change: "Client dinner ₹5,900 seems high for 2 people —
+                please confirm headcount or split the bill if it
+                included other attendees."
+Rahul:          it was 4 people, client + 3 of us
+Bot:            Got it — I'll add that note to the dinner line and
+                resubmit. Anything else to change before I resubmit?
+Rahul:          no, that's it
+Bot:            Resubmitted Mumbai Client Visit (₹22,060) to Anita with
+                your note attached.
+```
+
+The report keeps its original `expense_report` identity and version
+history (10E.15's "immutable history" rule) — a send-back produces a
+new version with the added note, not a new report, so the approver sees
+the full back-and-forth rather than a disconnected resubmission.
 
 ## 10F. Reporting, Status and Management Visibility
 
@@ -4367,3 +4588,4 @@ At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-empl
 | v1.10 | BC-expert and Domain-Expert re-review of v1.9 found two overclaims, both corrected: (1) BC-1's Purchase Invoice decision was asserted, not verified, against this doc's own earlier standard for BC feature maturity ("feature UI ships ahead of its API") — corrected from "closed" to "de-risked, one small fast API check remaining" (POST a test Purchase Invoice line with India GST fields via API v2.0). (2) Condition 2's reframing correctly closed the "who decides" mechanism but missed that Opsmeld's own shipped default templates (default Sec 17(5) blocked-credit list, sample DOFA) still need real tax/compliance review before shipping — split off as new condition 2b. Net: 4 of 6 conditions genuinely closed (3, 4, 5, 6); conditions 1 and 2 each reduced to one small, bounded, real-person action rather than either the original large ask or a false "fully closed" claim. |
 | v1.11 | Revised GST architecture: Opsmeld no longer computes GST tax amounts (dropped `OPSMELD_NATIVE` for GST/ITC computation, §7.3.1's GST configuration row now `HYBRID`). Opsmeld resolves classification only (GST Group Code, HSN/SAC Code, Tax Area, driven by ITC-eligibility decisions) and pushes it on the Purchase Invoice line; BC's own Tax Engine computes CGST/SGST/IGST from that classification using the customer's GST Posting Setup. Updated FR-31/32/33 (§6.7), BC-1 (§11), §17's Build Decision Gate, and §2.0's framing accordingly. This further de-risks BC-1's remaining check — the API question shifts from "does it accept a computed tax amount" to "does it accept standard classification fields" — and reduces Opsmeld's liability for tax-math correctness, since that arithmetic is Microsoft's maintained localization logic, not Opsmeld's own. |
 | v1.12 | Design phase started: five UI/UX mockups drafted for the app channel (employee dashboard, OCR capture confirmation, advance request/confirmation, report submission, manager approval queue) — noted in `expense-agent-spec.md` §12. Explicit V1 channel-scope decision (§2.3A, §3): V1 ships both the app and Teams conversational intake together, not app-first with Teams deferred — a direct user decision, with the effort tradeoff (roughly double the V1 UI surface) stated rather than assumed away. |
+| v1.13 | Fleshed out the Teams conversational dialog turns the two reference workflows previously only summarized: added §10C.20 (advance request) covering ambiguous-amount confirmation, advance-limit-exceeded hard block vs. escalation, overdue-advance blocking, the Edit-flow turn, the approver's Change Amount mini-dialog, and the no-response reminder; added §10E.23 (expense submission) covering duplicate-expense detection, multi-field low-confidence OCR correction, GST/ITC REVIEW routing (not a reimbursement block), report-level self-declaration under the receipt threshold, and send-back correction/resubmission. Also added two Teams adaptive-card mockups to the design canvas alongside the five app screens, per the V1 both-channels decision (v1.12) — see `expense-agent-spec.md` §12. |
