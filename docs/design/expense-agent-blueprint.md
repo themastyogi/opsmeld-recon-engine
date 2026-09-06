@@ -1,4 +1,4 @@
-# Expense Agent — Engineering Blueprint v1.11
+# Expense Agent — Engineering Blueprint v1.12
 
 Status: **4 of 6 council conditions genuinely closed (3, 4, 5, 6) —
 corrected 2026-09-06 after re-review found two overclaims in v1.9.**
@@ -146,6 +146,21 @@ common conversational intake layer. The layer must:
 The original message and extraction evidence are retained for
 auditability.
 
+**V1 channel commitment (2026-09-06):** §2.3/2.3A describe what the
+architecture can support; V1 build scope commits to shipping *both*
+channels together, not app-first with Teams deferred — the dedicated
+app (employee capture, advance request, expense status, report
+submission, manager approval — UI mockups drafted, see
+`expense-agent-spec.md` §12) and Teams conversational intake for
+advance requests and expense
+submission (§10C/§10E). Manager approval (line-item review, GST
+classification, policy-exception handling) is not well served by a
+chat interface and needs the app; employee-side capture benefits from
+the low-friction entry point Teams gives a workforce already on M365.
+This is a direct user scope decision, not a default — it roughly
+doubles V1's UI surface versus an app-only first cut, which is a real
+effort tradeoff, stated here rather than assumed away.
+
 ### 2.4 Configuration ownership and provider abstraction
 
 Recommendation: Opsmeld should own the canonical Expense configuration
@@ -247,6 +262,8 @@ In scope:
 - Application-side operational, compliance, workflow, evidence, and
   reconciliation data model
 - Auditability, idempotency, and reconciliation
+- Two V1 channels, built together: dedicated web/mobile app (employee +
+  manager UI) and Teams conversational intake (§2.3/§2.3A)
 
 Out of scope for this doc:
 - Actual AL/table/page implementation
@@ -4349,3 +4366,4 @@ At any realistic scale, LLM/OCR spend is a minor line item — even a 1,000-empl
 | v1.9 | Closed condition 1 (§11, §15, §17, Council review) via direct BC architecture decisions rather than pending sandbox validation: BC-1 (GST-bearing lines post via Purchase Invoice, not Journal), BC-8 (approval/DOFA fully `OPSMELD_NATIVE`), BC-11 (Purchase Invoice/Journal APIs first, custom AL API page as a known fallback). BC-7 (advance/employee ledger) architecturally addressed with a genuine per-customer choice — native Employee, Employee-as-Vendor (leverages BC's mature Vendor Ledger Application), or app-side tracking — added to §10.5's mapping table and §7.12's `mapping_definition.representation_type` enum. Updated the Accounting Treatment Matrix (§15) with the posting-mechanism column. **All six council conditions now closed.** |
 | v1.10 | BC-expert and Domain-Expert re-review of v1.9 found two overclaims, both corrected: (1) BC-1's Purchase Invoice decision was asserted, not verified, against this doc's own earlier standard for BC feature maturity ("feature UI ships ahead of its API") — corrected from "closed" to "de-risked, one small fast API check remaining" (POST a test Purchase Invoice line with India GST fields via API v2.0). (2) Condition 2's reframing correctly closed the "who decides" mechanism but missed that Opsmeld's own shipped default templates (default Sec 17(5) blocked-credit list, sample DOFA) still need real tax/compliance review before shipping — split off as new condition 2b. Net: 4 of 6 conditions genuinely closed (3, 4, 5, 6); conditions 1 and 2 each reduced to one small, bounded, real-person action rather than either the original large ask or a false "fully closed" claim. |
 | v1.11 | Revised GST architecture: Opsmeld no longer computes GST tax amounts (dropped `OPSMELD_NATIVE` for GST/ITC computation, §7.3.1's GST configuration row now `HYBRID`). Opsmeld resolves classification only (GST Group Code, HSN/SAC Code, Tax Area, driven by ITC-eligibility decisions) and pushes it on the Purchase Invoice line; BC's own Tax Engine computes CGST/SGST/IGST from that classification using the customer's GST Posting Setup. Updated FR-31/32/33 (§6.7), BC-1 (§11), §17's Build Decision Gate, and §2.0's framing accordingly. This further de-risks BC-1's remaining check — the API question shifts from "does it accept a computed tax amount" to "does it accept standard classification fields" — and reduces Opsmeld's liability for tax-math correctness, since that arithmetic is Microsoft's maintained localization logic, not Opsmeld's own. |
+| v1.12 | Design phase started: five UI/UX mockups drafted for the app channel (employee dashboard, OCR capture confirmation, advance request/confirmation, report submission, manager approval queue) — noted in `expense-agent-spec.md` §12. Explicit V1 channel-scope decision (§2.3A, §3): V1 ships both the app and Teams conversational intake together, not app-first with Teams deferred — a direct user decision, with the effort tradeoff (roughly double the V1 UI surface) stated rather than assumed away. |
